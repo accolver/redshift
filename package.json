@@ -1,0 +1,39 @@
+{
+	"name": "redshift",
+	"version": "0.1.0",
+	"description": "Decentralized, censorship-resistant secret management platform",
+	"type": "module",
+	"private": true,
+	"bin": {
+		"redshift": "./dist/redshift"
+	},
+	"scripts": {
+		"dev": "bun run cli/src/main.ts",
+		"build": "bun build cli/src/main.ts --compile --outfile dist/redshift",
+		"build:web": "cd web && bun run build",
+		"test": "bun test",
+		"test:watch": "bun test --watch",
+		"test:coverage": "bun test --coverage",
+		"typecheck": "tsc --noEmit",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"format": "biome format --write .",
+		"format:check": "biome format ."
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.0",
+		"@types/bun": "latest",
+		"typescript": "^5.0.0"
+	},
+	"dependencies": {
+		"nostr-tools": "^2.10.0",
+		"yaml": "^2.8.2"
+	},
+	"keywords": ["secrets", "nostr", "decentralized", "cli", "doppler", "environment-variables"],
+	"author": "",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": ""
+	}
+}
