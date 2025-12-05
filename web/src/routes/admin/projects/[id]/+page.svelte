@@ -14,11 +14,15 @@ import {
 import { getProjectsState } from '$lib/stores/projects.svelte';
 import {
 	getSecretsState,
+	getSecretsContext,
 	subscribeToSecrets,
 	unsubscribeFromSecrets,
 	setSecret,
 	deleteSecret,
 } from '$lib/stores/secrets.svelte';
+import { getAuthState } from '$lib/stores/auth.svelte';
+import { publishEvent, REDSHIFT_KIND, getSecretsDTag } from '$lib/stores/nostr.svelte';
+import { createSecretsContent } from '$lib/models/secrets';
 import {
 	ChevronDown,
 	Plus,
@@ -26,15 +30,24 @@ import {
 	EyeOff,
 	Ellipsis,
 	Search,
-	GripVertical,
 	Trash2,
-	Copy,
-	Pencil,
+	Clipboard,
 	LoaderCircle,
 	GitBranch,
+	ArrowUpDown,
+	Filter,
+	MessageSquare,
+	Check,
+	ArrowUpAZ,
+	ArrowDownAZ,
+	Clock,
+	Circle,
+	CircleDot,
+	CheckCircle2,
 } from '@lucide/svelte';
 import type { Environment } from '$lib/types/nostr';
 import AddEnvironmentModal from '$lib/components/AddEnvironmentModal.svelte';
+import CreateProjectModal from '$lib/components/CreateProjectModal.svelte';
 import { goto } from '$app/navigation';
 
 // Get project ID from route
@@ -54,21 +67,208 @@ const selectedEnv = $derived(
 );
 
 // UI State
-let activeTab = $state<'secrets' | 'access' | 'logs'>('secrets');
 let searchQuery = $state('');
 let showAddEnvModal = $state(false);
+let showCreateProjectModal = $state(false);
 let isAddingSecret = $state(false);
 let newSecretKey = $state('');
 let newSecretValue = $state('');
 let showAddSecretRow = $state(false);
 
+// Sorting state
+type SortOption = 'asc' | 'desc' | 'newest' | 'oldest';
+let sortBy = $state<SortOption>('asc');
+
 // Visibility toggle for secrets
 let visibleSecrets = $state<Set<string>>(new Set());
+let showAllSecrets = $state(false);
 
-// Filtered secrets based on search
-const filteredSecrets = $derived(
-	secretsState.secrets.filter((s) => s.key.toLowerCase().includes(searchQuery.toLowerCase())),
-);
+// Track edited secrets (originalKey -> { key: string, value: string })
+let editedSecrets = $state<Map<string, { key: string; value: string }>>(new Map());
+
+// Track saving state per secret
+let savingSecrets = $state<Set<string>>(new Set());
+
+// Track recently saved secrets (for showing success state)
+let savedSecrets = $state<Set<string>>(new Set());
+
+// Check if a secret has been modified
+function isSecretModified(originalKey: string): boolean {
+	const edited = editedSecrets.get(originalKey);
+	if (!edited) return false;
+	const original = secretsState.secrets.find((s) => s.key === originalKey);
+	if (!original) return false;
+	return edited.key !== original.key || edited.value !== original.value;
+}
+
+// Get the current edited value for a secret (or original if not edited)
+function getEditedSecret(originalKey: string): { key: string; value: string } {
+	const edited = editedSecrets.get(originalKey);
+	if (edited) return edited;
+	const original = secretsState.secrets.find((s) => s.key === originalKey);
+	return original ? { key: original.key, value: original.value } : { key: '', value: '' };
+}
+
+// Update edited secret key
+function updateSecretKey(originalKey: string, newKey: string) {
+	const current = getEditedSecret(originalKey);
+	editedSecrets.set(originalKey, { ...current, key: newKey });
+	editedSecrets = new Map(editedSecrets);
+}
+
+// Update edited secret value
+function updateSecretValue(originalKey: string, newValue: string) {
+	const current = getEditedSecret(originalKey);
+	editedSecrets.set(originalKey, { ...current, value: newValue });
+	editedSecrets = new Map(editedSecrets);
+}
+
+// Check if there are any unsaved changes
+const hasUnsavedChanges = $derived(() => {
+	for (const [originalKey] of editedSecrets) {
+		if (isSecretModified(originalKey)) return true;
+	}
+	return false;
+});
+
+// Save all changes - batch update all secrets at once
+async function saveAllChanges() {
+	const toSave = Array.from(editedSecrets.entries()).filter(([key]) => isSecretModified(key));
+	if (toSave.length === 0) return;
+
+	// Track the new keys for saved state (in case key was renamed)
+	const savedKeyMap = new Map<string, string>(); // originalKey -> newKey
+
+	// Mark all as saving (use the NEW key for tracking since that's what we'll display)
+	for (const [originalKey, edited] of toSave) {
+		savingSecrets.add(edited.key);
+		savedKeyMap.set(originalKey, edited.key);
+	}
+	savingSecrets = new Set(savingSecrets);
+
+	try {
+		// Build the new secrets array with all changes applied
+		let updatedSecrets = [...secretsState.secrets];
+		const keysToRemove: string[] = [];
+
+		for (const [originalKey, edited] of toSave) {
+			const originalIndex = updatedSecrets.findIndex((s) => s.key === originalKey);
+
+			if (originalIndex !== -1) {
+				// If key changed, mark old for removal and add new
+				if (edited.key !== originalKey) {
+					keysToRemove.push(originalKey);
+					// Check if new key already exists (update it) or add new
+					const existingNewIndex = updatedSecrets.findIndex((s) => s.key === edited.key);
+					if (existingNewIndex !== -1) {
+						updatedSecrets[existingNewIndex] = { key: edited.key, value: edited.value };
+					} else {
+						updatedSecrets.push({ key: edited.key, value: edited.value });
+					}
+				} else {
+					// Just update the value
+					updatedSecrets[originalIndex] = { key: edited.key, value: edited.value };
+				}
+			}
+		}
+
+		// Remove old keys that were renamed
+		updatedSecrets = updatedSecrets.filter((s) => !keysToRemove.includes(s.key));
+
+		// Now save all secrets at once
+		const auth = getAuthState();
+		if (!auth.isConnected || !auth.pubkey) {
+			throw new Error('Must be connected to save secrets');
+		}
+
+		const { projectId, environmentSlug } = getSecretsContext();
+		if (!projectId || !environmentSlug) {
+			throw new Error('No project/environment selected');
+		}
+
+		const content = createSecretsContent(updatedSecrets);
+
+		const unsignedEvent = {
+			kind: REDSHIFT_KIND,
+			created_at: Math.floor(Date.now() / 1000),
+			tags: [['d', getSecretsDTag(projectId, environmentSlug)]],
+			content: JSON.stringify(content),
+		};
+
+		let signedEvent;
+		if (auth.method === 'nip07' && window.nostr) {
+			signedEvent = await window.nostr.signEvent(unsignedEvent);
+		} else {
+			throw new Error('Local signing not yet implemented.');
+		}
+
+		await publishEvent(signedEvent);
+
+		// Mark all as saved (use the new keys)
+		for (const [originalKey, newKey] of savedKeyMap) {
+			savingSecrets.delete(newKey);
+			savedSecrets.add(newKey);
+			editedSecrets.delete(originalKey);
+		}
+		savingSecrets = new Set(savingSecrets);
+		savedSecrets = new Set(savedSecrets);
+		editedSecrets = new Map(editedSecrets);
+
+		// Clear saved status after 2 seconds
+		const keysToClean = Array.from(savedKeyMap.values());
+		setTimeout(() => {
+			for (const key of keysToClean) {
+				savedSecrets.delete(key);
+			}
+			savedSecrets = new Set(savedSecrets);
+		}, 2000);
+	} catch (err) {
+		console.error('Failed to save secrets:', err);
+		// Clear saving state on error
+		for (const [, newKey] of savedKeyMap) {
+			savingSecrets.delete(newKey);
+		}
+		savingSecrets = new Set(savingSecrets);
+	}
+}
+
+// Get the status of a secret: 'default' | 'dirty' | 'saving' | 'saved'
+function getSecretStatus(originalKey: string): 'default' | 'dirty' | 'saving' | 'saved' {
+	const edited = getEditedSecret(originalKey);
+	const currentKey = edited.key || originalKey;
+
+	// Check both original and current key for saving/saved states
+	if (savingSecrets.has(originalKey) || savingSecrets.has(currentKey)) return 'saving';
+	if (savedSecrets.has(originalKey) || savedSecrets.has(currentKey)) return 'saved';
+	if (isSecretModified(originalKey)) return 'dirty';
+	return 'default';
+}
+
+// Filtered and sorted secrets
+const filteredSecrets = $derived(() => {
+	let secrets = secretsState.secrets.filter((s) =>
+		s.key.toLowerCase().includes(searchQuery.toLowerCase()),
+	);
+
+	// Sort secrets
+	switch (sortBy) {
+		case 'asc':
+			secrets = [...secrets].sort((a, b) => a.key.localeCompare(b.key));
+			break;
+		case 'desc':
+			secrets = [...secrets].sort((a, b) => b.key.localeCompare(a.key));
+			break;
+		case 'newest':
+			// For now, reverse order (newest first) - would need timestamp in real impl
+			secrets = [...secrets].reverse();
+			break;
+		case 'oldest':
+			// Keep original order (oldest first)
+			break;
+	}
+
+	return secrets;
+});
 
 // Subscribe to secrets when environment changes
 $effect(() => {
@@ -101,12 +301,46 @@ function toggleVisibility(key: string) {
 	}
 }
 
+function toggleAllVisibility() {
+	if (showAllSecrets) {
+		visibleSecrets = new Set();
+		showAllSecrets = false;
+	} else {
+		visibleSecrets = new Set(secretsState.secrets.map((s) => s.key));
+		showAllSecrets = true;
+	}
+}
+
+// Transform key input to uppercase and underscores only
+function transformSecretKey(value: string): string {
+	return value
+		.toUpperCase()
+		.replace(/[^A-Z0-9_]/g, (char) => {
+			if (char === ' ' || char === '-') return '_';
+			return '';
+		})
+		.replace(/_+/g, '_'); // Replace multiple underscores with single
+}
+
+function handleKeyInput(e: Event) {
+	const input = e.target as HTMLInputElement;
+	const cursorPos = input.selectionStart ?? 0;
+	const oldLength = input.value.length;
+	newSecretKey = transformSecretKey(input.value);
+	// Adjust cursor position after transformation
+	const newLength = newSecretKey.length;
+	const diff = newLength - oldLength;
+	requestAnimationFrame(() => {
+		input.setSelectionRange(cursorPos + diff, cursorPos + diff);
+	});
+}
+
 async function handleAddSecret() {
 	if (!newSecretKey.trim()) return;
 
 	isAddingSecret = true;
 	try {
-		await setSecret(newSecretKey.toUpperCase(), newSecretValue);
+		await setSecret(newSecretKey, newSecretValue);
 		newSecretKey = '';
 		newSecretValue = '';
 		showAddSecretRow = false;
@@ -185,6 +419,11 @@ function handleKeydown(e: KeyboardEvent) {
 									{p.name}
 								</DropdownMenuItem>
 							{/each}
+							<DropdownMenuSeparator />
+							<DropdownMenuItem onclick={() => (showCreateProjectModal = true)}>
+								<Plus class="mr-2 size-4" />
+								New Project
+							</DropdownMenuItem>
 						</DropdownMenuContent>
 					</DropdownMenu>
 
@@ -219,7 +458,12 @@ function handleKeydown(e: KeyboardEvent) {
 				</div>
 
 				<div class="flex items-center gap-2">
-					<Button variant="outline" size="sm">
+					<Button 
+						variant={hasUnsavedChanges() ? "default" : "outline"} 
+						size="sm"
+						disabled={!hasUnsavedChanges()}
+						onclick={saveAllChanges}
+					>
 						Save
 					</Button>
 					<DropdownMenu>
@@ -241,49 +485,92 @@ function handleKeydown(e: KeyboardEvent) {
 			</div>
 		</div>
 
-		<!-- Tabs -->
-		<div class="border-b border-border">
-			<div class="mx-auto flex max-w-6xl items-center gap-6 px-6">
-				<button
-					type="button"
-					class="border-b-2 py-3 text-sm font-medium transition-colors {activeTab === 'secrets'
-						? 'border-primary text-primary'
-						: 'border-transparent text-muted-foreground hover:text-foreground'}"
-					onclick={() => (activeTab = 'secrets')}
-				>
-					Secrets
-				</button>
-				<button
-					type="button"
-					class="border-b-2 py-3 text-sm font-medium transition-colors {activeTab === 'access'
-						? 'border-primary text-primary'
-						: 'border-transparent text-muted-foreground hover:text-foreground'}"
-					onclick={() => (activeTab = 'access')}
-				>
-					Access
-				</button>
-				<button
-					type="button"
-					class="border-b-2 py-3 text-sm font-medium transition-colors {activeTab === 'logs'
-						? 'border-primary text-primary'
-						: 'border-transparent text-muted-foreground hover:text-foreground'}"
-					onclick={() => (activeTab = 'logs')}
-				>
-					Logs
-				</button>
-			</div>
-		</div>
-
 		<!-- Content -->
 		<div class="flex-1">
-			{#if activeTab === 'secrets'}
-				<div class="mx-auto max-w-6xl px-6 py-4">
+			<div class="mx-auto max-w-6xl px-6 py-4">
 					<!-- Toolbar -->
 					<div class="mb-4 flex items-center justify-between">
-						<div class="flex items-center gap-4">
+						<div class="flex items-center gap-2">
 							<span class="text-sm font-medium">
-								Active ({filteredSecrets.length})
+								Active ({filteredSecrets().length})
 							</span>
+							
+							<!-- Sort Dropdown -->
+							<DropdownMenu>
+								<DropdownMenuTrigger>
+									{#snippet child({ props })}
+										<button
+											{...props}
+											class="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+											class:text-primary={sortBy !== 'asc'}
+										>
+											<ArrowUpDown class="size-4" />
+										</button>
+									{/snippet}
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="start" class="w-48">
+									<div class="px-2 py-1.5 text-xs font-semibold text-muted-foreground">SORT BY</div>
+									<DropdownMenuItem onclick={() => (sortBy = 'asc')}>
+										<ArrowUpAZ class="mr-2 size-4" />
+										Ascending (A-Z)
+										{#if sortBy === 'asc'}
+											<Check class="ml-auto size-4" />
+										{/if}
+									</DropdownMenuItem>
+									<DropdownMenuItem onclick={() => (sortBy = 'desc')}>
+										<ArrowDownAZ class="mr-2 size-4" />
+										Descending (Z-A)
+										{#if sortBy === 'desc'}
+											<Check class="ml-auto size-4" />
+										{/if}
+									</DropdownMenuItem>
+									<DropdownMenuItem onclick={() => (sortBy = 'newest')}>
+										<Clock class="mr-2 size-4" />
+										Newest to oldest
+										{#if sortBy === 'newest'}
+											<Check class="ml-auto size-4" />
+										{/if}
+									</DropdownMenuItem>
+									<DropdownMenuItem onclick={() => (sortBy = 'oldest')}>
+										<Clock class="mr-2 size-4" />
+										Oldest to newest
+										{#if sortBy === 'oldest'}
+											<Check class="ml-auto size-4" />
+										{/if}
+									</DropdownMenuItem>
+								</DropdownMenuContent>
+							</DropdownMenu>
+							
+							<!-- Filter Button -->
+							<button
+								type="button"
+								class="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+							>
+								<Filter class="size-4" />
+							</button>
+							
+							<!-- Show/Hide All Button -->
+							<button
+								type="button"
+								class="flex size-8 cursor-pointer items-center justify-center rounded-md hover:bg-muted"
+								class:text-primary={showAllSecrets}
+								class:text-muted-foreground={!showAllSecrets}
+								onclick={toggleAllVisibility}
+							>
+								{#if showAllSecrets}
+									<EyeOff class="size-4" />
+								{:else}
+									<Eye class="size-4" />
+								{/if}
+							</button>
+							
+							<!-- Notes Button (placeholder) -->
+							<button
+								type="button"
+								class="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+							>
+								<MessageSquare class="size-4" />
+							</button>
 						</div>
 						<div class="flex items-center gap-2">
 							<div class="relative">
@@ -303,12 +590,12 @@ function handleKeydown(e: KeyboardEvent) {
 					</div>
 
 					<!-- Secrets List -->
-					<div class="rounded-lg border border-border bg-card">
+					<div class="space-y-2">
 						{#if secretsState.isLoading}
 							<div class="flex items-center justify-center py-12">
 								<LoaderCircle class="size-6 animate-spin text-muted-foreground" />
 							</div>
-						{:else if filteredSecrets.length === 0 && !showAddSecretRow}
+						{:else if filteredSecrets().length === 0 && !showAddSecretRow}
 							<div class="py-12 text-center text-muted-foreground">
 								{#if searchQuery}
 									<p>No secrets match "{searchQuery}"</p>
@@ -320,30 +607,37 @@ function handleKeydown(e: KeyboardEvent) {
 						{:else}
 							<!-- Add Secret Row -->
 							{#if showAddSecretRow}
-								<div class="flex items-center border-b border-border bg-muted/30 px-4 py-2">
-									<div class="flex w-8 items-center justify-center">
-										<GripVertical class="size-4 text-muted-foreground" />
+								<div class="flex items-center gap-2">
+									<!-- Status placeholder -->
+									<div class="flex size-8 items-center justify-center">
+										<Circle class="size-4 text-muted-foreground/30" />
 									</div>
-									<div class="flex flex-1 items-center gap-2">
-										<Input
+									
+									<!-- Key Pill -->
+									<div class="flex h-10 w-72 items-center rounded-lg border border-border bg-card px-3">
+										<input
 											type="text"
 											placeholder="SECRET_NAME"
-											class="h-8 w-64 font-mono text-sm uppercase"
+											class="w-full bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground"
 											bind:value={newSecretKey}
+											oninput={handleKeyInput}
 											onkeydown={handleKeydown}
 											autofocus
 										/>
-										<span class="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">String</span>
 									</div>
-									<div class="flex flex-1 items-center gap-2">
-										<Input
+									
+									<!-- Value Pill -->
+									<div class="flex h-10 flex-1 items-center rounded-lg border border-border bg-card px-3">
+										<input
 											type="text"
 											placeholder="Value"
-											class="h-8 flex-1 font-mono text-sm"
+											class="w-full bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground"
 											bind:value={newSecretValue}
 											onkeydown={handleKeydown}
 										/>
 									</div>
+									
+									<!-- Actions -->
 									<div class="flex items-center gap-1">
 										<Button
 											variant="ghost"
@@ -373,95 +667,129 @@ function handleKeydown(e: KeyboardEvent) {
 							{/if}
 
 							<!-- Secret Rows -->
-							{#each filteredSecrets as secret (secret.key)}
-								<div class="group flex items-center border-b border-border px-4 py-2 last:border-b-0 hover:bg-muted/30">
-									<!-- Drag Handle -->
-									<div class="flex w-8 items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-										<GripVertical class="size-4 cursor-grab text-muted-foreground" />
+							{#each filteredSecrets() as secret (secret.key)}
+								{@const edited = getEditedSecret(secret.key)}
+								{@const status = getSecretStatus(secret.key)}
+								<div class="group flex items-center gap-2">
+									<!-- Status Icon -->
+									<div class="flex size-8 items-center justify-center">
+										{#if status === 'saving'}
+											<LoaderCircle class="size-4 animate-spin text-muted-foreground" />
+										{:else if status === 'saved'}
+											<CheckCircle2 class="size-4 text-green-500" />
+										{:else if status === 'dirty'}
+											<CircleDot class="size-4 text-primary" />
+										{:else}
+											<Check class="size-4 text-muted-foreground/30" />
+										{/if}
 									</div>
 
-									<!-- Key + Type -->
-									<div class="flex w-80 items-center gap-2">
-										<span class="font-mono text-sm font-medium">{secret.key}</span>
-										<span class="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">String</span>
+									<!-- Key Pill (Editable) -->
+									<div 
+										class="flex h-10 w-72 items-center rounded-lg border bg-card px-3 transition-colors"
+										class:border-border={status !== 'dirty'}
+										class:border-primary={status === 'dirty'}
+									>
+										<input
+											type="text"
+											class="w-full truncate bg-transparent font-mono text-sm font-medium outline-none"
+											value={edited.key}
+											oninput={(e) => {
+												const input = e.target as HTMLInputElement;
+												const transformed = transformSecretKey(input.value);
+												updateSecretKey(secret.key, transformed);
+												// Update input value to transformed
+												input.value = transformed;
+											}}
+										/>
 									</div>
 
-									<!-- Value -->
-									<div class="flex flex-1 items-center gap-2">
-										<span class="font-mono text-sm text-muted-foreground">
-											{#if visibleSecrets.has(secret.key)}
-												{secret.value}
-											{:else}
-												{'•'.repeat(Math.min(secret.value.length || 6, 12))}
-											{/if}
-										</span>
-									</div>
-
-									<!-- Actions -->
-									<div class="flex items-center gap-1">
-										<Button
-											variant="ghost"
-											size="icon"
-											class="size-8 opacity-0 transition-opacity group-hover:opacity-100"
-											onclick={() => toggleVisibility(secret.key)}
-										>
-											{#if visibleSecrets.has(secret.key)}
-												<EyeOff class="size-4" />
-											{:else}
-												<Eye class="size-4" />
-											{/if}
-										</Button>
-										<DropdownMenu>
-											<DropdownMenuTrigger>
-												{#snippet child({ props })}
-													<button
-														{...props}
-														class="flex size-8 cursor-pointer items-center justify-center rounded-md opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
+									<!-- Value Pill (Editable) -->
+									<div 
+										class="flex h-10 flex-1 items-center justify-between rounded-lg border bg-card px-3 transition-colors"
+										class:border-border={status !== 'dirty'}
+										class:border-primary={status === 'dirty'}
+									>
+										{#if visibleSecrets.has(secret.key)}
+											<!-- Editable value input -->
+											<input
+												type="text"
+												class="flex-1 bg-transparent font-mono text-sm text-muted-foreground outline-none"
+												value={edited.value}
+												oninput={(e) => updateSecretValue(secret.key, (e.target as HTMLInputElement).value)}
+											/>
+										{:else}
+											<!-- Clickable masked value area -->
+											<button
+												type="button"
+												class="group/value relative flex-1 cursor-pointer text-left"
+												onclick={() => toggleVisibility(secret.key)}
+											>
+												<!-- Masked value with hover reveal text -->
+												<span class="font-mono text-sm text-muted-foreground transition-opacity group-hover/value:opacity-0">
+													{'•'.repeat(24)}
+												</span>
+												<span class="absolute inset-0 flex items-center text-sm text-muted-foreground opacity-0 transition-opacity group-hover/value:opacity-100">
+													Click to reveal
+												</span>
+											</button>
+										{/if}
+										
+										<!-- Right-aligned actions inside value pill -->
+										<div class="ml-2 flex items-center gap-1">
+											<!-- Copy Button -->
+											<button
+												type="button"
+												class="flex size-7 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+												onclick={() => copyToClipboard(edited.value)}
+												title="Copy value"
+											>
+												<Clipboard class="size-4" />
+											</button>
+											
+											<!-- Visibility Toggle -->
+											<button
+												type="button"
+												class="flex size-7 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+												onclick={() => toggleVisibility(secret.key)}
+												title={visibleSecrets.has(secret.key) ? 'Hide value' : 'Show value'}
+											>
+												{#if visibleSecrets.has(secret.key)}
+													<EyeOff class="size-4" />
+												{:else}
+													<Eye class="size-4" />
+												{/if}
+											</button>
+											
+											<!-- Settings Dropdown (Delete only) -->
+											<DropdownMenu>
+												<DropdownMenuTrigger>
+													{#snippet child({ props })}
+														<button
+															{...props}
+															class="flex size-7 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+														>
+															<Ellipsis class="size-4" />
+														</button>
+													{/snippet}
+												</DropdownMenuTrigger>
+												<DropdownMenuContent align="end">
+													<DropdownMenuItem
+														class="text-destructive"
+														onclick={() => handleDeleteSecret(secret.key)}
 													>
-														<Ellipsis class="size-4" />
-													</button>
-												{/snippet}
-											</DropdownMenuTrigger>
-											<DropdownMenuContent align="end">
-												<DropdownMenuItem onclick={() => copyToClipboard(secret.value)}>
-													<Copy class="mr-2 size-4" />
-													Copy Value
-												</DropdownMenuItem>
-												<DropdownMenuItem>
-													<Pencil class="mr-2 size-4" />
-													Edit
-												</DropdownMenuItem>
-												<DropdownMenuSeparator />
-												<DropdownMenuItem
-													class="text-destructive"
-													onclick={() => handleDeleteSecret(secret.key)}
-												>
-													<Trash2 class="mr-2 size-4" />
-													Delete
-												</DropdownMenuItem>
-											</DropdownMenuContent>
-										</DropdownMenu>
+														<Trash2 class="mr-2 size-4" />
+														Delete
+													</DropdownMenuItem>
+												</DropdownMenuContent>
+											</DropdownMenu>
+										</div>
 									</div>
 								</div>
 							{/each}
 						{/if}
 					</div>
-				</div>
-			{:else if activeTab === 'access'}
-				<div class="mx-auto max-w-6xl px-6 py-8">
-					<div class="text-center text-muted-foreground">
-						<p>Access management coming soon</p>
-						<p class="mt-1 text-sm">Configure who can view and edit secrets in this environment.</p>
-					</div>
-				</div>
-			{:else if activeTab === 'logs'}
-				<div class="mx-auto max-w-6xl px-6 py-8">
-					<div class="text-center text-muted-foreground">
-						<p>Activity logs coming soon</p>
-						<p class="mt-1 text-sm">View a history of changes to secrets in this environment.</p>
-					</div>
-				</div>
-			{/if}
+			</div>
 		</div>
 
 		<!-- Floating Add Button -->
@@ -501,3 +829,15 @@ function handleKeydown(e: KeyboardEvent) {
 		onEnvironmentCreated={handleEnvironmentCreated}
 	/>
 {/if}
+
+<CreateProjectModal
+	bind:open={showCreateProjectModal}
+	onOpenChange={(v) => (showCreateProjectModal = v)}
+	onProjectCreated={() => {
+		// Navigate to the new project after creation
+		const newProject = projectsState.projects[projectsState.projects.length - 1];
+		if (newProject) {
+			goto(`/admin/projects/${newProject.id}`);
+		}
+	}}
+/>
