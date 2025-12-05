@@ -9,16 +9,36 @@
 	},
 	"scripts": {
 		"dev": "bun run cli/src/main.ts",
-		"build": "bun build cli/src/main.ts --compile --outfile dist/redshift",
+		"dev:web": "cd web && bun run dev",
+
+		"build": "bun run build:cli",
+		"build:cli": "bun build cli/src/main.ts --compile --outfile dist/redshift",
+		"build:cli:all": "bun run build:cli:darwin-arm64 && bun run build:cli:darwin-x64 && bun run build:cli:linux-arm64 && bun run build:cli:linux-x64",
+		"build:cli:darwin-arm64": "bun build cli/src/main.ts --compile --target=bun-darwin-arm64 --outfile dist/redshift-darwin-arm64",
+		"build:cli:darwin-x64": "bun build cli/src/main.ts --compile --target=bun-darwin-x64 --outfile dist/redshift-darwin-x64",
+		"build:cli:linux-arm64": "bun build cli/src/main.ts --compile --target=bun-linux-arm64 --outfile dist/redshift-linux-arm64",
+		"build:cli:linux-x64": "bun build cli/src/main.ts --compile --target=bun-linux-x64 --outfile dist/redshift-linux-x64",
 		"build:web": "cd web && bun run build",
+		"build:all": "bun run build:cli:all && bun run build:web",
+
 		"test": "bun test",
+		"test:cli": "bun test cli/",
+		"test:web": "cd web && bun run test",
+		"test:all": "bun run test:cli && bun run test:web",
 		"test:watch": "bun test --watch",
 		"test:coverage": "bun test --coverage",
+
 		"typecheck": "tsc --noEmit",
+		"typecheck:web": "cd web && bun run check",
+
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write .",
-		"format:check": "biome format ."
+		"format:check": "biome format .",
+
+		"release:prepare": "bun run test:all && bun run build:all",
+		"release:list": "ls -lah dist/",
+		"version:bump": "npm version --no-git-tag-version"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.0",
