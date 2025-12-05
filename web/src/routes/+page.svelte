@@ -79,7 +79,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 					class="text-sm text-foreground/70 transition-colors hover:text-foreground">Tutorial</a
 				>
 				<a
-					href="https://github.com/redshift-secrets/redshift"
+					href="https://github.com/accolver/redshift"
 					class="text-sm text-foreground/70 transition-colors hover:text-foreground"
 					target="_blank">GitHub</a
 				>
@@ -470,7 +470,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 				<a href="/docs" class="transition-colors hover:text-foreground">Documentation</a>
 				<a href="/tutorial" class="transition-colors hover:text-foreground">Tutorial</a>
 				<a
-					href="https://github.com/redshift-secrets/redshift"
+					href="https://github.com/accolver/redshift"
 					target="_blank"
 					class="transition-colors hover:text-foreground">GitHub</a
 				>
