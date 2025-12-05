@@ -193,25 +193,25 @@ const orbOffset2 = $derived(scrollY * 0.08);
 					<div class="space-y-3">
 						<div>
 							<span class="text-tokyo-green">$</span>
-							<span class="text-muted-foreground"> redshift login</span>
+							<span class="text-foreground/80"> redshift login</span>
 						</div>
-						<div class="text-muted-foreground/70">
+						<div class="text-foreground/60">
 							<span class="text-tokyo-cyan">?</span> Select authentication method
 						</div>
 						<div class="pl-4 text-tokyo-blue">
 							<span class="text-tokyo-green">></span> NIP-07 Browser Extension (recommended)
 						</div>
-						<div class="pl-4 text-muted-foreground/50">Enter nsec manually</div>
-						<div class="pl-4 text-muted-foreground/50">Use bunker URL</div>
+						<div class="pl-4 text-foreground/50">Enter nsec manually</div>
+						<div class="pl-4 text-foreground/50">Use bunker URL</div>
 						<div class="mt-4">
 							<span class="text-tokyo-green">✓</span>
 							<span class="text-foreground"> Connected as npub1abc...xyz</span>
 						</div>
 						<div class="mt-4">
 							<span class="text-tokyo-green">$</span>
-							<span class="text-muted-foreground"> redshift run -- npm start</span>
+							<span class="text-foreground/80"> redshift run -- npm start</span>
 						</div>
-						<div class="text-muted-foreground/70">
+						<div class="text-foreground/60">
 							<span class="text-tokyo-cyan">info</span> Fetching secrets for
 							<span class="text-tokyo-purple">my-app/production</span>...
 						</div>
