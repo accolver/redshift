@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Button } from '$lib/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
+import CodeBlock from '$lib/components/CodeBlock.svelte';
 </script>
 
 <svelte:head>
@@ -30,12 +31,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/car
 				<p class="text-muted-foreground">
 					First, install the Redshift CLI. You can use the install script or your package manager:
 				</p>
-				<pre
-					class="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm"># Using install script
+				<CodeBlock code={`# Using install script
 curl -fsSL https://redshiftapp.com/install | sh
 
 # Or with bun
-bun add -g redshift</pre>
+bun add -g redshift`} />
 			</CardContent>
 		</Card>
 
@@ -54,11 +54,10 @@ bun add -g redshift</pre>
 				<p class="text-muted-foreground">
 					Redshift uses Nostr keys for authentication. If you don't have one, you can generate it:
 				</p>
-				<pre
-					class="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm"># Generate a new key (save your nsec securely!)
+				<CodeBlock code={`# Generate a new key (save your nsec securely!)
 nak key generate
 
-# Or use a browser extension like Alby or nos2x</pre>
+# Or use a browser extension like Alby or nos2x`} />
 				<p class="text-sm text-destructive">
 					Important: Never share your nsec (private key). Anyone with your nsec can access your
 					secrets.
@@ -81,15 +80,14 @@ nak key generate
 				<p class="text-muted-foreground">
 					Authenticate with your Nostr key. You have three options:
 				</p>
-				<pre
-					class="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm"># Interactive login (recommended)
+				<CodeBlock code={`# Interactive login (recommended)
 redshift login
 
 # Direct nsec (for scripting)
 redshift login --nsec nsec1...
 
 # Bunker URL (for remote signing)
-redshift login --bunker "bunker://pubkey?relay=wss://relay.example&secret=..."</pre>
+redshift login --bunker "bunker://pubkey?relay=wss://relay.example&secret=..."`} />
 			</CardContent>
 		</Card>
 
@@ -108,11 +106,10 @@ redshift login --bunker "bunker://pubkey?relay=wss://relay.example&secret=..."</
 				<p class="text-muted-foreground">
 					Navigate to your project directory and run setup to configure project and environment:
 				</p>
-				<pre
-					class="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm">cd ~/my-project
+				<CodeBlock code={`cd ~/my-project
 redshift setup
 
-# This creates a redshift.yaml file</pre>
+# This creates a redshift.yaml file`} />
 			</CardContent>
 		</Card>
 
@@ -129,15 +126,14 @@ redshift setup
 			</CardHeader>
 			<CardContent class="space-y-4">
 				<p class="text-muted-foreground">Add secrets using the CLI:</p>
-				<pre
-					class="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm"># Set a secret
+				<CodeBlock code={`# Set a secret
 redshift secrets set DATABASE_URL "postgres://user:pass@localhost/db"
 
 # View all secrets
 redshift secrets list
 
 # Get a specific secret
-redshift secrets get DATABASE_URL</pre>
+redshift secrets get DATABASE_URL`} />
 			</CardContent>
 		</Card>
 
@@ -154,13 +150,12 @@ redshift secrets get DATABASE_URL</pre>
 			</CardHeader>
 			<CardContent class="space-y-4">
 				<p class="text-muted-foreground">
-					Use <code class="rounded bg-muted px-1">redshift run</code> to inject secrets into your app:
+					Use <code class="rounded bg-muted px-1 text-foreground">redshift run</code> to inject secrets into your app:
 				</p>
-				<pre
-					class="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm"># Run with secrets injected
+				<CodeBlock code={`# Run with secrets injected
 redshift run -- npm start
 redshift run -- python app.py
-redshift run -- bun run dev</pre>
+redshift run -- bun run dev`} />
 				<p class="text-muted-foreground">
 					Your secrets are now available as environment variables in the child process!
 				</p>
