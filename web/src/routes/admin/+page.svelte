@@ -223,7 +223,7 @@ const cliCommands = [
 					{/each}
 				</div>
 				<p class="mt-4 text-xs text-muted-foreground">
-					Install: <code class="rounded bg-muted px-1.5 py-0.5">curl -fsSL https://redshift.dev/install | sh</code>
+					Install: <code class="rounded bg-muted px-1.5 py-0.5 text-foreground">curl -fsSL https://redshift.dev/install | sh</code>
 				</p>
 			</CardContent>
 		</Card>
