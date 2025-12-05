@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
+import { Button } from '$lib/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 </script>
 
 <svelte:head>
@@ -32,7 +32,7 @@
 				</p>
 				<pre
 					class="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm"># Using install script
-curl -fsSL https://redshift.dev/install | sh
+curl -fsSL https://redshiftapp.com/install | sh
 
 # Or with bun
 bun add -g redshift</pre>

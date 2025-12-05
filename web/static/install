@@ -1,0 +1,139 @@
+#!/bin/sh
+# Redshift CLI Installer
+# Usage: curl -fsSL https://redshiftapp.com/install | sh
+
+set -e
+
+REPO="redshift-secrets/redshift"
+BINARY_NAME="redshift"
+INSTALL_DIR="${REDSHIFT_INSTALL_DIR:-$HOME/.local/bin}"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+info() {
+    printf "${BLUE}info${NC} %s\n" "$1"
+}
+
+success() {
+    printf "${GREEN}success${NC} %s\n" "$1"
+}
+
+warn() {
+    printf "${YELLOW}warn${NC} %s\n" "$1"
+}
+
+error() {
+    printf "${RED}error${NC} %s\n" "$1"
+    exit 1
+}
+
+# Detect OS
+detect_os() {
+    case "$(uname -s)" in
+        Linux*)     OS="linux";;
+        Darwin*)    OS="darwin";;
+        MINGW*|MSYS*|CYGWIN*) OS="windows";;
+        *)          error "Unsupported operating system: $(uname -s)";;
+    esac
+}
+
+# Detect architecture
+detect_arch() {
+    case "$(uname -m)" in
+        x86_64|amd64)   ARCH="x64";;
+        arm64|aarch64)  ARCH="arm64";;
+        *)              error "Unsupported architecture: $(uname -m)";;
+    esac
+}
+
+# Get latest release version from GitHub
+get_latest_version() {
+    VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    if [ -z "$VERSION" ]; then
+        error "Failed to fetch latest version from GitHub"
+    fi
+}
+
+# Download and install binary
+install_binary() {
+    DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}-${OS}-${ARCH}"
+    
+    if [ "$OS" = "windows" ]; then
+        DOWNLOAD_URL="${DOWNLOAD_URL}.exe"
+        BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}.exe"
+    else
+        BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
+    fi
+
+    info "Downloading Redshift ${VERSION} for ${OS}/${ARCH}..."
+    
+    # Create install directory if it doesn't exist
+    mkdir -p "$INSTALL_DIR"
+    
+    # Download binary
+    if ! curl -fsSL "$DOWNLOAD_URL" -o "$BINARY_PATH"; then
+        error "Failed to download binary from $DOWNLOAD_URL"
+    fi
+    
+    # Make executable
+    chmod +x "$BINARY_PATH"
+    
+    success "Installed Redshift to $BINARY_PATH"
+}
+
+# Check if install directory is in PATH
+check_path() {
+    case ":$PATH:" in
+        *":$INSTALL_DIR:"*)
+            ;;
+        *)
+            warn "$INSTALL_DIR is not in your PATH"
+            echo ""
+            echo "Add it to your shell profile:"
+            echo ""
+            echo "  # For bash (~/.bashrc or ~/.bash_profile)"
+            echo "  export PATH=\"\$PATH:$INSTALL_DIR\""
+            echo ""
+            echo "  # For zsh (~/.zshrc)"
+            echo "  export PATH=\"\$PATH:$INSTALL_DIR\""
+            echo ""
+            echo "  # For fish (~/.config/fish/config.fish)"
+            echo "  fish_add_path $INSTALL_DIR"
+            echo ""
+            ;;
+    esac
+}
+
+# Main installation flow
+main() {
+    echo ""
+    echo "  ╔═══════════════════════════════════════╗"
+    echo "  ║   Redshift - Secret Management CLI    ║"
+    echo "  ║   Decentralized. Censorship-free.     ║"
+    echo "  ╚═══════════════════════════════════════╝"
+    echo ""
+
+    detect_os
+    detect_arch
+    get_latest_version
+    install_binary
+    check_path
+
+    echo ""
+    success "Installation complete!"
+    echo ""
+    echo "Get started:"
+    echo "  redshift login      # Authenticate with your Nostr identity"
+    echo "  redshift setup      # Configure a project"
+    echo "  redshift --help     # See all commands"
+    echo ""
+    echo "Documentation: https://redshiftapp.com/docs"
+    echo ""
+}
+
+main

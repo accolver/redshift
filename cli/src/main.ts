@@ -62,7 +62,7 @@ Environment Variables:
   REDSHIFT_BUNKER      Bunker URL for CI/CD (alternative to nsec)
   REDSHIFT_CONFIG_DIR  Override config directory (~/.redshift)
 
-Documentation: https://redshift.dev/docs
+Documentation: https://redshiftapp.com/docs
 `;
 
 async function main(): Promise<void> {

@@ -16,7 +16,7 @@ function handleScroll() {
 }
 
 async function copyInstallCommand() {
-	await navigator.clipboard.writeText('curl -fsSL https://redshift.dev/install | sh');
+	await navigator.clipboard.writeText('curl -fsSL https://redshiftapp.com/install | sh');
 	copied = true;
 	setTimeout(() => (copied = false), 2000);
 }
@@ -409,7 +409,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						<div class="p-6">
 							<code class="font-mono text-sm">
 								<span class="text-tokyo-green">$</span>
-								<span class="text-foreground"> curl -fsSL https://redshift.dev/install | sh</span>
+								<span class="text-foreground"> curl -fsSL https://redshiftapp.com/install | sh</span>
 							</code>
 						</div>
 					</div>

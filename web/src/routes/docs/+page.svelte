@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 </script>
 
 <svelte:head>
@@ -18,7 +18,7 @@
 			<CardContent class="space-y-4">
 				<p class="text-muted-foreground">Install the Redshift CLI using the install script:</p>
 				<pre
-					class="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm">curl -fsSL https://redshift.dev/install | sh</pre>
+					class="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm">curl -fsSL https://redshiftapp.com/install | sh</pre>
 
 				<p class="text-muted-foreground">Or install with npm/bun:</p>
 				<pre class="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm">bun add -g redshift</pre>
