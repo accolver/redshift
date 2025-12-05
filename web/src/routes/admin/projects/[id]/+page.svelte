@@ -1,6 +1,8 @@
 <script lang="ts">
 import { page } from '$app/state';
 import { onMount } from 'svelte';
+import { slide, fade } from 'svelte/transition';
+import { flip } from 'svelte/animate';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import {
@@ -123,18 +125,23 @@ function updateSecretValue(originalKey: string, newValue: string) {
 	editedSecrets = new Map(editedSecrets);
 }
 
-// Check if there are any unsaved changes
+// Check if there are any unsaved changes (including pending new secret)
 const hasUnsavedChanges = $derived(() => {
+	// Check if there's a pending new secret
+	if (showAddSecretRow && newSecretKey.trim()) return true;
+	// Check edited secrets
 	for (const [originalKey] of editedSecrets) {
 		if (isSecretModified(originalKey)) return true;
 	}
 	return false;
 });
 
-// Save all changes - batch update all secrets at once
+// Save all changes - batch update all secrets at once (including new secret row)
 async function saveAllChanges() {
 	const toSave = Array.from(editedSecrets.entries()).filter(([key]) => isSecretModified(key));
-	if (toSave.length === 0) return;
+	const hasNewSecret = showAddSecretRow && newSecretKey.trim();
+
+	if (toSave.length === 0 && !hasNewSecret) return;
 
 	// Track the new keys for saved state (in case key was renamed)
 	const savedKeyMap = new Map<string, string>(); // originalKey -> newKey
@@ -175,6 +182,21 @@ async function saveAllChanges() {
 		// Remove old keys that were renamed
 		updatedSecrets = updatedSecrets.filter((s) => !keysToRemove.includes(s.key));
 
+		// Add new secret if present
+		if (hasNewSecret) {
+			const trimmedKey = newSecretKey.trim();
+			// Check if key already exists
+			const existingIndex = updatedSecrets.findIndex((s) => s.key === trimmedKey);
+			if (existingIndex !== -1) {
+				updatedSecrets[existingIndex] = { key: trimmedKey, value: newSecretValue };
+			} else {
+				updatedSecrets.push({ key: trimmedKey, value: newSecretValue });
+			}
+			// Track for saving state
+			savingSecrets.add(trimmedKey);
+			savedKeyMap.set('__new__', trimmedKey);
+		}
+
 		// Now save all secrets at once
 		const auth = getAuthState();
 		if (!auth.isConnected || !auth.pubkey) {
@@ -208,11 +230,20 @@ async function saveAllChanges() {
 		for (const [originalKey, newKey] of savedKeyMap) {
 			savingSecrets.delete(newKey);
 			savedSecrets.add(newKey);
-			editedSecrets.delete(originalKey);
+			if (originalKey !== '__new__') {
+				editedSecrets.delete(originalKey);
+			}
 		}
 		savingSecrets = new Set(savingSecrets);
 		savedSecrets = new Set(savedSecrets);
 		editedSecrets = new Map(editedSecrets);
+
+		// Clear new secret row if it was saved
+		if (hasNewSecret) {
+			newSecretKey = '';
+			newSecretValue = '';
+			showAddSecretRow = false;
+		}
 
 		// Clear saved status after 2 seconds
 		const keysToClean = Array.from(savedKeyMap.values());
@@ -284,9 +315,22 @@ $effect(() => {
 	}
 });
 
+// Warn before leaving with unsaved changes
+function handleBeforeUnload(e: BeforeUnloadEvent) {
+	if (hasUnsavedChanges()) {
+		e.preventDefault();
+		// Modern browsers ignore custom messages, but we need to return something
+		return 'You have unsaved changes. Are you sure you want to leave?';
+	}
+}
+
 // Cleanup on unmount
 onMount(() => {
+	// Add beforeunload listener
+	window.addEventListener('beforeunload', handleBeforeUnload);
+
 	return () => {
+		window.removeEventListener('beforeunload', handleBeforeUnload);
 		unsubscribeFromSecrets();
 	};
 });
@@ -607,7 +651,7 @@ function handleKeydown(e: KeyboardEvent) {
 						{:else}
 							<!-- Add Secret Row -->
 							{#if showAddSecretRow}
-								<div class="flex items-center gap-2">
+								<div class="flex items-center gap-2" transition:slide={{ duration: 200 }}>
 									<!-- Status placeholder -->
 									<div class="flex size-8 items-center justify-center">
 										<Circle class="size-4 text-muted-foreground/30" />
@@ -670,7 +714,11 @@ function handleKeydown(e: KeyboardEvent) {
 							{#each filteredSecrets() as secret (secret.key)}
 								{@const edited = getEditedSecret(secret.key)}
 								{@const status = getSecretStatus(secret.key)}
-								<div class="group flex items-center gap-2">
+								<div 
+									class="group flex items-center gap-2"
+									transition:slide={{ duration: 200 }}
+									animate:flip={{ duration: 200 }}
+								>
 									<!-- Status Icon -->
 									<div class="flex size-8 items-center justify-center">
 										{#if status === 'saving'}
