@@ -1,10 +1,22 @@
 import type { AuthState, ProfileMetadata } from '$lib/types/nostr';
 import { SimplePool } from 'nostr-tools/pool';
+import {
+	secureStore,
+	secureRetrieve,
+	secureRemove,
+	isSecureStorageAvailable,
+} from './secure-storage';
 
 /**
  * Authentication store using Svelte 5 Runes
  * Handles NIP-07 browser extension and local nsec authentication
+ *
+ * Security: When using nsec, the private key is encrypted with a non-extractable
+ * AES-GCM key stored in IndexedDB before being saved to sessionStorage.
+ * See secure-storage.ts for details.
  */
+
+const NSEC_STORAGE_KEY = 'sk';
 
 // Default relays for fetching profile metadata
 const DEFAULT_RELAYS = [
@@ -88,7 +100,9 @@ export async function connectWithNip07(): Promise<boolean> {
 
 /**
  * Connect using a local nsec (private key)
- * NOTE: This is less secure than NIP-07 - the key is held in memory
+ *
+ * Security: The nsec is encrypted with a non-extractable AES-GCM key
+ * before being stored in sessionStorage. See secure-storage.ts for details.
  */
 export async function connectWithNsec(nsec: string): Promise<boolean> {
 	try {
@@ -110,8 +124,11 @@ export async function connectWithNsec(nsec: string): Promise<boolean> {
 
 		const pubkey = getPublicKey(secretKey);
 
-		// Store the secret key in sessionStorage (cleared on tab close)
-		sessionStorage.setItem('redshift_sk', nsec);
+		// Securely store the nsec (encrypted, cleared on tab close)
+		if (isSecureStorageAvailable()) {
+			await secureStore(NSEC_STORAGE_KEY, nsec);
+		}
+		// Note: If secure storage unavailable, we don't persist the key at all
 
 		authState = {
 			method: 'nsec',
@@ -136,7 +153,7 @@ export async function connectWithNsec(nsec: string): Promise<boolean> {
  * Disconnect and clear auth state
  */
 export function disconnect(): void {
-	sessionStorage.removeItem('redshift_sk');
+	secureRemove(NSEC_STORAGE_KEY);
 	authState = {
 		method: 'none',
 		pubkey: null,
@@ -161,13 +178,15 @@ export function clearError(): void {
 }
 
 /**
- * Try to restore auth from sessionStorage (for nsec) or check NIP-07
+ * Try to restore auth from secure storage (for nsec) or check NIP-07
  */
 export async function restoreAuth(): Promise<boolean> {
-	// First check for stored nsec
-	const storedNsec = sessionStorage.getItem('redshift_sk');
-	if (storedNsec) {
-		return connectWithNsec(storedNsec);
+	// First check for securely stored nsec
+	if (isSecureStorageAvailable()) {
+		const storedNsec = await secureRetrieve(NSEC_STORAGE_KEY);
+		if (storedNsec) {
+			return connectWithNsec(storedNsec);
+		}
 	}
 
 	// If no stored nsec, don't auto-connect NIP-07 (require explicit action)

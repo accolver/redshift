@@ -24,6 +24,7 @@
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/svelte": "^5.2.9",
 		"@vitest/ui": "^4.0.15",
+		"fake-indexeddb": "^6.2.5",
 		"jsdom": "^27.2.0",
 		"svelte": "^5.43.8",
 		"svelte-check": "^4.3.4",
