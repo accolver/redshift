@@ -61,7 +61,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 
 	<!-- Navigation -->
 	<nav class="glass fixed left-0 right-0 top-0 z-50 border-b border-border/50">
-		<div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+		<div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
 			<a href="/" class="flex items-center gap-2">
 				<div
 					class="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-tokyo-blue to-tokyo-purple"

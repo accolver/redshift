@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onMount } from 'svelte';
 import { Button } from '$lib/components/ui/button';
-import { Key, ChevronDown, LogOut } from '@lucide/svelte';
+import { Key, ChevronDown, LogOut, Radio, Search } from '@lucide/svelte';
 import {
 	getAuthState,
 	connectWithNip07,
@@ -10,16 +10,61 @@ import {
 	restoreAuth,
 } from '$lib/stores/auth.svelte';
 import { subscribeToProjects, unsubscribeFromProjects } from '$lib/stores/projects.svelte';
-import { connectAndSync, disconnect as nostrDisconnect } from '$lib/stores/nostr.svelte';
+import {
+	connectAndSync,
+	disconnect as nostrDisconnect,
+	getRelayState,
+	DEFAULT_RELAYS,
+} from '$lib/stores/nostr.svelte';
 import { nip19 } from 'nostr-tools';
+import GlobalSearch from '$lib/components/GlobalSearch.svelte';
 
 let dropdownOpen = $state(false);
+let relayDropdownOpen = $state(false);
+let searchOpen = $state(false);
 
 let { children } = $props();
 let isConnecting = $state(false);
 let hasExtension = $state(false);
 
 const auth = $derived(getAuthState());
+const relayState = $derived(getRelayState());
+
+// Detect platform for keyboard shortcut display
+const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC');
+
+// Global keyboard shortcut for search
+function handleGlobalKeydown(e: KeyboardEvent) {
+	// Cmd+K (Mac) or Ctrl+K (Windows/Linux)
+	if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+		e.preventDefault();
+		if (auth.isConnected) {
+			searchOpen = true;
+		}
+	}
+}
+
+// Get relay status color and label
+const relayStatusInfo = $derived(() => {
+	switch (relayState.status) {
+		case 'connected':
+			return { color: 'bg-green-500', label: 'Connected', textColor: 'text-green-500' };
+		case 'connecting':
+			return {
+				color: 'bg-yellow-500 animate-pulse',
+				label: 'Connecting',
+				textColor: 'text-yellow-500',
+			};
+		case 'error':
+			return { color: 'bg-red-500', label: 'Error', textColor: 'text-red-500' };
+		default:
+			return {
+				color: 'bg-muted-foreground/40',
+				label: 'Disconnected',
+				textColor: 'text-muted-foreground',
+			};
+	}
+});
 
 // Subscribe to projects when authenticated
 $effect(() => {
@@ -48,8 +93,12 @@ onMount(() => {
 		}
 	});
 
+	// Add global keyboard shortcut listener
+	window.addEventListener('keydown', handleGlobalKeydown);
+
 	// Cleanup on unmount
 	return () => {
+		window.removeEventListener('keydown', handleGlobalKeydown);
 		unsubscribeFromProjects();
 		nostrDisconnect();
 	};
@@ -91,10 +140,55 @@ function getDisplayName(pubkey: string): string {
 				</a>
 				<nav class="flex items-center gap-1">
 					<a href="/admin" class="rounded-md px-3 py-1.5 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground">Dashboard</a>
-					<a href="/admin/secrets" class="rounded-md px-3 py-1.5 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground">Secrets</a>
 				</nav>
 			</div>
 			<div class="flex items-center gap-3">
+				<!-- Search Button -->
+				{#if auth.isConnected}
+					<button
+						type="button"
+						class="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+						onclick={() => (searchOpen = true)}
+					>
+						<Search class="size-4" />
+						<span class="hidden sm:inline">Search</span>
+						<kbd class="hidden rounded border border-border bg-background px-1.5 py-0.5 text-xs sm:inline">{isMac ? '⌘' : 'Ctrl'}K</kbd>
+					</button>
+				{/if}
+
+				<!-- Relay Status Indicator -->
+				{#if auth.isConnected}
+					<div class="relative">
+						<button
+							type="button"
+							class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+							onclick={() => (relayDropdownOpen = !relayDropdownOpen)}
+							onblur={() => setTimeout(() => (relayDropdownOpen = false), 150)}
+							title="Relay status"
+						>
+							<Radio class="size-4" />
+							<span class="hidden sm:inline">{relayState.connectedCount}/{relayState.totalCount}</span>
+							<span class="flex size-2 rounded-full {relayStatusInfo().color}"></span>
+						</button>
+						{#if relayDropdownOpen}
+							<div class="absolute right-0 top-full z-50 mt-1 w-64 rounded-md border border-border bg-card p-3 shadow-lg">
+								<div class="mb-2 flex items-center justify-between">
+									<span class="text-sm font-medium">Relay Status</span>
+									<span class="text-xs {relayStatusInfo().textColor}">{relayStatusInfo().label}</span>
+								</div>
+								<div class="space-y-1.5">
+									{#each DEFAULT_RELAYS as relay}
+										<div class="flex items-center gap-2 text-xs">
+											<span class="flex size-1.5 rounded-full {relayState.status === 'connected' ? 'bg-green-500' : 'bg-muted-foreground/40'}"></span>
+											<span class="truncate text-muted-foreground">{relay.replace('wss://', '')}</span>
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
+					</div>
+				{/if}
+
 				{#if auth.isConnected}
 					<div class="relative">
 						<button
@@ -147,3 +241,6 @@ function getDisplayName(pubkey: string): string {
 		{@render children()}
 	</main>
 </div>
+
+<!-- Global Search Dialog -->
+<GlobalSearch bind:open={searchOpen} onOpenChange={(v) => (searchOpen = v)} />

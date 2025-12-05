@@ -27,6 +27,28 @@ export const relayPool = new RelayPool();
 // Track active subscriptions
 let activeSubscription: { unsubscribe: () => void } | null = null;
 
+// Relay connection status
+export type RelayStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+
+interface RelayState {
+	status: RelayStatus;
+	connectedCount: number;
+	totalCount: number;
+}
+
+let relayState = $state<RelayState>({
+	status: 'disconnected',
+	connectedCount: 0,
+	totalCount: 0,
+});
+
+/**
+ * Get current relay connection state (reactive)
+ */
+export function getRelayState(): RelayState {
+	return relayState;
+}
+
 /**
  * Connect to relays and start syncing events for a user
  */
@@ -35,6 +57,13 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 	if (activeSubscription) {
 		activeSubscription.unsubscribe();
 	}
+
+	// Update relay state
+	relayState = {
+		status: 'connecting',
+		connectedCount: 0,
+		totalCount: relays.length,
+	};
 
 	// Subscribe to all Redshift events (Kind 30078) for this user
 	// Also subscribe to profile events (Kind 0) for displaying user info
@@ -47,11 +76,34 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 		.subscribe({
 			next: (event: NostrEvent) => {
 				eventStore.add(event);
+				// Mark as connected once we receive any event
+				if (relayState.status !== 'connected') {
+					relayState = {
+						...relayState,
+						status: 'connected',
+						connectedCount: relays.length, // Simplified - assume all connected if we get events
+					};
+				}
 			},
 			error: (err) => {
 				console.error('Relay subscription error:', err);
+				relayState = {
+					...relayState,
+					status: 'error',
+				};
 			},
 		});
+
+	// Set connected after a short delay (relays are async)
+	setTimeout(() => {
+		if (relayState.status === 'connecting') {
+			relayState = {
+				...relayState,
+				status: 'connected',
+				connectedCount: relays.length,
+			};
+		}
+	}, 2000);
 }
 
 /**
@@ -62,6 +114,11 @@ export function disconnect(): void {
 		activeSubscription.unsubscribe();
 		activeSubscription = null;
 	}
+	relayState = {
+		status: 'disconnected',
+		connectedCount: 0,
+		totalCount: 0,
+	};
 }
 
 /**

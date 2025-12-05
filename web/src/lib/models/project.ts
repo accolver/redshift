@@ -126,3 +126,22 @@ export function createEnvironment(slug: string, name: string): Environment {
 		createdAt: Date.now(),
 	};
 }
+
+/**
+ * Remove an environment from a project by slug
+ * Returns a new project object (immutable)
+ * Throws error if trying to remove the last environment
+ */
+export function removeEnvironmentFromProject(project: Project, slug: string): Project {
+	// Prevent removing the last environment
+	if (project.environments.length <= 1) {
+		throw new Error(
+			'Cannot delete the last environment. A project must have at least one environment.',
+		);
+	}
+
+	return {
+		...project,
+		environments: project.environments.filter((env) => env.slug !== slug),
+	};
+}

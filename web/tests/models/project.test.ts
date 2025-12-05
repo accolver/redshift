@@ -4,7 +4,9 @@ import {
 	createEnvironment,
 	createProjectContent,
 	generateProjectId,
+	removeEnvironmentFromProject,
 } from '$lib/models/project';
+import type { Project } from '$lib/types/nostr';
 
 describe('Project Model', () => {
 	describe('generateProjectId', () => {
@@ -119,6 +121,77 @@ describe('Project Model', () => {
 
 			expect(content.createdAt).toBeGreaterThanOrEqual(before);
 			expect(content.createdAt).toBeLessThanOrEqual(after);
+		});
+	});
+
+	describe('removeEnvironmentFromProject', () => {
+		const createTestProject = (): Project => ({
+			id: 'test-project',
+			name: 'Test Project',
+			createdAt: Date.now(),
+			environments: [
+				{ id: 'env1', slug: 'dev', name: 'Development', createdAt: Date.now() },
+				{ id: 'env2', slug: 'staging', name: 'Staging', createdAt: Date.now() },
+				{ id: 'env3', slug: 'prod', name: 'Production', createdAt: Date.now() },
+			],
+		});
+
+		it('removes environment by slug', () => {
+			const project = createTestProject();
+			const result = removeEnvironmentFromProject(project, 'staging');
+
+			expect(result.environments).toHaveLength(2);
+			expect(result.environments.map((e) => e.slug)).toEqual(['dev', 'prod']);
+		});
+
+		it('returns new project object (immutable)', () => {
+			const project = createTestProject();
+			const result = removeEnvironmentFromProject(project, 'staging');
+
+			expect(result).not.toBe(project);
+			expect(result.environments).not.toBe(project.environments);
+		});
+
+		it('preserves other project properties', () => {
+			const project = createTestProject();
+			const result = removeEnvironmentFromProject(project, 'staging');
+
+			expect(result.id).toBe(project.id);
+			expect(result.name).toBe(project.name);
+			expect(result.createdAt).toBe(project.createdAt);
+		});
+
+		it('returns unchanged project if slug not found', () => {
+			const project = createTestProject();
+			const result = removeEnvironmentFromProject(project, 'nonexistent');
+
+			expect(result.environments).toHaveLength(3);
+		});
+
+		it('throws error when trying to remove last environment', () => {
+			const project: Project = {
+				id: 'test',
+				name: 'Test',
+				createdAt: Date.now(),
+				environments: [{ id: 'env1', slug: 'dev', name: 'Development', createdAt: Date.now() }],
+			};
+
+			expect(() => removeEnvironmentFromProject(project, 'dev')).toThrow(
+				'Cannot delete the last environment',
+			);
+		});
+
+		it('handles empty environments array gracefully', () => {
+			const project: Project = {
+				id: 'test',
+				name: 'Test',
+				createdAt: Date.now(),
+				environments: [],
+			};
+
+			expect(() => removeEnvironmentFromProject(project, 'dev')).toThrow(
+				'Cannot delete the last environment',
+			);
 		});
 	});
 });

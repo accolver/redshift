@@ -13,7 +13,7 @@ import {
 	DropdownMenuSeparator,
 } from '$lib/components/ui/dropdown-menu';
 
-import { getProjectsState } from '$lib/stores/projects.svelte';
+import { getProjectsState, deleteProject, deleteEnvironment } from '$lib/stores/projects.svelte';
 import {
 	getSecretsState,
 	getSecretsContext,
@@ -46,7 +46,16 @@ import {
 	CircleCheck,
 	Download,
 	Upload,
+	TriangleAlert,
 } from '@lucide/svelte';
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from '$lib/components/ui/dialog';
 import type { Environment } from '$lib/types/nostr';
 import AddEnvironmentModal from '$lib/components/AddEnvironmentModal.svelte';
 import CreateProjectModal from '$lib/components/CreateProjectModal.svelte';
@@ -76,6 +85,9 @@ let showAddEnvModal = $state(false);
 let showCreateProjectModal = $state(false);
 let showExportModal = $state(false);
 let showImportModal = $state(false);
+let showDeleteProjectDialog = $state(false);
+let showDeleteEnvDialog = $state(false);
+let isDeleting = $state(false);
 let isAddingSecret = $state(false);
 let newSecretKey = $state('');
 let newSecretValue = $state('');
@@ -490,6 +502,41 @@ async function handleImportSecrets(
 		console.error('Failed to import secrets:', err);
 	}
 }
+
+async function handleDeleteProject() {
+	if (!project) return;
+
+	isDeleting = true;
+	try {
+		await deleteProject(project.id);
+		showDeleteProjectDialog = false;
+		goto('/admin');
+	} catch (err) {
+		console.error('Failed to delete project:', err);
+	} finally {
+		isDeleting = false;
+	}
+}
+
+async function handleDeleteEnvironment() {
+	if (!project || !selectedEnv) return;
+
+	isDeleting = true;
+	try {
+		await deleteEnvironment(project.id, selectedEnv.slug);
+		showDeleteEnvDialog = false;
+		// Switch to first remaining environment
+		const remainingEnvs = project.environments.filter((e) => e.slug !== selectedEnv.slug);
+		if (remainingEnvs.length > 0) {
+			selectedEnvSlug = remainingEnvs[0].slug;
+		}
+	} catch (err) {
+		console.error('Failed to delete environment:', err);
+		alert(err instanceof Error ? err.message : 'Failed to delete environment');
+	} finally {
+		isDeleting = false;
+	}
+}
 </script>
 
 <svelte:head>
@@ -592,7 +639,21 @@ async function handleImportSecrets(
 								Import
 							</DropdownMenuItem>
 							<DropdownMenuSeparator />
-							<DropdownMenuItem class="text-destructive">Delete Project</DropdownMenuItem>
+							<DropdownMenuItem
+								class="text-destructive"
+								onclick={() => (showDeleteEnvDialog = true)}
+								disabled={project.environments.length <= 1}
+							>
+								<Trash2 class="mr-2 size-4" />
+								Delete Environment
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								class="text-destructive"
+								onclick={() => (showDeleteProjectDialog = true)}
+							>
+								<Trash2 class="mr-2 size-4" />
+								Delete Project
+							</DropdownMenuItem>
 						</DropdownMenuContent>
 					</DropdownMenu>
 				</div>
@@ -1080,3 +1141,59 @@ async function handleImportSecrets(
 		</div>
 	</div>
 {/if}
+
+<!-- Delete Project Confirmation Dialog -->
+<Dialog bind:open={showDeleteProjectDialog} onOpenChange={(v) => (showDeleteProjectDialog = v)}>
+	<DialogContent class="sm:max-w-md">
+		<DialogHeader>
+			<DialogTitle class="flex items-center gap-2">
+				<TriangleAlert class="size-5 text-destructive" />
+				Delete Project
+			</DialogTitle>
+			<DialogDescription>
+				Are you sure you want to delete <strong>{project?.name}</strong>? This will permanently delete all environments and secrets in this project. This action cannot be undone.
+			</DialogDescription>
+		</DialogHeader>
+		<DialogFooter class="gap-2 sm:gap-0">
+			<Button variant="outline" onclick={() => (showDeleteProjectDialog = false)} disabled={isDeleting}>
+				Cancel
+			</Button>
+			<Button variant="destructive" onclick={handleDeleteProject} disabled={isDeleting}>
+				{#if isDeleting}
+					<LoaderCircle class="mr-2 size-4 animate-spin" />
+					Deleting...
+				{:else}
+					Delete Project
+				{/if}
+			</Button>
+		</DialogFooter>
+	</DialogContent>
+</Dialog>
+
+<!-- Delete Environment Confirmation Dialog -->
+<Dialog bind:open={showDeleteEnvDialog} onOpenChange={(v) => (showDeleteEnvDialog = v)}>
+	<DialogContent class="sm:max-w-md">
+		<DialogHeader>
+			<DialogTitle class="flex items-center gap-2">
+				<TriangleAlert class="size-5 text-destructive" />
+				Delete Environment
+			</DialogTitle>
+			<DialogDescription>
+				Are you sure you want to delete the <strong>{selectedEnv?.name}</strong> environment? All secrets in this environment will be permanently deleted. This action cannot be undone.
+			</DialogDescription>
+		</DialogHeader>
+		<DialogFooter class="gap-2 sm:gap-0">
+			<Button variant="outline" onclick={() => (showDeleteEnvDialog = false)} disabled={isDeleting}>
+				Cancel
+			</Button>
+			<Button variant="destructive" onclick={handleDeleteEnvironment} disabled={isDeleting}>
+				{#if isDeleting}
+					<LoaderCircle class="mr-2 size-4 animate-spin" />
+					Deleting...
+				{:else}
+					Delete Environment
+				{/if}
+			</Button>
+		</DialogFooter>
+	</DialogContent>
+</Dialog>

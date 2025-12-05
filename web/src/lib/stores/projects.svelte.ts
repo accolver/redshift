@@ -6,6 +6,7 @@ import {
 	createProjectContent,
 	generateProjectId,
 	createEnvironment,
+	removeEnvironmentFromProject,
 } from '$lib/models/project';
 import { getAuthState } from './auth.svelte';
 
@@ -281,6 +282,51 @@ export async function addEnvironment(
 	await publishEvent(signedEvent);
 
 	return newEnv;
+}
+
+/**
+ * Delete an environment from a project
+ */
+export async function deleteEnvironment(projectId: string, slug: string): Promise<void> {
+	const project = getProjectById(projectId);
+
+	if (!project) {
+		throw new Error('Project not found');
+	}
+
+	const auth = getAuthState();
+	if (!auth.isConnected || !auth.pubkey) {
+		throw new Error('Must be connected to delete an environment');
+	}
+
+	// Use the model function to get updated project (validates constraints)
+	const updatedProject = removeEnvironmentFromProject(project, slug);
+
+	// Create updated content
+	const content = {
+		type: 'project' as const,
+		name: updatedProject.name,
+		environments: updatedProject.environments,
+		createdAt: updatedProject.createdAt,
+	};
+
+	// Create the unsigned event with same d-tag (replaceable)
+	const unsignedEvent = {
+		kind: REDSHIFT_KIND,
+		created_at: Math.floor(Date.now() / 1000),
+		tags: [['d', getProjectDTag(projectId)]],
+		content: JSON.stringify(content),
+	};
+
+	// Sign and publish
+	let signedEvent;
+	if (auth.method === 'nip07' && window.nostr) {
+		signedEvent = await window.nostr.signEvent(unsignedEvent);
+	} else {
+		throw new Error('Local signing not yet implemented. Please use a NIP-07 extension.');
+	}
+
+	await publishEvent(signedEvent);
 }
 
 /**
