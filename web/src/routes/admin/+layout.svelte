@@ -18,13 +18,14 @@ import {
 } from '$lib/stores/nostr.svelte';
 import { nip19 } from 'nostr-tools';
 import GlobalSearch from '$lib/components/GlobalSearch.svelte';
+import LoginDialog from '$lib/components/LoginDialog.svelte';
 
 let dropdownOpen = $state(false);
 let relayDropdownOpen = $state(false);
 let searchOpen = $state(false);
+let loginDialogOpen = $state(false);
 
 let { children } = $props();
-let isConnecting = $state(false);
 let hasExtension = $state(false);
 
 const auth = $derived(getAuthState());
@@ -87,9 +88,7 @@ onMount(() => {
 	restoreAuth().then(async (restored) => {
 		// If not restored and NIP-07 extension is available, auto-connect
 		if (!restored && hasExtension) {
-			isConnecting = true;
 			await connectWithNip07();
-			isConnecting = false;
 		}
 	});
 
@@ -103,12 +102,6 @@ onMount(() => {
 		nostrDisconnect();
 	};
 });
-
-async function handleConnect() {
-	isConnecting = true;
-	await connectWithNip07();
-	isConnecting = false;
-}
 
 function formatPubkey(pubkey: string): string {
 	try {
@@ -228,8 +221,8 @@ function getDisplayName(pubkey: string): string {
 						{/if}
 					</div>
 				{:else}
-					<Button size="sm" onclick={handleConnect} disabled={isConnecting || !hasExtension}>
-						{isConnecting ? 'Connecting...' : 'Connect'}
+					<Button size="sm" onclick={() => (loginDialogOpen = true)}>
+						Connect
 					</Button>
 				{/if}
 			</div>
@@ -244,3 +237,6 @@ function getDisplayName(pubkey: string): string {
 
 <!-- Global Search Dialog -->
 <GlobalSearch bind:open={searchOpen} onOpenChange={(v) => (searchOpen = v)} />
+
+<!-- Login Dialog -->
+<LoginDialog bind:open={loginDialogOpen} onOpenChange={(v) => (loginDialogOpen = v)} />
