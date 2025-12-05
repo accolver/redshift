@@ -35,6 +35,31 @@ const orbOffset2 = $derived(scrollY * 0.08);
 		name="description"
 		content="Sovereign, censorship-resistant secret management using Nostr protocol. Own your secrets."
 	/>
+	{@html `<script type="application/ld+json">
+	{
+		"@context": "https://schema.org",
+		"@type": "SoftwareApplication",
+		"name": "Redshift",
+		"applicationCategory": "DeveloperApplication",
+		"operatingSystem": "macOS, Linux, Windows",
+		"description": "Decentralized, censorship-resistant secret management built on Nostr. Client-side encryption, Doppler-compatible CLI.",
+		"url": "https://redshiftapp.com",
+		"downloadUrl": "https://redshiftapp.com/install",
+		"softwareVersion": "0.1.0",
+		"offers": {
+			"@type": "Offer",
+			"price": "0",
+			"priceCurrency": "USD"
+		},
+		"featureList": [
+			"Client-side encryption",
+			"Nostr-based decentralized storage",
+			"Doppler-compatible CLI",
+			"Censorship-resistant",
+			"No vendor lock-in"
+		]
+	}
+	</script>`}
 </svelte:head>
 
 <div class="relative min-h-screen overflow-hidden bg-background">

@@ -1,3 +1,11 @@
-# allow crawling everything by default
+# Redshift - Decentralized Secret Management
+# https://redshiftapp.com
+
 User-agent: *
-Disallow:
+Allow: /
+
+# Sitemap
+Sitemap: https://redshiftapp.com/sitemap.xml
+
+# Disallow admin dynamic routes from indexing
+Disallow: /admin/projects/
