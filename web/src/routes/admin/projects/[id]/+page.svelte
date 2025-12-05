@@ -1,7 +1,7 @@
 <script lang="ts">
 import { page } from '$app/state';
 import { onMount } from 'svelte';
-import { slide, fade } from 'svelte/transition';
+import { slide } from 'svelte/transition';
 import { flip } from 'svelte/animate';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
@@ -37,19 +37,21 @@ import {
 	LoaderCircle,
 	GitBranch,
 	ArrowUpDown,
-	Filter,
-	MessageSquare,
 	Check,
 	ArrowUpAZ,
 	ArrowDownAZ,
 	Clock,
 	Circle,
 	CircleDot,
-	CheckCircle2,
+	CircleCheck,
+	Download,
+	Upload,
 } from '@lucide/svelte';
 import type { Environment } from '$lib/types/nostr';
 import AddEnvironmentModal from '$lib/components/AddEnvironmentModal.svelte';
 import CreateProjectModal from '$lib/components/CreateProjectModal.svelte';
+import ExportSecretsModal from '$lib/components/ExportSecretsModal.svelte';
+import ImportSecretsModal from '$lib/components/ImportSecretsModal.svelte';
 import { goto } from '$app/navigation';
 
 // Get project ID from route
@@ -72,6 +74,8 @@ const selectedEnv = $derived(
 let searchQuery = $state('');
 let showAddEnvModal = $state(false);
 let showCreateProjectModal = $state(false);
+let showExportModal = $state(false);
+let showImportModal = $state(false);
 let isAddingSecret = $state(false);
 let newSecretKey = $state('');
 let newSecretValue = $state('');
@@ -93,6 +97,9 @@ let savingSecrets = $state<Set<string>>(new Set());
 
 // Track recently saved secrets (for showing success state)
 let savedSecrets = $state<Set<string>>(new Set());
+
+// Track copied secret for toast feedback
+let copiedKey = $state<string | null>(null);
 
 // Check if a secret has been modified
 function isSecretModified(originalKey: string): boolean {
@@ -405,8 +412,12 @@ async function handleDeleteSecret(key: string) {
 	}
 }
 
-function copyToClipboard(value: string) {
+function copyToClipboard(key: string, value: string) {
 	navigator.clipboard.writeText(value);
+	copiedKey = key;
+	setTimeout(() => {
+		copiedKey = null;
+	}, 2000);
 }
 
 function selectEnvironment(env: Environment) {
@@ -424,6 +435,59 @@ function handleKeydown(e: KeyboardEvent) {
 		showAddSecretRow = false;
 		newSecretKey = '';
 		newSecretValue = '';
+	}
+}
+
+async function handleImportSecrets(
+	importedSecrets: import('$lib/types/nostr').Secret[],
+	mode: 'merge' | 'replace',
+) {
+	const auth = getAuthState();
+	if (!auth.isConnected || !auth.pubkey) {
+		console.error('Must be connected to import secrets');
+		return;
+	}
+
+	const { projectId, environmentSlug } = getSecretsContext();
+	if (!projectId || !environmentSlug) {
+		console.error('No project/environment selected');
+		return;
+	}
+
+	let finalSecrets: import('$lib/types/nostr').Secret[];
+
+	if (mode === 'replace') {
+		// Replace all existing secrets with imported ones
+		finalSecrets = importedSecrets;
+	} else {
+		// Merge: add new, update existing
+		const existingMap = new Map(secretsState.secrets.map((s) => [s.key, s]));
+		for (const imported of importedSecrets) {
+			existingMap.set(imported.key, imported);
+		}
+		finalSecrets = Array.from(existingMap.values());
+	}
+
+	try {
+		const content = createSecretsContent(finalSecrets);
+
+		const unsignedEvent = {
+			kind: REDSHIFT_KIND,
+			created_at: Math.floor(Date.now() / 1000),
+			tags: [['d', getSecretsDTag(projectId, environmentSlug)]],
+			content: JSON.stringify(content),
+		};
+
+		let signedEvent;
+		if (auth.method === 'nip07' && window.nostr) {
+			signedEvent = await window.nostr.signEvent(unsignedEvent);
+		} else {
+			throw new Error('Local signing not yet implemented.');
+		}
+
+		await publishEvent(signedEvent);
+	} catch (err) {
+		console.error('Failed to import secrets:', err);
 	}
 }
 </script>
@@ -445,15 +509,15 @@ function handleKeydown(e: KeyboardEvent) {
 	{:else}
 		<!-- Breadcrumb Header -->
 		<div class="border-b border-border bg-card/50">
-			<div class="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-				<div class="flex items-center gap-2">
+			<div class="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
+				<div class="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
 					<!-- Project Dropdown -->
 					<DropdownMenu>
 						<DropdownMenuTrigger>
 							{#snippet child({ props })}
-								<button {...props} class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-lg font-semibold hover:bg-muted">
-									{project.name}
-									<ChevronDown class="size-4 text-muted-foreground" />
+								<button {...props} class="flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-base font-semibold hover:bg-muted sm:gap-2 sm:px-2 sm:text-lg">
+									<span class="truncate">{project.name}</span>
+									<ChevronDown class="size-4 shrink-0 text-muted-foreground" />
 								</button>
 							{/snippet}
 						</DropdownMenuTrigger>
@@ -471,16 +535,16 @@ function handleKeydown(e: KeyboardEvent) {
 						</DropdownMenuContent>
 					</DropdownMenu>
 
-					<span class="text-muted-foreground">/</span>
+					<span class="shrink-0 text-muted-foreground">/</span>
 
 					<!-- Environment Dropdown -->
 					<DropdownMenu>
 						<DropdownMenuTrigger>
 							{#snippet child({ props })}
-								<button {...props} class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-lg font-semibold hover:bg-muted">
-									<GitBranch class="size-4" />
-									{selectedEnv?.name ?? 'Select Environment'}
-									<ChevronDown class="size-4 text-muted-foreground" />
+								<button {...props} class="flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-base font-semibold hover:bg-muted sm:gap-2 sm:px-2 sm:text-lg">
+									<GitBranch class="size-4 shrink-0" />
+									<span class="truncate">{selectedEnv?.name ?? 'Select Environment'}</span>
+									<ChevronDown class="size-4 shrink-0 text-muted-foreground" />
 								</button>
 							{/snippet}
 						</DropdownMenuTrigger>
@@ -501,7 +565,7 @@ function handleKeydown(e: KeyboardEvent) {
 					</DropdownMenu>
 				</div>
 
-				<div class="flex items-center gap-2">
+				<div class="flex shrink-0 items-center gap-2">
 					<Button 
 						variant={hasUnsavedChanges() ? "default" : "outline"} 
 						size="sm"
@@ -519,8 +583,14 @@ function handleKeydown(e: KeyboardEvent) {
 							{/snippet}
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end">
-							<DropdownMenuItem>Settings</DropdownMenuItem>
-							<DropdownMenuItem>Export</DropdownMenuItem>
+							<DropdownMenuItem onclick={() => (showExportModal = true)}>
+								<Download class="mr-2 size-4" />
+								Export
+							</DropdownMenuItem>
+							<DropdownMenuItem onclick={() => (showImportModal = true)}>
+								<Upload class="mr-2 size-4" />
+								Import
+							</DropdownMenuItem>
 							<DropdownMenuSeparator />
 							<DropdownMenuItem class="text-destructive">Delete Project</DropdownMenuItem>
 						</DropdownMenuContent>
@@ -531,9 +601,9 @@ function handleKeydown(e: KeyboardEvent) {
 
 		<!-- Content -->
 		<div class="flex-1">
-			<div class="mx-auto max-w-6xl px-6 py-4">
+			<div class="mx-auto max-w-6xl px-4 py-4 sm:px-6">
 					<!-- Toolbar -->
-					<div class="mb-4 flex items-center justify-between">
+					<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<div class="flex items-center gap-2">
 							<span class="text-sm font-medium">
 								Active ({filteredSecrets().length})
@@ -585,14 +655,6 @@ function handleKeydown(e: KeyboardEvent) {
 								</DropdownMenuContent>
 							</DropdownMenu>
 							
-							<!-- Filter Button -->
-							<button
-								type="button"
-								class="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-							>
-								<Filter class="size-4" />
-							</button>
-							
 							<!-- Show/Hide All Button -->
 							<button
 								type="button"
@@ -600,6 +662,7 @@ function handleKeydown(e: KeyboardEvent) {
 								class:text-primary={showAllSecrets}
 								class:text-muted-foreground={!showAllSecrets}
 								onclick={toggleAllVisibility}
+								title={showAllSecrets ? 'Hide all values' : 'Show all values'}
 							>
 								{#if showAllSecrets}
 									<EyeOff class="size-4" />
@@ -607,26 +670,18 @@ function handleKeydown(e: KeyboardEvent) {
 									<Eye class="size-4" />
 								{/if}
 							</button>
-							
-							<!-- Notes Button (placeholder) -->
-							<button
-								type="button"
-								class="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-							>
-								<MessageSquare class="size-4" />
-							</button>
 						</div>
-						<div class="flex items-center gap-2">
-							<div class="relative">
+						<div class="flex flex-1 items-center gap-2 sm:flex-initial sm:justify-end">
+							<div class="relative flex-1 sm:flex-initial">
 								<Search class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 								<Input
 									type="text"
-									placeholder="Search for a secret..."
-									class="w-64 pl-9"
+									placeholder="Search..."
+									class="w-full pl-9 sm:w-64"
 									bind:value={searchQuery}
 								/>
 							</div>
-							<Button size="sm" onclick={() => (showAddSecretRow = true)}>
+							<Button size="sm" onclick={() => (showAddSecretRow = true)} class="hidden sm:flex">
 								<Plus class="mr-1 size-4" />
 								Add Secret
 							</Button>
@@ -651,14 +706,14 @@ function handleKeydown(e: KeyboardEvent) {
 						{:else}
 							<!-- Add Secret Row -->
 							{#if showAddSecretRow}
-								<div class="flex items-center gap-2" transition:slide={{ duration: 200 }}>
-									<!-- Status placeholder -->
-									<div class="flex size-8 items-center justify-center">
+								<div class="flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-3 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0" transition:slide={{ duration: 200 }}>
+									<!-- Status placeholder (hidden on mobile) -->
+									<div class="hidden size-8 items-center justify-center sm:flex">
 										<Circle class="size-4 text-muted-foreground/30" />
 									</div>
 									
 									<!-- Key Pill -->
-									<div class="flex h-10 w-72 items-center rounded-lg border border-border bg-card px-3">
+									<div class="flex h-10 items-center rounded-lg border border-border bg-card px-3 sm:w-72">
 										<input
 											type="text"
 											placeholder="SECRET_NAME"
@@ -682,7 +737,7 @@ function handleKeydown(e: KeyboardEvent) {
 									</div>
 									
 									<!-- Actions -->
-									<div class="flex items-center gap-1">
+									<div class="flex items-center justify-end gap-1">
 										<Button
 											variant="ghost"
 											size="sm"
@@ -715,122 +770,227 @@ function handleKeydown(e: KeyboardEvent) {
 								{@const edited = getEditedSecret(secret.key)}
 								{@const status = getSecretStatus(secret.key)}
 								<div 
-									class="group flex items-center gap-2"
+									class="group flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-3 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0"
+									class:border-primary={status === 'dirty'}
 									transition:slide={{ duration: 200 }}
 									animate:flip={{ duration: 200 }}
 								>
-									<!-- Status Icon -->
-									<div class="flex size-8 items-center justify-center">
-										{#if status === 'saving'}
-											<LoaderCircle class="size-4 animate-spin text-muted-foreground" />
-										{:else if status === 'saved'}
-											<CheckCircle2 class="size-4 text-green-500" />
-										{:else if status === 'dirty'}
-											<CircleDot class="size-4 text-primary" />
-										{:else}
-											<Check class="size-4 text-muted-foreground/30" />
-										{/if}
-									</div>
-
-									<!-- Key Pill (Editable) -->
-									<div 
-										class="flex h-10 w-72 items-center rounded-lg border bg-card px-3 transition-colors"
-										class:border-border={status !== 'dirty'}
-										class:border-primary={status === 'dirty'}
-									>
-										<input
-											type="text"
-											class="w-full truncate bg-transparent font-mono text-sm font-medium outline-none"
-											value={edited.key}
-											oninput={(e) => {
-												const input = e.target as HTMLInputElement;
-												const transformed = transformSecretKey(input.value);
-												updateSecretKey(secret.key, transformed);
-												// Update input value to transformed
-												input.value = transformed;
-											}}
-										/>
-									</div>
-
-									<!-- Value Pill (Editable) -->
-									<div 
-										class="flex h-10 flex-1 items-center justify-between rounded-lg border bg-card px-3 transition-colors"
-										class:border-border={status !== 'dirty'}
-										class:border-primary={status === 'dirty'}
-									>
-										{#if visibleSecrets.has(secret.key)}
-											<!-- Editable value input -->
+									<!-- Mobile Header: Key + Status -->
+									<div class="flex items-center justify-between sm:hidden">
+										<div 
+											class="flex h-9 flex-1 items-center rounded-lg border bg-card px-3 transition-colors"
+											class:border-border={status !== 'dirty'}
+											class:border-primary={status === 'dirty'}
+										>
 											<input
 												type="text"
-												class="flex-1 bg-transparent font-mono text-sm text-muted-foreground outline-none"
-												value={edited.value}
-												oninput={(e) => updateSecretValue(secret.key, (e.target as HTMLInputElement).value)}
+												class="w-full bg-transparent font-mono text-sm font-medium outline-none"
+												value={edited.key}
+												oninput={(e) => {
+													const input = e.target as HTMLInputElement;
+													const transformed = transformSecretKey(input.value);
+													updateSecretKey(secret.key, transformed);
+													input.value = transformed;
+												}}
 											/>
-										{:else}
-											<!-- Clickable masked value area -->
-											<button
-												type="button"
-												class="group/value relative flex-1 cursor-pointer text-left"
-												onclick={() => toggleVisibility(secret.key)}
-											>
-												<!-- Masked value with hover reveal text -->
-												<span class="font-mono text-sm text-muted-foreground transition-opacity group-hover/value:opacity-0">
-													{'•'.repeat(24)}
-												</span>
-												<span class="absolute inset-0 flex items-center text-sm text-muted-foreground opacity-0 transition-opacity group-hover/value:opacity-100">
-													Click to reveal
-												</span>
-											</button>
-										{/if}
-										
-										<!-- Right-aligned actions inside value pill -->
+										</div>
 										<div class="ml-2 flex items-center gap-1">
-											<!-- Copy Button -->
-											<button
-												type="button"
-												class="flex size-7 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
-												onclick={() => copyToClipboard(edited.value)}
-												title="Copy value"
-											>
+											{#if status === 'saving'}
+												<LoaderCircle class="size-4 animate-spin text-muted-foreground" />
+											{:else if status === 'saved'}
+												<CircleCheck class="size-4 text-green-500" />
+											{:else if status === 'dirty'}
+												<CircleDot class="size-4 text-primary" />
+											{:else}
+												<Check class="size-4 text-muted-foreground/30" />
+											{/if}
+										</div>
+									</div>
+
+									<!-- Mobile Value Row -->
+									<div class="flex items-center gap-2 sm:hidden">
+										<div 
+											class="flex h-9 flex-1 items-center rounded-lg border bg-card px-3 transition-colors"
+											class:border-border={status !== 'dirty'}
+											class:border-primary={status === 'dirty'}
+										>
+											{#if visibleSecrets.has(secret.key)}
+												<input
+													type="text"
+													class="w-full bg-transparent font-mono text-sm text-muted-foreground outline-none"
+													value={edited.value}
+													oninput={(e) => updateSecretValue(secret.key, (e.target as HTMLInputElement).value)}
+												/>
+											{:else}
+												<button
+													type="button"
+													class="flex-1 text-left font-mono text-sm text-muted-foreground"
+													onclick={() => toggleVisibility(secret.key)}
+												>
+													{'•'.repeat(16)}
+												</button>
+											{/if}
+										</div>
+										<!-- Mobile actions always visible -->
+										<button
+											type="button"
+											class="flex size-8 cursor-pointer items-center justify-center rounded transition-colors {copiedKey === secret.key ? 'text-green-500' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+											onclick={() => copyToClipboard(secret.key, edited.value)}
+											title={copiedKey === secret.key ? 'Copied!' : 'Copy value'}
+										>
+											{#if copiedKey === secret.key}
+												<Check class="size-4" />
+											{:else}
 												<Clipboard class="size-4" />
-											</button>
-											
-											<!-- Visibility Toggle -->
-											<button
-												type="button"
-												class="flex size-7 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
-												onclick={() => toggleVisibility(secret.key)}
-												title={visibleSecrets.has(secret.key) ? 'Hide value' : 'Show value'}
-											>
-												{#if visibleSecrets.has(secret.key)}
-													<EyeOff class="size-4" />
-												{:else}
-													<Eye class="size-4" />
-												{/if}
-											</button>
-											
-											<!-- Settings Dropdown (Delete only) -->
-											<DropdownMenu>
-												<DropdownMenuTrigger>
-													{#snippet child({ props })}
-														<button
-															{...props}
-															class="flex size-7 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
-														>
-															<Ellipsis class="size-4" />
-														</button>
-													{/snippet}
-												</DropdownMenuTrigger>
-												<DropdownMenuContent align="end">
-													<DropdownMenuItem
-														class="text-destructive"
-														onclick={() => handleDeleteSecret(secret.key)}
+											{/if}
+										</button>
+										<button
+											type="button"
+											class="flex size-8 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+											onclick={() => toggleVisibility(secret.key)}
+											title={visibleSecrets.has(secret.key) ? 'Hide value' : 'Show value'}
+										>
+											{#if visibleSecrets.has(secret.key)}
+												<EyeOff class="size-4" />
+											{:else}
+												<Eye class="size-4" />
+											{/if}
+										</button>
+										<DropdownMenu>
+											<DropdownMenuTrigger>
+												{#snippet child({ props })}
+													<button
+														{...props}
+														class="flex size-8 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
 													>
-														<Trash2 class="mr-2 size-4" />
-														Delete
-													</DropdownMenuItem>
-												</DropdownMenuContent>
-											</DropdownMenu>
+														<Ellipsis class="size-4" />
+													</button>
+												{/snippet}
+											</DropdownMenuTrigger>
+											<DropdownMenuContent align="end">
+												<DropdownMenuItem
+													class="text-destructive"
+													onclick={() => handleDeleteSecret(secret.key)}
+												>
+													<Trash2 class="mr-2 size-4" />
+													Delete
+												</DropdownMenuItem>
+											</DropdownMenuContent>
+										</DropdownMenu>
+									</div>
+
+									<!-- Desktop Layout (hidden on mobile) -->
+									<div class="hidden sm:flex sm:flex-1 sm:items-center sm:gap-2">
+										<!-- Status Icon -->
+										<div class="flex size-8 items-center justify-center">
+											{#if status === 'saving'}
+												<LoaderCircle class="size-4 animate-spin text-muted-foreground" />
+											{:else if status === 'saved'}
+												<CircleCheck class="size-4 text-green-500" />
+											{:else if status === 'dirty'}
+												<CircleDot class="size-4 text-primary" />
+											{:else}
+												<Check class="size-4 text-muted-foreground/30" />
+											{/if}
+										</div>
+
+										<!-- Key Pill (Editable) -->
+										<div 
+											class="flex h-10 w-72 items-center rounded-lg border bg-card px-3 transition-colors"
+											class:border-border={status !== 'dirty'}
+											class:border-primary={status === 'dirty'}
+										>
+											<input
+												type="text"
+												class="w-full truncate bg-transparent font-mono text-sm font-medium outline-none"
+												value={edited.key}
+												oninput={(e) => {
+													const input = e.target as HTMLInputElement;
+													const transformed = transformSecretKey(input.value);
+													updateSecretKey(secret.key, transformed);
+													input.value = transformed;
+												}}
+											/>
+										</div>
+
+										<!-- Value Pill (Editable) -->
+										<div 
+											class="flex h-10 flex-1 items-center justify-between rounded-lg border bg-card px-3 transition-colors"
+											class:border-border={status !== 'dirty'}
+											class:border-primary={status === 'dirty'}
+										>
+											{#if visibleSecrets.has(secret.key)}
+												<input
+													type="text"
+													class="flex-1 bg-transparent font-mono text-sm text-muted-foreground outline-none"
+													value={edited.value}
+													oninput={(e) => updateSecretValue(secret.key, (e.target as HTMLInputElement).value)}
+												/>
+											{:else}
+												<button
+													type="button"
+													class="group/value relative flex-1 cursor-pointer text-left"
+													onclick={() => toggleVisibility(secret.key)}
+												>
+													<span class="font-mono text-sm text-muted-foreground transition-opacity group-hover/value:opacity-0">
+														{'•'.repeat(24)}
+													</span>
+													<span class="absolute inset-0 flex items-center text-sm text-muted-foreground opacity-0 transition-opacity group-hover/value:opacity-100">
+														Click to reveal
+													</span>
+												</button>
+											{/if}
+											
+											<!-- Right-aligned actions inside value pill -->
+											<div class="ml-2 flex items-center gap-1">
+												<button
+													type="button"
+													class="flex size-7 cursor-pointer items-center justify-center rounded transition-all {copiedKey === secret.key ? 'text-green-500 opacity-100' : 'text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover:opacity-100'}"
+													onclick={() => copyToClipboard(secret.key, edited.value)}
+													title={copiedKey === secret.key ? 'Copied!' : 'Copy value'}
+												>
+													{#if copiedKey === secret.key}
+														<Check class="size-4" />
+													{:else}
+														<Clipboard class="size-4" />
+													{/if}
+												</button>
+												
+												<button
+													type="button"
+													class="flex size-7 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+													onclick={() => toggleVisibility(secret.key)}
+													title={visibleSecrets.has(secret.key) ? 'Hide value' : 'Show value'}
+												>
+													{#if visibleSecrets.has(secret.key)}
+														<EyeOff class="size-4" />
+													{:else}
+														<Eye class="size-4" />
+													{/if}
+												</button>
+												
+												<DropdownMenu>
+													<DropdownMenuTrigger>
+														{#snippet child({ props })}
+															<button
+																{...props}
+																class="flex size-7 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+															>
+																<Ellipsis class="size-4" />
+															</button>
+														{/snippet}
+													</DropdownMenuTrigger>
+													<DropdownMenuContent align="end">
+														<DropdownMenuItem
+															class="text-destructive"
+															onclick={() => handleDeleteSecret(secret.key)}
+														>
+															<Trash2 class="mr-2 size-4" />
+															Delete
+														</DropdownMenuItem>
+													</DropdownMenuContent>
+												</DropdownMenu>
+											</div>
 										</div>
 									</div>
 								</div>
@@ -860,8 +1020,9 @@ function handleKeydown(e: KeyboardEvent) {
 						<Plus class="mr-2 size-4" />
 						Add Secret
 					</DropdownMenuItem>
-					<DropdownMenuItem>
-						Import from .env
+					<DropdownMenuItem onclick={() => (showImportModal = true)}>
+						<Upload class="mr-2 size-4" />
+						Import
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
@@ -889,3 +1050,33 @@ function handleKeydown(e: KeyboardEvent) {
 		}
 	}}
 />
+
+{#if project && selectedEnv}
+	<ExportSecretsModal
+		bind:open={showExportModal}
+		secrets={secretsState.secrets}
+		projectName={project.name}
+		environmentName={selectedEnv.name}
+		onOpenChange={(v) => (showExportModal = v)}
+	/>
+
+	<ImportSecretsModal
+		bind:open={showImportModal}
+		existingSecrets={secretsState.secrets}
+		onOpenChange={(v) => (showImportModal = v)}
+		onImport={handleImportSecrets}
+	/>
+{/if}
+
+<!-- Copy Toast Notification -->
+{#if copiedKey}
+	<div 
+		class="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 transform"
+		transition:slide={{ duration: 150 }}
+	>
+		<div class="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 shadow-lg">
+			<Check class="size-4 text-green-500" />
+			<span class="text-sm">Copied to clipboard</span>
+		</div>
+	</div>
+{/if}
