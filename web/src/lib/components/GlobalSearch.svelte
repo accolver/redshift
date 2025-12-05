@@ -115,7 +115,6 @@ function handleKeydown(e: KeyboardEvent) {
 				class="flex-1 bg-transparent px-3 py-4 text-sm outline-none placeholder:text-muted-foreground"
 				bind:value={searchQuery}
 				onkeydown={handleKeydown}
-				autofocus
 			/>
 			{#if isSearching}
 				<LoaderCircle class="size-4 animate-spin text-muted-foreground" />

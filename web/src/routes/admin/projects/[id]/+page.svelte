@@ -782,7 +782,6 @@ async function handleDeleteEnvironment() {
 											bind:value={newSecretKey}
 											oninput={handleKeyInput}
 											onkeydown={handleKeydown}
-											autofocus
 										/>
 									</div>
 									
