@@ -1060,18 +1060,16 @@ async function handleDeleteEnvironment() {
 			</div>
 		</div>
 
-		<!-- Floating Add Button -->
-		<div class="fixed bottom-6 right-6">
+		<!-- Floating Add Button (mobile only) -->
+		<div class="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-end p-4 sm:hidden">
 			<DropdownMenu>
 				<DropdownMenuTrigger>
 					{#snippet child({ props })}
 						<button
 							{...props}
-							class="flex cursor-pointer items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg hover:bg-primary/90"
+							class="pointer-events-auto flex cursor-pointer items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-lg hover:bg-primary/90"
 						>
-							<Plus class="size-4" />
-							Add Secret
-							<ChevronDown class="size-4" />
+							<Plus class="size-5" />
 						</button>
 					{/snippet}
 				</DropdownMenuTrigger>

@@ -123,28 +123,27 @@ function getDisplayName(pubkey: string): string {
 <div class="flex min-h-screen flex-col bg-background">
 	<!-- Admin Header - full width with inner container -->
 	<header class="sticky top-0 z-40 border-b border-border/50 bg-card/95 backdrop-blur-sm">
-		<div class="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-			<div class="flex items-center gap-8">
-				<a href="/" class="flex items-center gap-2">
+		<div class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
+			<div class="flex min-w-0 items-center gap-2 sm:gap-8">
+				<a href="/" class="flex shrink-0 items-center gap-2">
 					<div class="flex size-7 items-center justify-center rounded-md bg-gradient-to-br from-tokyo-blue to-tokyo-purple">
 						<Key class="size-3.5 text-white" />
 					</div>
-					<span class="text-lg font-semibold">Redshift</span>
+					<span class="hidden text-lg font-semibold sm:inline">Redshift</span>
 				</a>
-				<nav class="flex items-center gap-1">
+				<nav class="hidden items-center gap-1 sm:flex">
 					<a href="/admin" class="rounded-md px-3 py-1.5 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground">Dashboard</a>
 				</nav>
 			</div>
-			<div class="flex items-center gap-3">
+			<div class="flex shrink-0 items-center gap-1 sm:gap-3">
 				<!-- Search Button -->
 				{#if auth.isConnected}
 					<button
 						type="button"
-						class="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+						class="flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:gap-2 sm:px-3"
 						onclick={() => (searchOpen = true)}
 					>
 						<Search class="size-4" />
-						<span class="hidden sm:inline">Search</span>
 						<kbd class="hidden rounded border border-border bg-background px-1.5 py-0.5 text-xs sm:inline">{isMac ? '⌘' : 'Ctrl'}K</kbd>
 					</button>
 				{/if}
@@ -154,13 +153,12 @@ function getDisplayName(pubkey: string): string {
 					<div class="relative">
 						<button
 							type="button"
-							class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+							class="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:gap-2 sm:px-2"
 							onclick={() => (relayDropdownOpen = !relayDropdownOpen)}
 							onblur={() => setTimeout(() => (relayDropdownOpen = false), 150)}
 							title="Relay status"
 						>
 							<Radio class="size-4" />
-							<span class="hidden sm:inline">{relayState.connectedCount}/{relayState.totalCount}</span>
 							<span class="flex size-2 rounded-full {relayStatusInfo().color}"></span>
 						</button>
 						{#if relayDropdownOpen}
@@ -186,11 +184,11 @@ function getDisplayName(pubkey: string): string {
 					<div class="relative">
 						<button
 							type="button"
-							class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted"
+							class="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1.5 transition-colors hover:bg-muted sm:gap-2 sm:px-2"
 							onclick={() => (dropdownOpen = !dropdownOpen)}
 							onblur={() => setTimeout(() => (dropdownOpen = false), 150)}
 						>
-							<span class="text-sm">{getDisplayName(auth.pubkey!)}</span>
+							<span class="hidden text-sm sm:inline">{getDisplayName(auth.pubkey!)}</span>
 							{#if auth.profile?.picture}
 								<img
 									src={auth.profile.picture}
@@ -202,7 +200,7 @@ function getDisplayName(pubkey: string): string {
 									{(auth.profile?.name ?? auth.pubkey)?.[0]?.toUpperCase() ?? '?'}
 								</div>
 							{/if}
-							<ChevronDown class="size-4 text-muted-foreground" />
+							<ChevronDown class="hidden size-4 text-muted-foreground sm:block" />
 						</button>
 						{#if dropdownOpen}
 							<div class="absolute right-0 top-full z-50 mt-1 min-w-40 rounded-md border border-border bg-card p-1 shadow-lg">

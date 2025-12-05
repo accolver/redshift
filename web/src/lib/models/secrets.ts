@@ -97,6 +97,16 @@ export function createSecretsContent(secrets: Secret[]): SecretsEventContent {
 }
 
 /**
+ * Parse secrets from event content (already JSON parsed)
+ */
+export function parseSecretsContent(content: unknown): Secret[] {
+	if (!content || typeof content !== 'object') return [];
+	const typed = content as SecretsEventContent;
+	if (typed.type !== 'secrets') return [];
+	return typed.secrets ?? [];
+}
+
+/**
  * Add or update a secret in the secrets array
  */
 export function upsertSecret(secrets: Secret[], key: string, value: string): Secret[] {

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { createSecretsContent, upsertSecret, removeSecret } from '$lib/models/secrets';
+import {
+	createSecretsContent,
+	upsertSecret,
+	removeSecret,
+	parseSecretsContent,
+} from '$lib/models/secrets';
 import type { Secret } from '$lib/types/nostr';
 
 describe('Secrets Model', () => {
@@ -129,6 +134,66 @@ describe('Secrets Model', () => {
 		it('handles empty array', () => {
 			const result = removeSecret([], 'API_KEY');
 			expect(result).toHaveLength(0);
+		});
+	});
+
+	describe('parseSecretsContent', () => {
+		it('parses valid secrets content', () => {
+			const content = {
+				type: 'secrets',
+				secrets: [
+					{ key: 'API_KEY', value: 'secret123' },
+					{ key: 'DB_URL', value: 'postgres://localhost' },
+				],
+			};
+			const result = parseSecretsContent(content);
+
+			expect(result).toHaveLength(2);
+			expect(result[0].key).toBe('API_KEY');
+			expect(result[1].key).toBe('DB_URL');
+		});
+
+		it('returns empty array for wrong type', () => {
+			const content = {
+				type: 'project',
+				name: 'my-project',
+			};
+			const result = parseSecretsContent(content);
+
+			expect(result).toEqual([]);
+		});
+
+		it('returns empty array for null content', () => {
+			const result = parseSecretsContent(null);
+			expect(result).toEqual([]);
+		});
+
+		it('returns empty array for undefined content', () => {
+			const result = parseSecretsContent(undefined);
+			expect(result).toEqual([]);
+		});
+
+		it('returns empty array for non-object content', () => {
+			expect(parseSecretsContent('string')).toEqual([]);
+			expect(parseSecretsContent(123)).toEqual([]);
+			expect(parseSecretsContent(true)).toEqual([]);
+		});
+
+		it('returns empty array when secrets array is missing', () => {
+			const content = { type: 'secrets' };
+			const result = parseSecretsContent(content);
+
+			expect(result).toEqual([]);
+		});
+
+		it('handles empty secrets array', () => {
+			const content = {
+				type: 'secrets',
+				secrets: [],
+			};
+			const result = parseSecretsContent(content);
+
+			expect(result).toEqual([]);
 		});
 	});
 });
