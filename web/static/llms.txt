@@ -1,0 +1,55 @@
+# Redshift
+
+> Redshift is a decentralized, censorship-resistant secret management platform built on the Nostr protocol. It provides a Doppler-compatible CLI for managing environment variables and secrets with client-side encryption.
+
+Important notes:
+
+- Redshift uses Nostr (NIP-78 application-specific data) for storing encrypted secrets across distributed relays
+- Secrets are encrypted client-side before being published - the server/relays never see plaintext
+- Authentication uses Nostr keys (nsec/npub) via NIP-07 browser extensions or direct key entry
+- The CLI is designed to be a drop-in replacement for Doppler's workflow (`redshift run`, `redshift secrets`)
+
+## Docs
+
+- [Documentation](https://redshiftapp.com/docs): CLI commands reference, installation, and environment variables
+- [Tutorial](https://redshiftapp.com/tutorial): Step-by-step getting started guide covering installation, authentication, project setup, and secret management
+
+## CLI Commands
+
+- `redshift login`: Authenticate with Nostr identity (supports --nsec, --bunker, or NIP-07)
+- `redshift setup`: Configure project and environment for current directory (creates redshift.yaml)
+- `redshift run -- <command>`: Run a command with secrets injected as environment variables
+- `redshift secrets list`: List all secrets in current project/environment
+- `redshift secrets set <KEY> <VALUE>`: Set a secret value
+- `redshift secrets get <KEY>`: Get a specific secret value
+- `redshift secrets delete <KEY>`: Delete a secret
+- `redshift serve`: Start the local web admin UI
+
+## Installation
+
+```bash
+# Install via script
+curl -fsSL https://redshiftapp.com/install | sh
+
+# Or with bun
+bun add -g redshift
+```
+
+## Configuration
+
+Redshift uses a `redshift.yaml` file in your project root:
+
+```yaml
+project: my-app
+environment: development
+```
+
+Environment variables for CI/CD:
+- `REDSHIFT_NSEC`: Private key for authentication
+- `REDSHIFT_BUNKER`: Bunker URL for remote signing (NIP-46)
+- `REDSHIFT_CONFIG_DIR`: Override config directory (default: ~/.redshift)
+
+## Optional
+
+- [GitHub Repository](https://github.com/accolver/redshift): Source code, issues, and contributions
+- [Nostr Protocol](https://nostr.com): Background on the Nostr protocol that Redshift is built on
