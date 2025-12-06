@@ -1,5 +1,5 @@
 <script lang="ts">
-import { onMount } from 'svelte';
+import { onMount, untrack } from 'svelte';
 import { Button } from '$lib/components/ui/button';
 import { ChevronDown, LogOut, Radio, Search } from '@lucide/svelte';
 import {
@@ -67,17 +67,33 @@ const relayStatusInfo = $derived(() => {
 	}
 });
 
+// Track the pubkey we've connected with to avoid re-subscribing
+let lastConnectedPubkey: string | null = null;
+
 // Subscribe to projects when authenticated
+// Only track auth.isConnected and auth.pubkey, not the comparison variable
 $effect(() => {
-	if (auth.isConnected && auth.pubkey) {
-		// Connect to relays and start syncing
-		connectAndSync(auth.pubkey);
-		// Subscribe to projects from EventStore
-		subscribeToProjects();
+	const isConnected = auth.isConnected;
+	const pubkey = auth.pubkey;
+
+	if (isConnected && pubkey) {
+		// Read lastConnectedPubkey without tracking to avoid self-referential loop
+		const lastPubkey = untrack(() => lastConnectedPubkey);
+		if (lastPubkey !== pubkey) {
+			lastConnectedPubkey = pubkey;
+			// Connect to relays and start syncing
+			connectAndSync(pubkey);
+			// Subscribe to projects from EventStore
+			subscribeToProjects();
+		}
 	} else {
 		// Cleanup when disconnected
-		unsubscribeFromProjects();
-		nostrDisconnect();
+		const lastPubkey = untrack(() => lastConnectedPubkey);
+		if (lastPubkey !== null) {
+			lastConnectedPubkey = null;
+			unsubscribeFromProjects();
+			nostrDisconnect();
+		}
 	}
 });
 

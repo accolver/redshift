@@ -86,6 +86,21 @@ export function subscribeToSecrets(
 ): void {
 	const auth = getAuthState();
 
+	if (!auth.isConnected || !auth.pubkey) {
+		secretsState.secrets = [];
+		secretsState.error = 'Not authenticated';
+		return;
+	}
+
+	// Skip if already subscribed to the same project/environment
+	if (
+		currentProjectId === projectId &&
+		currentEnvironmentSlug === environmentSlug &&
+		subscription !== null
+	) {
+		return;
+	}
+
 	// Clean up existing subscriptions
 	if (subscription) {
 		subscription.unsubscribe();
@@ -94,12 +109,6 @@ export function subscribeToSecrets(
 	if (allEnvSubscription) {
 		allEnvSubscription.unsubscribe();
 		allEnvSubscription = null;
-	}
-
-	if (!auth.isConnected || !auth.pubkey) {
-		secretsState.secrets = [];
-		secretsState.error = 'Not authenticated';
-		return;
 	}
 
 	// Update context
