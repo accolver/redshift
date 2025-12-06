@@ -116,7 +116,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 
 	<!-- Hero Section -->
 	<section
-		class="relative z-10 flex min-h-screen flex-col items-center justify-center px-6 pt-16 pb-32"
+		class="relative z-10 flex min-h-screen flex-col items-center justify-center px-6 pt-32 pb-32"
 	>
 		<div
 			class="relative z-10 mx-auto max-w-4xl text-center"
