@@ -38,6 +38,7 @@
 	},
 	"dependencies": {
 		"@lucide/svelte": "^0.544.0",
+		"@redshift/crypto": "workspace:*",
 		"applesauce-core": "^4.4.2",
 		"applesauce-factory": "^4.0.0",
 		"applesauce-relay": "^4.4.2",
@@ -46,6 +47,7 @@
 		"exponential-backoff": "^3.1.3",
 		"nostr-tools": "^2.18.2",
 		"prismjs": "^1.30.0",
+		"rxjs": "^7.8.2",
 		"svelte-motion": "^0.12.2",
 		"tailwind-merge": "^3.4.0",
 		"tailwind-variants": "^3.2.2"

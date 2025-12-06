@@ -292,6 +292,46 @@ export async function restoreAuth(): Promise<boolean> {
 }
 
 /**
+ * Get the raw private key for encryption operations.
+ * Only available when using nsec authentication.
+ *
+ * @returns The private key as Uint8Array, or null if not available
+ */
+export async function getPrivateKey(): Promise<Uint8Array | null> {
+	if (authState.method !== 'nsec' || !authState.isConnected) {
+		return null;
+	}
+
+	const storedNsec = await secureRetrieve(NSEC_STORAGE_KEY);
+	if (!storedNsec) {
+		return null;
+	}
+
+	return parseNsec(storedNsec);
+}
+
+/**
+ * Check if the current auth method supports NIP-44 encryption.
+ * Required for NIP-59 Gift Wrap.
+ *
+ * @returns true if encryption is supported
+ */
+export function supportsEncryption(): boolean {
+	if (authState.method === 'nsec') {
+		// nsec always supports encryption (we have the private key)
+		return true;
+	}
+
+	if (authState.method === 'nip07' && window.nostr?.nip44) {
+		// NIP-07 extension with NIP-44 support
+		return true;
+	}
+
+	// Bunker and basic NIP-07 don't support client-side encryption
+	return false;
+}
+
+/**
  * Sign an event using the current authentication method
  *
  * For NIP-07: Uses the browser extension to sign

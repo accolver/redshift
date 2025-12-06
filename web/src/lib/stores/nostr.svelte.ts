@@ -2,6 +2,7 @@ import { EventStore } from 'applesauce-core';
 import { RelayPool, onlyEvents } from 'applesauce-relay';
 import type { NostrEvent } from 'nostr-tools';
 import { REDSHIFT_KIND } from '$lib/constants';
+import { getRedshiftSecretsFilter, NostrKinds } from '$lib/crypto';
 import { RateLimiter, withPublishBackoff } from '$lib/rate-limiter';
 
 // Re-export constants for backward compatibility with existing imports
@@ -74,10 +75,14 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 		totalCount: relays.length,
 	};
 
-	// Subscribe to all Redshift events (Kind 30078) for this user
-	// Also subscribe to profile events (Kind 0) for displaying user info
+	// Subscribe to:
+	// 1. NIP-59 Gift Wrap events (kind 1059) with redshift-secrets type tag for encrypted secrets
+	// 2. Redshift events (Kind 30078) for project metadata
+	// 3. Profile events (Kind 0) for displaying user info
+	const secretsFilter = getRedshiftSecretsFilter(pubkey);
 	activeSubscription = relayPool
 		.subscription(relays, [
+			secretsFilter,
 			{ kinds: [REDSHIFT_KIND], authors: [pubkey] },
 			{ kinds: [0], authors: [pubkey] },
 		])
