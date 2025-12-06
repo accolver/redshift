@@ -19,7 +19,7 @@ functional, with comprehensive test coverage.
 | **Protocol**  | NIP-59 Gift Wrap encryption, Kind 30078 events, NIP-09 deletion                    |
 | **Web Admin** | Project list, secret editor, import/export, global search                          |
 | **Pages**     | Landing page (`/`), docs (`/docs/*`), tutorial (`/tutorial`), admin (`/admin/*`)   |
-| **Tests**     | 159 web tests, CLI tests, crypto tests, relay integration tests                    |
+| **Tests**     | 185 web tests, 178 CLI tests, crypto tests, relay integration tests (363 total)    |
 | **CI/CD**     | GitHub Actions: test, build, multi-platform release (Linux/macOS x64/arm64)        |
 
 ---
@@ -40,14 +40,22 @@ functional, with comprehensive test coverage.
 | **Interactive project fetching** | `setup` command should fetch existing projects from relays instead of manual input | Partial (manual input works) |
 | **Keychain storage**             | Store nsec in system keychain (macOS Keychain, Linux Secret Service)               | Not started                  |
 | **Secret version history**       | View and restore previous versions of secrets                                      | Not started                  |
+| **Rate limiting for relays**     | Add rate limiting to relay queries to prevent abuse                                | Not started                  |
+| **Input validation**             | Validate secret keys before use in `secrets.ts` commands                           | Not started                  |
+| **Improved error handling**      | Better error handling in relay operations (avoid swallowing errors)                | Not started                  |
 
 ### Low Priority
 
-| Feature                      | Description                                         | Status                      |
-| ---------------------------- | --------------------------------------------------- | --------------------------- |
-| **Drag-and-drop secrets**    | Reorder/group secrets in the web UI                 | Not started                 |
-| **svelte-motion animations** | Enhanced animations beyond basic Svelte transitions | Package installed, not used |
-| **Binary integration test**  | TDD Phase 4: spawn binary and test HTTP response    | Not started                 |
+| Feature                       | Description                                                          | Status                      |
+| ----------------------------- | -------------------------------------------------------------------- | --------------------------- |
+| **Drag-and-drop secrets**     | Reorder/group secrets in the web UI                                  | Not started                 |
+| **svelte-motion animations**  | Enhanced animations beyond basic Svelte transitions                  | Package installed, not used |
+| **Binary integration test**   | TDD Phase 4: spawn binary and test HTTP response                     | Not started                 |
+| **Remove duplicate code**     | Remove duplicate `injectSecrets` from parser.ts (use secret-manager) | Complete                    |
+| **CLI command tests: run.ts** | Add unit tests for `run` command                                     | Complete                    |
+| **CLI command tests: serve**  | Add unit tests for `serve` command                                   | Complete                    |
+| **CLI command tests: setup**  | Add unit tests for `setup` command                                   | Complete                    |
+| **TypeScript strict types**   | Fix exactOptionalPropertyTypes errors in types.ts and related files  | Complete                    |
 
 ---
 
