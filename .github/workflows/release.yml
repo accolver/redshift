@@ -1,7 +1,9 @@
-name: Release
+name: Build & Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 
@@ -9,7 +11,32 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: |
+          bun install
+          cd web && bun install
+
+      - name: Run CLI tests
+        run: bun test cli/
+
+      - name: Run web tests
+        run: cd web && bun run test
+
   build:
+    needs: test
     strategy:
       matrix:
         include:
@@ -40,12 +67,17 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install
+        run: |
+          bun install
+          cd web && bun install
 
-      - name: Run tests
-        run: bun test cli/
+      - name: Build web
+        run: cd web && bun run build
 
-      - name: Build binary
+      - name: Generate embeds
+        run: bun run build:embeds
+
+      - name: Build binary with embedded UI
         run: bun build cli/src/main.ts --compile --target=${{ matrix.target }} --outfile dist/${{ matrix.artifact }}
 
       - name: Upload artifact
@@ -54,9 +86,11 @@ jobs:
           name: ${{ matrix.artifact }}
           path: dist/${{ matrix.artifact }}
 
+  # Only create GitHub release on tags
   release:
     needs: build
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
       - uses: actions/checkout@v4
@@ -82,7 +116,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Deploy web to Cloudflare Pages on main and tags
   deploy-web:
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
@@ -109,3 +145,12 @@ jobs:
         with:
           name: web-dist
           path: web/dist
+
+      # If you're using Cloudflare Pages with GitHub integration,
+      # the deploy happens automatically. If using wrangler, uncomment:
+      # - name: Deploy to Cloudflare Pages
+      #   uses: cloudflare/wrangler-action@v3
+      #   with:
+      #     apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      #     accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      #     command: pages deploy web/dist --project-name=redshift
