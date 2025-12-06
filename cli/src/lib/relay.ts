@@ -2,15 +2,26 @@
  * Nostr Relay Communication Module
  *
  * L4: Integration-Contractor - Nostr protocol communication
+ *
+ * This module provides rate-limited and resilient relay connections
+ * with exponential backoff for transient failures.
  */
 
 import type { Filter } from 'nostr-tools/filter';
 import { SimplePool } from 'nostr-tools/pool';
 import type { NostrEvent, UnsignedEvent } from './types';
 import { NostrKinds } from './types';
+import { RateLimiter, withPublishBackoff, withQueryBackoff } from './rate-limiter';
 
 /**
- * Relay pool wrapper for managing connections
+ * Default rate limiter configuration for relay operations
+ * - Max 10 requests per second window
+ * - Minimum 100ms between requests
+ */
+const defaultRateLimiter = new RateLimiter(10, 1000, 100);
+
+/**
+ * Relay pool wrapper for managing connections with rate limiting
  */
 export interface RelayPool {
 	relays: string[];
@@ -24,24 +35,45 @@ export interface RelayPool {
 		onEose?: () => void,
 	): { close: () => void };
 	/**
-	 * Publish an event to all relays
+	 * Publish an event to all relays (with rate limiting and retry)
 	 */
 	publish(event: NostrEvent): Promise<void>;
 	/**
-	 * Query events and wait for EOSE
+	 * Query events and wait for EOSE (with rate limiting and retry)
 	 */
 	query(filter: Filter, timeout?: number): Promise<NostrEvent[]>;
 	/**
 	 * Close all relay connections
 	 */
 	close(): void;
+	/**
+	 * Reset the rate limiter (useful for testing)
+	 */
+	resetRateLimiter(): void;
 }
 
 /**
- * Create a relay pool for the given URLs.
+ * Options for creating a relay pool
  */
-export function createRelayPool(relayUrls: string[]): RelayPool {
+export interface RelayPoolOptions {
+	/** Custom rate limiter instance (optional) */
+	rateLimiter?: RateLimiter;
+	/** Whether to enable rate limiting (default: true) */
+	enableRateLimiting?: boolean;
+	/** Whether to enable exponential backoff retries (default: true) */
+	enableRetry?: boolean;
+}
+
+/**
+ * Create a relay pool for the given URLs with rate limiting and retry support.
+ */
+export function createRelayPool(relayUrls: string[], options: RelayPoolOptions = {}): RelayPool {
 	const pool = new SimplePool();
+	const {
+		rateLimiter = defaultRateLimiter,
+		enableRateLimiting = true,
+		enableRetry = true,
+	} = options;
 
 	return {
 		relays: relayUrls,
@@ -59,24 +91,50 @@ export function createRelayPool(relayUrls: string[]): RelayPool {
 		},
 
 		async publish(event) {
-			await Promise.all(pool.publish(relayUrls, event));
+			const publishOperation = async () => {
+				// Rate limit before publishing
+				if (enableRateLimiting) {
+					await rateLimiter.waitForSlot();
+				}
+				await Promise.all(pool.publish(relayUrls, event));
+			};
+
+			if (enableRetry) {
+				await withPublishBackoff(publishOperation);
+			} else {
+				await publishOperation();
+			}
 		},
 
 		async query(filter, timeout = 10000) {
-			// Use querySync for simpler query handling
-			try {
+			const queryOperation = async (): Promise<NostrEvent[]> => {
+				// Rate limit before querying
+				if (enableRateLimiting) {
+					await rateLimiter.waitForSlot();
+				}
 				const events = await pool.querySync(relayUrls, filter, {
 					maxWait: timeout,
 				});
 				return events as NostrEvent[];
+			};
+
+			try {
+				if (enableRetry) {
+					return await withQueryBackoff(queryOperation);
+				}
+				return await queryOperation();
 			} catch (err) {
-				console.error('Query error:', err);
+				console.error('Query error after retries:', err);
 				return [];
 			}
 		},
 
 		close() {
 			pool.close(relayUrls);
+		},
+
+		resetRateLimiter() {
+			rateLimiter.reset();
 		},
 	};
 }

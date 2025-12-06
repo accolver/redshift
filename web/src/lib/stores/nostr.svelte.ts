@@ -2,9 +2,17 @@ import { EventStore } from 'applesauce-core';
 import { RelayPool, onlyEvents } from 'applesauce-relay';
 import type { NostrEvent } from 'nostr-tools';
 import { REDSHIFT_KIND } from '$lib/constants';
+import { RateLimiter, withPublishBackoff } from '$lib/rate-limiter';
 
 // Re-export constants for backward compatibility with existing imports
 export { REDSHIFT_KIND, getSecretsDTag, getProjectDTag, parseDTag } from '$lib/constants';
+
+/**
+ * Rate limiter instance for relay operations
+ * - Max 10 requests per second
+ * - Minimum 100ms between requests
+ */
+const rateLimiter = new RateLimiter(10, 1000, 100);
 
 /**
  * Shared Nostr infrastructure for the entire app
@@ -123,7 +131,7 @@ export function disconnect(): void {
 }
 
 /**
- * Publish an event to relays
+ * Publish an event to relays with rate limiting and exponential backoff
  */
 export async function publishEvent(
 	event: NostrEvent,
@@ -132,6 +140,9 @@ export async function publishEvent(
 	// Add to local store immediately for optimistic updates
 	eventStore.add(event);
 
-	// Publish to relays
-	await relayPool.publish(relays, event);
+	// Publish to relays with rate limiting and retry
+	await rateLimiter.waitForSlot();
+	await withPublishBackoff(async () => {
+		await relayPool.publish(relays, event);
+	});
 }

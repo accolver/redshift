@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import { createRelayPool, filterGiftWraps, getLatestByDTag } from '../../src/lib/relay';
+import { RateLimiter } from '../../src/lib/rate-limiter';
 import type { NostrEvent } from '../../src/lib/types';
 
 describe('Relay Module', () => {
@@ -21,6 +22,50 @@ describe('Relay Module', () => {
 		it('creates pool with empty relay list', () => {
 			const pool = createRelayPool([]);
 			expect(pool.relays).toEqual([]);
+		});
+
+		it('creates pool with rate limiting enabled by default', () => {
+			const relays = ['wss://relay1.test'];
+			const pool = createRelayPool(relays);
+
+			// Pool should have resetRateLimiter method
+			expect(pool.resetRateLimiter).toBeDefined();
+			expect(typeof pool.resetRateLimiter).toBe('function');
+		});
+
+		it('accepts custom rate limiter via options', () => {
+			const customLimiter = new RateLimiter(5, 500, 50);
+			const pool = createRelayPool(['wss://relay1.test'], {
+				rateLimiter: customLimiter,
+			});
+
+			expect(pool).toBeDefined();
+			expect(pool.resetRateLimiter).toBeDefined();
+		});
+
+		it('can disable rate limiting via options', () => {
+			const pool = createRelayPool(['wss://relay1.test'], {
+				enableRateLimiting: false,
+			});
+
+			expect(pool).toBeDefined();
+		});
+
+		it('can disable retry via options', () => {
+			const pool = createRelayPool(['wss://relay1.test'], {
+				enableRetry: false,
+			});
+
+			expect(pool).toBeDefined();
+		});
+
+		it('can disable both rate limiting and retry', () => {
+			const pool = createRelayPool(['wss://relay1.test'], {
+				enableRateLimiting: false,
+				enableRetry: false,
+			});
+
+			expect(pool).toBeDefined();
 		});
 	});
 

@@ -10,7 +10,6 @@
 	"scripts": {
 		"dev": "bun run cli/src/main.ts",
 		"dev:web": "cd web && bun run dev",
-
 		"build": "bun run build:web && bun run build:embeds && bun run build:cli",
 		"build:embeds": "bun run cli/scripts/generate-embeds.ts",
 		"build:cli": "bun build cli/src/main.ts --compile --outfile dist/redshift",
@@ -21,22 +20,18 @@
 		"build:cli:linux-x64": "bun build cli/src/main.ts --compile --target=bun-linux-x64 --outfile dist/redshift-linux-x64",
 		"build:web": "cd web && bun run build",
 		"build:all": "bun run build:web && bun run build:embeds && bun run build:cli:all",
-
 		"test": "bun test",
 		"test:cli": "bun test cli/",
 		"test:web": "cd web && bun run test",
 		"test:all": "bun run test:cli && bun run test:web",
 		"test:watch": "bun test --watch",
 		"test:coverage": "bun test --coverage",
-
 		"typecheck": "tsc --noEmit",
 		"typecheck:web": "cd web && bun run check",
-
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write .",
 		"format:check": "biome format .",
-
 		"release:prepare": "bun run test:all && bun run build:all",
 		"release:list": "ls -lah dist/",
 		"version:bump": "npm version --no-git-tag-version"
@@ -47,6 +42,7 @@
 		"typescript": "^5.0.0"
 	},
 	"dependencies": {
+		"exponential-backoff": "^3.1.3",
 		"nostr-tools": "^2.10.0",
 		"yaml": "^2.8.2"
 	},
