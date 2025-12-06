@@ -1,6 +1,10 @@
 import { EventStore } from 'applesauce-core';
 import { RelayPool, onlyEvents } from 'applesauce-relay';
 import type { NostrEvent } from 'nostr-tools';
+import { REDSHIFT_KIND } from '$lib/constants';
+
+// Re-export constants for backward compatibility with existing imports
+export { REDSHIFT_KIND, getSecretsDTag, getProjectDTag, parseDTag } from '$lib/constants';
 
 /**
  * Shared Nostr infrastructure for the entire app
@@ -14,9 +18,6 @@ export const DEFAULT_RELAYS = [
 	'wss://nos.lol',
 	'wss://relay.nostr.band',
 ];
-
-// Redshift uses Kind 30078 (Parameterized Replaceable) for project/secret data
-export const REDSHIFT_KIND = 30078;
 
 // Single EventStore instance for the entire app
 export const eventStore = new EventStore();
@@ -133,31 +134,4 @@ export async function publishEvent(
 
 	// Publish to relays
 	await relayPool.publish(relays, event);
-}
-
-/**
- * Get the d-tag value for a project
- * Format: <project_id> (just the project ID for project metadata)
- */
-export function getProjectDTag(projectId: string): string {
-	return projectId;
-}
-
-/**
- * Get the d-tag value for secrets in an environment
- * Format: <project_id>|<environment_slug>
- */
-export function getSecretsDTag(projectId: string, environmentSlug: string): string {
-	return `${projectId}|${environmentSlug}`;
-}
-
-/**
- * Parse a d-tag to extract project and environment info
- */
-export function parseDTag(dTag: string): { projectId: string; environmentSlug?: string } {
-	const parts = dTag.split('|');
-	return {
-		projectId: parts[0],
-		environmentSlug: parts[1],
-	};
 }

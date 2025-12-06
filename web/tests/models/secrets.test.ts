@@ -4,6 +4,7 @@ import {
 	upsertSecret,
 	removeSecret,
 	parseSecretsContent,
+	calculateMissingSecrets,
 } from '$lib/models/secrets';
 import type { Secret } from '$lib/types/nostr';
 
@@ -194,6 +195,172 @@ describe('Secrets Model', () => {
 			const result = parseSecretsContent(content);
 
 			expect(result).toEqual([]);
+		});
+	});
+
+	describe('calculateMissingSecrets', () => {
+		it('returns empty array when all environments have same secrets', () => {
+			const allEnvSecrets = new Map<string, Secret[]>([
+				['dev', [{ key: 'API_KEY', value: 'dev-key' }]],
+				['staging', [{ key: 'API_KEY', value: 'staging-key' }]],
+				['prod', [{ key: 'API_KEY', value: 'prod-key' }]],
+			]);
+
+			const result = calculateMissingSecrets(allEnvSecrets, 'dev');
+			expect(result).toHaveLength(0);
+		});
+
+		it('finds secrets missing from current environment', () => {
+			const allEnvSecrets = new Map<string, Secret[]>([
+				['dev', [{ key: 'API_KEY', value: 'dev-key' }]],
+				[
+					'staging',
+					[
+						{ key: 'API_KEY', value: 'staging-key' },
+						{ key: 'DB_URL', value: 'staging-db' },
+					],
+				],
+				[
+					'prod',
+					[
+						{ key: 'API_KEY', value: 'prod-key' },
+						{ key: 'DB_URL', value: 'prod-db' },
+						{ key: 'REDIS_URL', value: 'prod-redis' },
+					],
+				],
+			]);
+
+			const result = calculateMissingSecrets(allEnvSecrets, 'dev');
+
+			expect(result).toHaveLength(2);
+			expect(result.map((m) => m.key)).toContain('DB_URL');
+			expect(result.map((m) => m.key)).toContain('REDIS_URL');
+		});
+
+		it('tracks which environments have the missing secret', () => {
+			const allEnvSecrets = new Map<string, Secret[]>([
+				['dev', []],
+				['staging', [{ key: 'API_KEY', value: 'staging-key' }]],
+				['prod', [{ key: 'API_KEY', value: 'prod-key' }]],
+			]);
+
+			const result = calculateMissingSecrets(allEnvSecrets, 'dev');
+
+			expect(result).toHaveLength(1);
+			expect(result[0].key).toBe('API_KEY');
+			expect(result[0].existsIn).toContain('staging');
+			expect(result[0].existsIn).toContain('prod');
+			expect(result[0].existsIn).toHaveLength(2);
+		});
+
+		it('returns empty array when current env has all secrets', () => {
+			const allEnvSecrets = new Map<string, Secret[]>([
+				[
+					'dev',
+					[
+						{ key: 'API_KEY', value: 'dev-key' },
+						{ key: 'DB_URL', value: 'dev-db' },
+					],
+				],
+				['staging', [{ key: 'API_KEY', value: 'staging-key' }]],
+			]);
+
+			const result = calculateMissingSecrets(allEnvSecrets, 'dev');
+			expect(result).toHaveLength(0);
+		});
+
+		it('returns empty array when current env is only environment', () => {
+			const allEnvSecrets = new Map<string, Secret[]>([
+				['dev', [{ key: 'API_KEY', value: 'dev-key' }]],
+			]);
+
+			const result = calculateMissingSecrets(allEnvSecrets, 'dev');
+			expect(result).toHaveLength(0);
+		});
+
+		it('handles empty current environment', () => {
+			const allEnvSecrets = new Map<string, Secret[]>([
+				['dev', []],
+				[
+					'staging',
+					[
+						{ key: 'API_KEY', value: 'staging-key' },
+						{ key: 'DB_URL', value: 'staging-db' },
+					],
+				],
+			]);
+
+			const result = calculateMissingSecrets(allEnvSecrets, 'dev');
+
+			expect(result).toHaveLength(2);
+			expect(result.map((m) => m.key)).toContain('API_KEY');
+			expect(result.map((m) => m.key)).toContain('DB_URL');
+		});
+
+		it('handles missing current environment in map', () => {
+			const allEnvSecrets = new Map<string, Secret[]>([
+				['staging', [{ key: 'API_KEY', value: 'staging-key' }]],
+			]);
+
+			const result = calculateMissingSecrets(allEnvSecrets, 'dev');
+
+			expect(result).toHaveLength(1);
+			expect(result[0].key).toBe('API_KEY');
+			expect(result[0].existsIn).toEqual(['staging']);
+		});
+
+		it('sorts results alphabetically by key', () => {
+			const allEnvSecrets = new Map<string, Secret[]>([
+				['dev', []],
+				[
+					'staging',
+					[
+						{ key: 'ZEBRA', value: 'z' },
+						{ key: 'ALPHA', value: 'a' },
+						{ key: 'MIDDLE', value: 'm' },
+					],
+				],
+			]);
+
+			const result = calculateMissingSecrets(allEnvSecrets, 'dev');
+
+			expect(result).toHaveLength(3);
+			expect(result[0].key).toBe('ALPHA');
+			expect(result[1].key).toBe('MIDDLE');
+			expect(result[2].key).toBe('ZEBRA');
+		});
+
+		it('does not include secrets already in current environment', () => {
+			const allEnvSecrets = new Map<string, Secret[]>([
+				['dev', [{ key: 'SHARED', value: 'dev-shared' }]],
+				[
+					'staging',
+					[
+						{ key: 'SHARED', value: 'staging-shared' },
+						{ key: 'STAGING_ONLY', value: 'staging' },
+					],
+				],
+				[
+					'prod',
+					[
+						{ key: 'SHARED', value: 'prod-shared' },
+						{ key: 'PROD_ONLY', value: 'prod' },
+					],
+				],
+			]);
+
+			const result = calculateMissingSecrets(allEnvSecrets, 'dev');
+
+			expect(result).toHaveLength(2);
+			expect(result.map((m) => m.key)).not.toContain('SHARED');
+			expect(result.map((m) => m.key)).toContain('STAGING_ONLY');
+			expect(result.map((m) => m.key)).toContain('PROD_ONLY');
+		});
+
+		it('handles empty map', () => {
+			const allEnvSecrets = new Map<string, Secret[]>();
+			const result = calculateMissingSecrets(allEnvSecrets, 'dev');
+			expect(result).toHaveLength(0);
 		});
 	});
 });

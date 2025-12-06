@@ -1,9 +1,9 @@
-import { map, combineLatestWith } from 'rxjs/operators';
+import { map } from 'rxjs/operators';
 import { combineLatest, of } from 'rxjs';
 import type { Observable } from 'rxjs';
 import type { EventStore } from 'applesauce-core';
 import type { NostrEvent } from 'nostr-tools';
-import { REDSHIFT_KIND, getSecretsDTag } from '$lib/stores/nostr.svelte';
+import { REDSHIFT_KIND, getSecretsDTag } from '$lib/constants';
 import type { Secret, SecretsBundle } from '$lib/types/nostr';
 
 /**
