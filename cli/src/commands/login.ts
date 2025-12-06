@@ -251,6 +251,37 @@ export async function logoutCommand(): Promise<void> {
 }
 
 /**
+ * Try to get auth credentials without exiting.
+ * Returns null if not logged in or auth is invalid.
+ */
+export async function tryAuth(): Promise<{
+	nsec: string;
+	npub: string;
+	privateKey: Uint8Array;
+} | null> {
+	const auth = await getAuth();
+
+	if (!auth) {
+		return null;
+	}
+
+	// For now, only nsec auth provides direct private key access
+	if (auth.method !== 'nsec' || !auth.nsec) {
+		return null;
+	}
+
+	if (!validateNsec(auth.nsec)) {
+		return null;
+	}
+
+	const privateKey = decodeNsec(auth.nsec);
+	const pubkey = getPublicKey(privateKey);
+	const npub = npubEncode(pubkey);
+
+	return { nsec: auth.nsec, npub, privateKey };
+}
+
+/**
  * Check if user is logged in and return their credentials.
  * Exits with error if not logged in.
  */
@@ -259,30 +290,21 @@ export async function requireAuth(): Promise<{
 	npub: string;
 	privateKey: Uint8Array;
 }> {
-	const auth = await getAuth();
+	const auth = await tryAuth();
 
 	if (!auth) {
-		console.error('Not logged in. Run `redshift login` first.');
-		console.error('Or set REDSHIFT_NSEC environment variable for CI/CD.');
+		const storedAuth = await getAuth();
+		if (!storedAuth) {
+			console.error('Not logged in. Run `redshift login` first.');
+			console.error('Or set REDSHIFT_NSEC environment variable for CI/CD.');
+		} else if (storedAuth.method !== 'nsec' || !storedAuth.nsec) {
+			console.error('Bunker auth not yet fully supported for this command.');
+			console.error('Please use nsec authentication for now.');
+		} else {
+			console.error('Invalid nsec stored in config. Please run `redshift login` again.');
+		}
 		process.exit(1);
 	}
 
-	// For now, only nsec auth provides direct private key access
-	// Bunker auth requires different handling in SecretManager
-	if (auth.method !== 'nsec' || !auth.nsec) {
-		console.error('Bunker auth not yet fully supported for this command.');
-		console.error('Please use nsec authentication for now.');
-		process.exit(1);
-	}
-
-	if (!validateNsec(auth.nsec)) {
-		console.error('Invalid nsec stored in config. Please run `redshift login` again.');
-		process.exit(1);
-	}
-
-	const privateKey = decodeNsec(auth.nsec);
-	const pubkey = getPublicKey(privateKey);
-	const npub = npubEncode(pubkey);
-
-	return { nsec: auth.nsec, npub, privateKey };
+	return auth;
 }

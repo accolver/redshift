@@ -11,7 +11,8 @@
 		"dev": "bun run cli/src/main.ts",
 		"dev:web": "cd web && bun run dev",
 
-		"build": "bun run build:cli",
+		"build": "bun run build:web && bun run build:embeds && bun run build:cli",
+		"build:embeds": "bun run cli/scripts/generate-embeds.ts",
 		"build:cli": "bun build cli/src/main.ts --compile --outfile dist/redshift",
 		"build:cli:all": "bun run build:cli:darwin-arm64 && bun run build:cli:darwin-x64 && bun run build:cli:linux-arm64 && bun run build:cli:linux-x64",
 		"build:cli:darwin-arm64": "bun build cli/src/main.ts --compile --target=bun-darwin-arm64 --outfile dist/redshift-darwin-arm64",
@@ -19,7 +20,7 @@
 		"build:cli:linux-arm64": "bun build cli/src/main.ts --compile --target=bun-linux-arm64 --outfile dist/redshift-linux-arm64",
 		"build:cli:linux-x64": "bun build cli/src/main.ts --compile --target=bun-linux-x64 --outfile dist/redshift-linux-x64",
 		"build:web": "cd web && bun run build",
-		"build:all": "bun run build:cli:all && bun run build:web",
+		"build:all": "bun run build:web && bun run build:embeds && bun run build:cli:all",
 
 		"test": "bun test",
 		"test:cli": "bun test cli/",

@@ -4,7 +4,8 @@
  * L5: Journey-Validator - Web UI serving workflow
  */
 
-import { requireAuth } from './login';
+import { decodeContent, getEmbeddedFile, hasEmbeddedFiles } from '../lib/embedded-files';
+import { tryAuth } from './login';
 
 export interface ServeOptions {
 	port?: number;
@@ -12,9 +13,8 @@ export interface ServeOptions {
 	open?: boolean;
 }
 
-// Placeholder HTML for the admin UI
-// In production, this would be imported from the built SvelteKit app
-const PLACEHOLDER_HTML = `<!DOCTYPE html>
+// Fallback HTML when embedded files aren't available (dev mode)
+const FALLBACK_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -67,7 +67,7 @@ const PLACEHOLDER_HTML = `<!DOCTYPE html>
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      color: #9ece6a;
+      color: #f7768e;
       font-size: 0.875rem;
     }
     .status::before {
@@ -95,6 +95,12 @@ const PLACEHOLDER_HTML = `<!DOCTYPE html>
       color: #565f89;
       margin-top: 2rem;
     }
+    code {
+      background: var(--card);
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
   </style>
 </head>
 <body>
@@ -103,7 +109,7 @@ const PLACEHOLDER_HTML = `<!DOCTYPE html>
     <p class="subtitle">Decentralized Secret Management</p>
     
     <div class="card">
-      <p class="status">Server Running</p>
+      <p class="status">Admin UI Not Embedded</p>
       <dl class="info">
         <dt>Public Key</dt>
         <dd id="npub">Loading...</dd>
@@ -113,8 +119,11 @@ const PLACEHOLDER_HTML = `<!DOCTYPE html>
     </div>
     
     <p class="note">
-      The full admin UI will be available once the SvelteKit app is built.
-      <br><br>
+      The admin UI is not embedded in this binary.<br><br>
+      To build with the embedded UI:<br>
+      <code>bun run build:web</code><br>
+      <code>bun run build:embeds</code><br>
+      <code>bun run build:cli</code><br><br>
       For now, use the CLI commands:<br>
       <code>redshift secrets list</code><br>
       <code>redshift secrets set KEY VALUE</code>
@@ -122,7 +131,6 @@ const PLACEHOLDER_HTML = `<!DOCTYPE html>
   </div>
   
   <script>
-    // Fetch server info
     fetch('/api/info')
       .then(r => r.json())
       .then(data => {
@@ -146,16 +154,22 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
 
 	// Get auth info for display (optional for serve)
 	let npub = 'Not logged in';
-	try {
-		const auth = await requireAuth();
+	const auth = await tryAuth();
+	if (auth) {
 		npub = auth.npub;
-	} catch {
+	} else {
 		console.log('Warning: Not logged in. Some features may be unavailable.');
 	}
 
 	const address = `http://${host}:${port}`;
+	const hasEmbeds = hasEmbeddedFiles();
 
 	console.log('Starting Redshift Admin Server...');
+	if (hasEmbeds) {
+		console.log('Serving embedded admin UI.');
+	} else {
+		console.log('Warning: Admin UI not embedded. Run build:embeds first.');
+	}
 	console.log('');
 
 	const server = Bun.serve({
@@ -164,22 +178,50 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
 
 		fetch(req) {
 			const url = new URL(req.url);
+			const path = url.pathname;
 
 			// API endpoints
-			if (url.pathname === '/api/info') {
+			if (path === '/api/info') {
 				return Response.json({
 					npub,
 					address,
 					version: '0.1.0',
+					embedded: hasEmbeds,
 				});
 			}
 
-			if (url.pathname === '/api/health') {
+			if (path === '/api/health') {
 				return Response.json({ status: 'ok' });
 			}
 
-			// Serve the placeholder HTML for all other routes
-			return new Response(PLACEHOLDER_HTML, {
+			// If we have embedded files, serve them
+			if (hasEmbeds) {
+				// Try to find the file
+				let file = getEmbeddedFile(path);
+
+				// For SPA routing: if not found and not an asset, serve index.html
+				if (!file && !path.includes('.')) {
+					file = getEmbeddedFile('/');
+				}
+
+				if (file) {
+					const content = decodeContent(file);
+					return new Response(content, {
+						headers: {
+							'Content-Type': file.contentType,
+							'Cache-Control': path.includes('/_app/immutable/')
+								? 'public, max-age=31536000, immutable'
+								: 'public, max-age=0, must-revalidate',
+						},
+					});
+				}
+
+				// 404 for missing files
+				return new Response('Not Found', { status: 404 });
+			}
+
+			// Fallback: serve placeholder HTML
+			return new Response(FALLBACK_HTML, {
 				headers: {
 					'Content-Type': 'text/html; charset=utf-8',
 				},
