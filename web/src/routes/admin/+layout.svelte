@@ -139,7 +139,7 @@ function getDisplayName(pubkey: string): string {
 <div class="flex min-h-screen flex-col bg-background">
 	<!-- Admin Header - full width with inner container -->
 	<header class="sticky top-0 z-40 border-b border-border/50 bg-card/95 backdrop-blur-sm">
-		<div class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
+		<div class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-3 sm:px-6">
 			<!-- Left: Logo + Nav + Search -->
 			<div class="flex min-w-0 items-center gap-2 sm:gap-8">
 				<a href="/" class="flex shrink-0 items-center gap-2">
@@ -245,7 +245,7 @@ function getDisplayName(pubkey: string): string {
 	</header>
 
 	<!-- Admin Content - same max-width as header -->
-	<main class="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
+	<main class="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-6 sm:py-8">
 		{@render children()}
 	</main>
 </div>

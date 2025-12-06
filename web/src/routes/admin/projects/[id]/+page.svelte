@@ -113,6 +113,10 @@ let newSecretKey = $state('');
 let newSecretValue = $state('');
 let showAddSecretRow = $state(false);
 
+// Track which missing secret is being edited inline
+let editingMissingKey = $state<string | null>(null);
+let missingSecretValue = $state('');
+
 // Pending secret for multi-env save (single secret mode)
 let pendingSecretKey = $state('');
 let pendingSecretValue = $state('');
@@ -533,6 +537,8 @@ async function handleMultiEnvSave(envSlugs: string[]) {
 			newSecretKey = '';
 			newSecretValue = '';
 			showAddSecretRow = false;
+			editingMissingKey = null;
+			missingSecretValue = '';
 			pendingSecretKey = '';
 			pendingSecretValue = '';
 		}
@@ -566,24 +572,57 @@ function selectEnvironment(env: Environment) {
 	selectedEnvSlug = env.slug;
 }
 
-// Add a missing secret (creates with empty value, ready to fill in)
+// Add a missing secret inline
 function handleAddMissingSecret(key: string) {
-	// Pre-fill the add secret row with the key
-	newSecretKey = key;
-	newSecretValue = '';
-	showAddSecretRow = true;
-	// Scroll to top where the add row appears
+	editingMissingKey = key;
+	missingSecretValue = '';
+	// Focus the value input after render
 	setTimeout(() => {
-		const addRow = document.querySelector('[data-add-secret-row]');
-		if (addRow) {
-			addRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-			// Focus the value input
-			const valueInput = addRow.querySelector('input[placeholder="Value"]') as HTMLInputElement;
-			if (valueInput) {
-				valueInput.focus();
-			}
+		const input = document.querySelector(`[data-missing-input="${key}"]`) as HTMLInputElement;
+		if (input) {
+			input.focus();
 		}
-	}, 100);
+	}, 50);
+}
+
+// Save the missing secret
+async function handleSaveMissingSecret() {
+	if (!editingMissingKey) return;
+
+	// If project has multiple environments, show the multi-env save modal
+	if (project && project.environments.length > 1) {
+		pendingSecretKey = editingMissingKey;
+		pendingSecretValue = missingSecretValue;
+		showMultiEnvSaveModal = true;
+		return;
+	}
+
+	// Single environment, save directly
+	isAddingSecret = true;
+	try {
+		await setSecret(editingMissingKey, missingSecretValue);
+		editingMissingKey = null;
+		missingSecretValue = '';
+	} catch (err) {
+		console.error('Failed to add secret:', err);
+	} finally {
+		isAddingSecret = false;
+	}
+}
+
+// Cancel editing missing secret
+function handleCancelMissingSecret() {
+	editingMissingKey = null;
+	missingSecretValue = '';
+}
+
+// Handle keydown for missing secret input
+function handleMissingKeydown(e: KeyboardEvent) {
+	if (e.key === 'Enter') {
+		handleSaveMissingSecret();
+	} else if (e.key === 'Escape') {
+		handleCancelMissingSecret();
+	}
 }
 
 function handleEnvironmentCreated(env: Environment) {
@@ -706,7 +745,7 @@ async function handleDeleteEnvironment() {
 	{:else}
 		<!-- Breadcrumb Header -->
 		<div class="border-b border-border bg-card/50">
-			<div class="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
+			<div class="mx-auto flex h-14 max-w-6xl items-center justify-between px-3 sm:px-6">
 				<div class="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
 					<!-- Project Dropdown -->
 					<DropdownMenu>
@@ -812,7 +851,7 @@ async function handleDeleteEnvironment() {
 
 		<!-- Content -->
 		<div class="flex-1">
-			<div class="mx-auto max-w-6xl px-4 py-4 sm:px-6">
+			<div class="mx-auto max-w-6xl px-3 py-3 sm:px-6 sm:py-4">
 					<!-- Toolbar -->
 					<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<div class="flex items-center gap-2">
@@ -910,8 +949,9 @@ async function handleDeleteEnvironment() {
 							</div>
 							<div class="space-y-2">
 								{#each missingSecretsState.missing as missing (missing.key)}
+									{@const isEditing = editingMissingKey === missing.key}
 									<div
-										class="group flex flex-col gap-2 rounded-lg border border-dashed border-amber-500/50 bg-amber-500/5 p-3 sm:flex-row sm:items-center"
+										class="group flex flex-col gap-2 rounded-lg border border-dashed border-amber-500/50 bg-amber-500/5 p-2 sm:flex-row sm:items-center sm:p-3"
 										transition:slide={{ duration: 200 }}
 									>
 										<!-- Status Icon -->
@@ -924,21 +964,57 @@ async function handleDeleteEnvironment() {
 											<span class="truncate font-mono text-sm font-medium">{missing.key}</span>
 										</div>
 										
-										<!-- Info & Action -->
-										<div class="flex flex-1 items-center justify-between gap-2">
-											<span class="text-sm text-muted-foreground">
-												Exists in: {missing.existsIn.join(', ')}
-											</span>
-											<Button
-												variant="outline"
-												size="sm"
-												onclick={() => handleAddMissingSecret(missing.key)}
-												class="shrink-0"
-											>
-												<Plus class="mr-1 size-4" />
-												Add Value
-											</Button>
-										</div>
+										{#if isEditing}
+											<!-- Editing Mode: Value input + Save/Cancel -->
+											<div class="flex flex-1 items-center gap-2">
+												<div class="flex h-10 flex-1 items-center rounded-lg border border-border bg-card px-3">
+													<input
+														data-missing-input={missing.key}
+														type="text"
+														placeholder="Value"
+														class="w-full bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground"
+														bind:value={missingSecretValue}
+														onkeydown={handleMissingKeydown}
+													/>
+												</div>
+												<Button
+													variant="ghost"
+													size="sm"
+													onclick={handleSaveMissingSecret}
+													disabled={isAddingSecret}
+												>
+													{#if isAddingSecret}
+														<LoaderCircle class="size-4 animate-spin" />
+													{:else}
+														Save
+													{/if}
+												</Button>
+												<Button
+													variant="ghost"
+													size="sm"
+													onclick={handleCancelMissingSecret}
+													disabled={isAddingSecret}
+												>
+													Cancel
+												</Button>
+											</div>
+										{:else}
+											<!-- Default: Info & Add Value button -->
+											<div class="flex flex-1 items-center justify-between gap-2">
+												<span class="text-sm text-muted-foreground">
+													Exists in: {missing.existsIn.join(', ')}
+												</span>
+												<Button
+													variant="outline"
+													size="sm"
+													onclick={() => handleAddMissingSecret(missing.key)}
+													class="shrink-0"
+												>
+													<Plus class="mr-1 size-4" />
+													Add Value
+												</Button>
+											</div>
+										{/if}
 									</div>
 								{/each}
 							</div>
@@ -963,7 +1039,7 @@ async function handleDeleteEnvironment() {
 						{:else}
 							<!-- Add Secret Row -->
 							{#if showAddSecretRow}
-								<div data-add-secret-row class="flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-3 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0" transition:slide={{ duration: 200 }}>
+								<div data-add-secret-row class="flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-2 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0" transition:slide={{ duration: 200 }}>
 									<!-- Status placeholder (hidden on mobile) -->
 									<div class="hidden size-8 items-center justify-center sm:flex">
 										<Circle class="size-4 text-muted-foreground/30" />
@@ -1028,7 +1104,7 @@ async function handleDeleteEnvironment() {
 								{@const isHighlighted = highlightedKey === secret.key}
 								<div 
 									data-secret-key={secret.key}
-									class="group flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-3 transition-all duration-300 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0 {isHighlighted ? 'ring-2 ring-primary ring-offset-2 ring-offset-background sm:rounded-lg sm:p-2 sm:bg-primary/5' : ''}"
+									class="group flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-2 transition-all duration-300 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0 {isHighlighted ? 'ring-2 ring-primary ring-offset-2 ring-offset-background sm:rounded-lg sm:p-2 sm:bg-primary/5' : ''}"
 									class:border-primary={status === 'dirty'}
 									transition:slide={{ duration: 200 }}
 									animate:flip={{ duration: 200 }}
