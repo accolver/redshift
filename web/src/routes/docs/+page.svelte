@@ -1,6 +1,7 @@
 <script lang="ts">
 import { ArrowRight, Key, Shield, Terminal, Globe } from '@lucide/svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
+import InlineCode from '$lib/components/InlineCode.svelte';
 </script>
 
 <svelte:head>
@@ -103,7 +104,7 @@ import ProseHeading from '$lib/components/ProseHeading.svelte';
 		</ol>
 
 		<p>
-			When you run <code>redshift run -- npm start</code>, the CLI fetches your encrypted secrets from relays, decrypts them locally, and injects them as environment variables into your process.
+			When you run <InlineCode>redshift run -- npm start</InlineCode>, the CLI fetches your encrypted secrets from relays, decrypts them locally, and injects them as environment variables into your process.
 		</p>
 
 		<ProseHeading level={2} id="getting-help">Getting help</ProseHeading>

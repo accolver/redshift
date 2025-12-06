@@ -1,5 +1,6 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
+import InlineCode from '$lib/components/InlineCode.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
 </script>
 
@@ -29,7 +30,7 @@ import ProseHeading from '$lib/components/ProseHeading.svelte';
 		</p>
 		<CodeBlock language="bash" code="redshift serve --open" />
 		<p>
-			This starts a local server at <code>http://localhost:3000</code> with the same functionality.
+			This starts a local server at <InlineCode>http://localhost:3000</InlineCode> with the same functionality.
 		</p>
 
 		<ProseHeading level={2} id="connecting">Connecting</ProseHeading>

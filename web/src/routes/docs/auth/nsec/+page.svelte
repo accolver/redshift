@@ -1,6 +1,7 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
+import InlineCode from '$lib/components/InlineCode.svelte';
 import { TriangleAlert, Shield } from '@lucide/svelte';
 </script>
 
@@ -46,7 +47,7 @@ import { TriangleAlert, Shield } from '@lucide/svelte';
 			<li>Go to <a href="/admin">/admin</a></li>
 			<li>Click "Connect"</li>
 			<li>Select "Private Key (nsec)"</li>
-			<li>Enter your nsec (starts with <code>nsec1...</code>)</li>
+			<li>Enter your nsec (starts with <InlineCode>nsec1...</InlineCode>)</li>
 			<li>Click "Connect"</li>
 		</ol>
 
@@ -69,7 +70,7 @@ redshift secrets list`} />
 		<p>Redshift accepts private keys in two formats:</p>
 
 		<ProseHeading level={3} id="bech32-nsec">Bech32 (nsec)</ProseHeading>
-		<p>The standard Nostr format, starts with <code>nsec1</code>:</p>
+		<p>The standard Nostr format, starts with <InlineCode>nsec1</InlineCode>:</p>
 		<CodeBlock code="nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5" language="text" />
 
 		<ProseHeading level={3} id="hex">Hex</ProseHeading>
@@ -161,7 +162,7 @@ redshift secrets list
 redshift run -- npm start`} />
 
 		<p>
-			This is more secure than passing <code>--nsec</code> on the command line, which may be visible in shell history or process listings.
+			This is more secure than passing <InlineCode>--nsec</InlineCode> on the command line, which may be visible in shell history or process listings.
 		</p>
 
 		<ProseHeading level={2} id="migrating-to-a-browser-extension">Migrating to a Browser Extension</ProseHeading>

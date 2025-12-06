@@ -9,6 +9,7 @@ import {
 	DialogTitle,
 } from '$lib/components/ui/dialog';
 import { Label } from '$lib/components/ui/label';
+import InlineCode from '$lib/components/InlineCode.svelte';
 import {
 	exportToEnv,
 	exportToJson,
@@ -141,7 +142,7 @@ function handleOpenChange(value: boolean) {
 			<!-- Filename -->
 			<div class="flex items-center gap-2 text-sm text-muted-foreground">
 				<Download class="size-4" />
-				<span>Will be saved as: <code class="rounded bg-muted px-1">{filename()}</code></span>
+				<span>Will be saved as: <InlineCode>{filename()}</InlineCode></span>
 			</div>
 		</div>
 

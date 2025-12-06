@@ -4,30 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '$lib/
 import { getAuthState } from '$lib/stores/auth.svelte';
 import { getProjectsState } from '$lib/stores/projects.svelte';
 import CreateProjectModal from '$lib/components/CreateProjectModal.svelte';
-import {
-	Folder,
-	ChevronRight,
-	LoaderCircle,
-	CircleCheck,
-	Circle,
-	Terminal,
-	Copy,
-	Check,
-} from '@lucide/svelte';
+import ProjectCard from '$lib/components/ProjectCard.svelte';
+import InlineCode from '$lib/components/InlineCode.svelte';
+import { LoaderCircle, CircleCheck, Circle, Terminal, Copy, Check, Folder } from '@lucide/svelte';
 
 const auth = $derived(getAuthState());
 const projectsState = $derived(getProjectsState());
 
 let showCreateModal = $state(false);
 let copiedCommand = $state<string | null>(null);
-
-function formatDate(timestamp: number): string {
-	return new Date(timestamp).toLocaleDateString('en-US', {
-		month: 'short',
-		day: 'numeric',
-		year: 'numeric',
-	});
-}
 
 async function copyCommand(command: string) {
 	await navigator.clipboard.writeText(command);
@@ -85,7 +70,7 @@ const cliCommands = [
 		<p class="text-muted-foreground">Manage your projects and secrets</p>
 	</div>
 
-	<!-- Getting Started Guide (shown when no projects) -->
+	<!-- Getting Started Guide (hidden for now)
 	{#if auth.isConnected && !projectsState.isLoading && projectsState.projects.length === 0}
 		<section>
 			<Card>
@@ -120,6 +105,7 @@ const cliCommands = [
 			</Card>
 		</section>
 	{/if}
+	-->
 
 	<!-- Projects Grid -->
 	<section>
@@ -150,41 +136,12 @@ const cliCommands = [
 					</CardContent>
 				</Card>
 			{:else if projectsState.projects.length === 0}
-				<!-- Empty state - connected but no projects (minimal since Getting Started is shown) -->
-				<Card class="border-dashed">
-					<CardContent class="flex flex-col items-center justify-center py-8 text-center">
-						<Folder class="mb-3 size-8 text-muted-foreground/40" />
-						<p class="text-sm text-muted-foreground">No projects yet</p>
-					</CardContent>
-				</Card>
+				<!-- Empty state - connected but no projects -->
+				<ProjectCard placeholder />
 			{:else}
 				<!-- Project cards -->
 				{#each projectsState.projects as project (project.id)}
-					<a href="/admin/projects/{project.id}" class="block">
-						<Card class="group cursor-pointer transition-colors hover:border-primary/50">
-							<CardHeader class="pb-3">
-								<div class="flex items-start justify-between">
-									<div class="flex items-center gap-3">
-										<div class="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-											<Folder class="size-5" />
-										</div>
-										<div>
-											<CardTitle class="text-base">{project.name}</CardTitle>
-											<CardDescription class="text-xs">
-												Created {formatDate(project.createdAt)}
-											</CardDescription>
-										</div>
-									</div>
-									<ChevronRight class="size-5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-								</div>
-							</CardHeader>
-							<CardContent>
-								<div class="flex items-center gap-4 text-sm text-muted-foreground">
-									<span>{project.environments.length} environment{project.environments.length !== 1 ? 's' : ''}</span>
-								</div>
-							</CardContent>
-						</Card>
-					</a>
+					<ProjectCard {project} />
 				{/each}
 			{/if}
 		</div>
@@ -204,7 +161,7 @@ const cliCommands = [
 					{#each cliCommands as cmd}
 						<div class="group flex items-center justify-between rounded-md bg-muted/50 px-3 py-2">
 							<div class="flex items-center gap-3">
-								<code class="font-mono text-sm">{cmd.command}</code>
+								<InlineCode>{cmd.command}</InlineCode>
 								<span class="text-sm text-muted-foreground">{cmd.description}</span>
 							</div>
 							<button
@@ -223,7 +180,7 @@ const cliCommands = [
 					{/each}
 				</div>
 				<p class="mt-4 text-xs text-muted-foreground">
-					Install: <code class="rounded bg-muted px-1.5 py-0.5 text-foreground">curl -fsSL https://redshiftapp.com/install | sh</code>
+					Install: <InlineCode>curl -fsSL https://redshiftapp.com/install | sh</InlineCode>
 				</p>
 			</CardContent>
 		</Card>

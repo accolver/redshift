@@ -1,5 +1,6 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
+import InlineCode from '$lib/components/InlineCode.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
 import { CircleCheck } from '@lucide/svelte';
 </script>
@@ -124,7 +125,7 @@ import { CircleCheck } from '@lucide/svelte';
 
 		<ol>
 			<li>Redshift creates an unsigned event</li>
-			<li>It calls <code>window.nostr.signEvent(event)</code></li>
+			<li>It calls <InlineCode>window.nostr.signEvent(event)</InlineCode></li>
 			<li>Your extension shows a popup asking for approval</li>
 			<li>You click "Sign" (or the extension auto-approves if configured)</li>
 			<li>The extension signs the event and returns it</li>

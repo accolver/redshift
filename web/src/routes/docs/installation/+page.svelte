@@ -1,5 +1,6 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
+import InlineCode from '$lib/components/InlineCode.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
 import { CircleCheck } from '@lucide/svelte';
 </script>
@@ -24,7 +25,7 @@ import { CircleCheck } from '@lucide/svelte';
 		<CodeBlock code="curl -fsSL https://redshiftapp.com/install | sh" language="bash" />
 
 		<p>
-			This will download the latest release and install it to <code>~/.redshift/bin</code>, then add it to your PATH.
+			This will download the latest release and install it to <InlineCode>~/.redshift/bin</InlineCode>, then add it to your PATH.
 		</p>
 
 		<ProseHeading level={2} id="package-managers">Package Managers</ProseHeading>
@@ -48,10 +49,10 @@ bun add -g @redshift/cli`} language="bash" />
 		</p>
 
 		<ul>
-			<li><code>redshift-darwin-arm64</code> - macOS (Apple Silicon)</li>
-			<li><code>redshift-darwin-x64</code> - macOS (Intel)</li>
-			<li><code>redshift-linux-x64</code> - Linux (x64)</li>
-			<li><code>redshift-linux-arm64</code> - Linux (ARM64)</li>
+			<li><InlineCode>redshift-darwin-arm64</InlineCode> - macOS (Apple Silicon)</li>
+			<li><InlineCode>redshift-darwin-x64</InlineCode> - macOS (Intel)</li>
+			<li><InlineCode>redshift-linux-x64</InlineCode> - Linux (x64)</li>
+			<li><InlineCode>redshift-linux-arm64</InlineCode> - Linux (ARM64)</li>
 		</ul>
 
 		<p>Then make it executable and move to your PATH:</p>

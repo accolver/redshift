@@ -1,6 +1,7 @@
 <script lang="ts">
 import { onMount } from 'svelte';
 import { Button } from '$lib/components/ui/button';
+import InlineCode from '$lib/components/InlineCode.svelte';
 import { Shield, Terminal, Globe, Key, Zap, Lock, ArrowRight, Copy, Check } from '@lucide/svelte';
 
 let scrollY = $state(0);
@@ -282,7 +283,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 					</div>
 					<h3 class="mb-2 text-lg font-semibold">Doppler Compatible CLI</h3>
 					<p class="text-sm text-foreground/60">
-						Familiar commands like <code class="rounded bg-muted px-1.5 py-0.5 text-xs text-foreground/80">redshift run</code>.
+						Familiar commands like <InlineCode class="text-xs">redshift run</InlineCode>.
 						Drop-in replacement for your existing workflow.
 					</p>
 				</div>

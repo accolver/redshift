@@ -1,5 +1,6 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
+import InlineCode from '$lib/components/InlineCode.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
 </script>
 
@@ -66,7 +67,7 @@ redshift setup
 # ✓ Created .redshift.json`} language="bash" />
 
 		<p>
-			This creates a <code>.redshift.json</code> file in your project:
+			This creates a <InlineCode>.redshift.json</InlineCode> file in your project:
 		</p>
 
 		<CodeBlock code={`{
@@ -76,7 +77,7 @@ redshift setup
 
 		<div class="not-prose my-6 rounded-lg border border-tokyo-orange/50 bg-tokyo-orange/10 p-4">
 			<p class="text-sm">
-				<strong class="text-tokyo-orange">Tip:</strong> Add <code>.redshift.json</code> to your <code>.gitignore</code> if you want different environments per developer, or commit it to share the same environment across your team.
+				<strong class="text-tokyo-orange">Tip:</strong> Add <InlineCode>.redshift.json</InlineCode> to your <InlineCode>.gitignore</InlineCode> if you want different environments per developer, or commit it to share the same environment across your team.
 			</p>
 		</div>
 
@@ -100,7 +101,7 @@ redshift secrets list
 
 		<ProseHeading level={2} id="run-application">5. Run Your Application</ProseHeading>
 		<p>
-			Use <code>redshift run</code> to inject secrets as environment variables:
+			Use <InlineCode>redshift run</InlineCode> to inject secrets as environment variables:
 		</p>
 
 		<CodeBlock code={`# Run any command with secrets injected

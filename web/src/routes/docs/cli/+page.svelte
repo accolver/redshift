@@ -1,5 +1,6 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
+import InlineCode from '$lib/components/InlineCode.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
 </script>
 
@@ -70,8 +71,8 @@ redshift login --generate`} />
 
 		<ProseHeading level={3} id="login-environment-variables">Environment Variables</ProseHeading>
 		<ul>
-			<li><code>REDSHIFT_NSEC</code> - Private key for authentication</li>
-			<li><code>REDSHIFT_BUNKER</code> - Bunker URI for remote signing</li>
+			<li><InlineCode>REDSHIFT_NSEC</InlineCode> - Private key for authentication</li>
+			<li><InlineCode>REDSHIFT_BUNKER</InlineCode> - Bunker URI for remote signing</li>
 		</ul>
 
 		<hr />
@@ -93,7 +94,7 @@ redshift setup
 redshift setup --project my-app --environment development`} />
 
 		<p>
-			This creates a <code>.redshift.json</code> file in the current directory:
+			This creates a <InlineCode>.redshift.json</InlineCode> file in the current directory:
 		</p>
 		<CodeBlock language="json" code={`{
   "project": "my-app",

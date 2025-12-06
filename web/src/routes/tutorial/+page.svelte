@@ -2,6 +2,7 @@
 import { Button } from '$lib/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 import CodeBlock from '$lib/components/CodeBlock.svelte';
+import InlineCode from '$lib/components/InlineCode.svelte';
 </script>
 
 <svelte:head>
@@ -150,7 +151,7 @@ redshift secrets get DATABASE_URL`} />
 			</CardHeader>
 			<CardContent class="space-y-4">
 				<p class="text-muted-foreground">
-					Use <code class="rounded bg-muted px-1 text-foreground">redshift run</code> to inject secrets into your app:
+					Use <InlineCode>redshift run</InlineCode> to inject secrets into your app:
 				</p>
 				<CodeBlock code={`# Run with secrets injected
 redshift run -- npm start

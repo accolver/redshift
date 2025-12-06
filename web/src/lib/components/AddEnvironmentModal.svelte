@@ -10,6 +10,7 @@ import {
 } from '$lib/components/ui/dialog';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
+import InlineCode from '$lib/components/InlineCode.svelte';
 import { addEnvironment } from '$lib/stores/projects.svelte';
 import type { Environment } from '$lib/types/nostr';
 
@@ -124,7 +125,7 @@ function handleOpenChange(value: boolean) {
 						disabled={isCreating}
 					/>
 					<p class="text-xs text-muted-foreground">
-						Used in CLI commands: <code class="rounded bg-muted px-1">redshift run -e {envSlug || 'slug'}</code>
+						Used in CLI commands: <InlineCode>redshift run -e {envSlug || 'slug'}</InlineCode>
 					</p>
 				</div>
 

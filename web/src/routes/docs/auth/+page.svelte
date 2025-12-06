@@ -1,4 +1,5 @@
 <script lang="ts">
+import InlineCode from '$lib/components/InlineCode.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
 import { Globe, Key, Shield } from '@lucide/svelte';
 </script>
@@ -137,7 +138,7 @@ import { Globe, Key, Shield } from '@lucide/svelte';
 
 		<ul>
 			<li><strong>Browser extension:</strong> Install <a href="https://getalby.com" target="_blank" rel="noopener">Alby</a> and it will generate keys for you</li>
-			<li><strong>CLI:</strong> Run <code>redshift login</code> and select "Generate new identity"</li>
+			<li><strong>CLI:</strong> Run <InlineCode>redshift login</InlineCode> and select "Generate new identity"</li>
 			<li><strong>Web:</strong> Click "Connect" in the Redshift admin and generate keys there</li>
 		</ul>
 
