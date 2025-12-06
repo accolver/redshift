@@ -1,6 +1,6 @@
 <script lang="ts">
 import { page } from '$app/state';
-import { onMount } from 'svelte';
+import { onMount, untrack } from 'svelte';
 import { slide } from 'svelte/transition';
 import { flip } from 'svelte/animate';
 import { Button } from '$lib/components/ui/button';
@@ -65,6 +65,7 @@ import ExportSecretsModal from '$lib/components/ExportSecretsModal.svelte';
 import ImportSecretsModal from '$lib/components/ImportSecretsModal.svelte';
 import MultiEnvSaveModal from '$lib/components/MultiEnvSaveModal.svelte';
 import { goto } from '$app/navigation';
+import { fuzzyMatch } from '$lib/utils/search';
 
 // Get project ID from route
 const projectId = $derived(page.params.id);
@@ -81,10 +82,15 @@ const project = $derived(projectsState.projects.find((p) => p.id === projectId))
 let selectedEnvSlug = $state<string | null>(null);
 
 // Read environment from URL query param
+// This effect sets selectedEnvSlug based on URL, using untrack to avoid loops
 $effect(() => {
 	const urlEnv = page.url.searchParams.get('env');
+	const currentSlug = untrack(() => selectedEnvSlug);
+	// Set from URL if it's a valid environment and different from current
 	if (urlEnv && project?.environments.some((e) => e.slug === urlEnv)) {
-		selectedEnvSlug = urlEnv;
+		if (currentSlug !== urlEnv) {
+			selectedEnvSlug = urlEnv;
+		}
 	}
 });
 
@@ -107,9 +113,13 @@ let newSecretKey = $state('');
 let newSecretValue = $state('');
 let showAddSecretRow = $state(false);
 
-// Pending secret for multi-env save
+// Pending secret for multi-env save (single secret mode)
 let pendingSecretKey = $state('');
 let pendingSecretValue = $state('');
+
+// Pending secrets for multi-env save (global save mode)
+let pendingSecrets = $state<{ key: string; value: string }[]>([]);
+let isGlobalSaveMode = $state(false);
 
 // Sorting state
 type SortOption = 'asc' | 'desc' | 'newest' | 'oldest';
@@ -201,6 +211,25 @@ async function saveAllChanges() {
 	const hasNewSecret = showAddSecretRow && newSecretKey.trim();
 
 	if (toSave.length === 0 && !hasNewSecret) return;
+
+	// If project has multiple environments, show the multi-env save modal
+	if (project && project.environments.length > 1) {
+		// Collect all secrets that need to be saved
+		const secretsToSave: { key: string; value: string }[] = [];
+
+		for (const [, edited] of toSave) {
+			secretsToSave.push({ key: edited.key, value: edited.value });
+		}
+
+		if (hasNewSecret) {
+			secretsToSave.push({ key: newSecretKey.trim().toUpperCase(), value: newSecretValue });
+		}
+
+		pendingSecrets = secretsToSave;
+		isGlobalSaveMode = true;
+		showMultiEnvSaveModal = true;
+		return;
+	}
 
 	// Track the new keys for saved state (in case key was renamed)
 	const savedKeyMap = new Map<string, string>(); // originalKey -> newKey
@@ -336,9 +365,7 @@ function getSecretStatus(originalKey: string): 'default' | 'dirty' | 'saving' | 
 
 // Filtered and sorted secrets
 const filteredSecrets = $derived(() => {
-	let secrets = secretsState.secrets.filter((s) =>
-		s.key.toLowerCase().includes(searchQuery.toLowerCase()),
-	);
+	let secrets = secretsState.secrets.filter((s) => fuzzyMatch(s.key, searchQuery));
 
 	// Sort secrets
 	switch (sortBy) {
@@ -360,18 +387,26 @@ const filteredSecrets = $derived(() => {
 	return secrets;
 });
 
-// Subscribe to secrets when environment changes
+// Set default environment when project loads (run first)
+// Use untrack for selectedEnvSlug to prevent self-referential tracking
 $effect(() => {
-	if (project && selectedEnv) {
-		const allEnvSlugs = project.environments.map((e) => e.slug);
-		subscribeToSecrets(project.id, selectedEnv.slug, allEnvSlugs);
+	const currentProject = project;
+	const currentSlug = untrack(() => selectedEnvSlug);
+	if (currentProject && currentProject.environments.length > 0 && !currentSlug) {
+		selectedEnvSlug = currentProject.environments[0].slug;
 	}
 });
 
-// Set default environment when project loads
+// Subscribe to secrets when environment changes
+// Track project.id and selectedEnv.slug specifically to avoid loops from object reference changes
 $effect(() => {
-	if (project && project.environments.length > 0 && !selectedEnvSlug) {
-		selectedEnvSlug = project.environments[0].slug;
+	const currentProjectId = project?.id;
+	const currentEnvSlug = selectedEnv?.slug;
+
+	if (currentProjectId && currentEnvSlug) {
+		// Use untrack to read environments without creating dependency on array changes
+		const allEnvSlugs = untrack(() => project?.environments.map((e) => e.slug) ?? []);
+		subscribeToSecrets(currentProjectId, currentEnvSlug, allEnvSlugs);
 	}
 });
 
@@ -469,12 +504,38 @@ async function handleMultiEnvSave(envSlugs: string[]) {
 
 	isAddingSecret = true;
 	try {
-		await setSecretToMultipleEnvs(project.id, pendingSecretKey, pendingSecretValue, envSlugs);
-		newSecretKey = '';
-		newSecretValue = '';
-		showAddSecretRow = false;
-		pendingSecretKey = '';
-		pendingSecretValue = '';
+		if (isGlobalSaveMode) {
+			// Global save mode: save all pending secrets to selected environments
+			for (const secret of pendingSecrets) {
+				await setSecretToMultipleEnvs(project.id, secret.key, secret.value, envSlugs);
+			}
+
+			// Clear editing state for saved secrets
+			for (const [originalKey] of editedSecrets) {
+				if (isSecretModified(originalKey)) {
+					editedSecrets.delete(originalKey);
+				}
+			}
+			editedSecrets = new Map(editedSecrets);
+
+			// Clear new secret row if it was included
+			if (showAddSecretRow && newSecretKey.trim()) {
+				newSecretKey = '';
+				newSecretValue = '';
+				showAddSecretRow = false;
+			}
+
+			pendingSecrets = [];
+			isGlobalSaveMode = false;
+		} else {
+			// Single secret mode (inline save)
+			await setSecretToMultipleEnvs(project.id, pendingSecretKey, pendingSecretValue, envSlugs);
+			newSecretKey = '';
+			newSecretValue = '';
+			showAddSecretRow = false;
+			pendingSecretKey = '';
+			pendingSecretValue = '';
+		}
 	} catch (err) {
 		console.error('Failed to save secret:', err);
 		throw err; // Re-throw so the modal can show the error
@@ -1266,9 +1327,17 @@ async function handleDeleteEnvironment() {
 		bind:open={showMultiEnvSaveModal}
 		secretKey={pendingSecretKey}
 		secretValue={pendingSecretValue}
+		secrets={isGlobalSaveMode ? pendingSecrets : []}
 		currentEnvSlug={selectedEnv.slug}
 		environments={project.environments}
-		onOpenChange={(v) => (showMultiEnvSaveModal = v)}
+		onOpenChange={(v) => {
+			showMultiEnvSaveModal = v;
+			if (!v) {
+				// Reset global save mode when modal closes
+				isGlobalSaveMode = false;
+				pendingSecrets = [];
+			}
+		}}
 		onSave={handleMultiEnvSave}
 	/>
 {/if}

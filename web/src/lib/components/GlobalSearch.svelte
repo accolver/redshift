@@ -7,6 +7,7 @@ import { eventStore, REDSHIFT_KIND, getSecretsDTag } from '$lib/stores/nostr.sve
 import { parseSecretsContent } from '$lib/models/secrets';
 import type { Secret, Project, Environment } from '$lib/types/nostr';
 import { goto } from '$app/navigation';
+import { fuzzyMatch, matchScore } from '$lib/utils/search';
 
 interface Props {
 	open: boolean;
@@ -32,6 +33,7 @@ interface SearchResult {
 	secret?: Secret;
 	matchedText: string;
 	subtitle?: string;
+	score?: number;
 }
 
 // Load secrets for all environments when search opens
@@ -80,24 +82,26 @@ const searchResults = $derived(() => {
 
 	// Search projects
 	for (const project of projectsState.projects) {
-		if (project.name.toLowerCase().includes(query)) {
+		if (fuzzyMatch(project.name, query)) {
 			results.push({
 				type: 'project',
 				project,
 				matchedText: project.name,
 				subtitle: 'Project',
+				score: matchScore(project.name, query),
 			});
 		}
 
 		// Search environment names
 		for (const env of project.environments) {
-			if (env.name.toLowerCase().includes(query) || env.slug.toLowerCase().includes(query)) {
+			if (fuzzyMatch(env.name, query) || fuzzyMatch(env.slug, query)) {
 				results.push({
 					type: 'environment',
 					project,
 					environment: env,
 					matchedText: env.name,
 					subtitle: project.name,
+					score: Math.max(matchScore(env.name, query), matchScore(env.slug, query)),
 				});
 			}
 
@@ -106,7 +110,7 @@ const searchResults = $derived(() => {
 			const secrets = secretsCache.get(cacheKey) ?? [];
 
 			for (const secret of secrets) {
-				if (secret.key.toLowerCase().includes(query)) {
+				if (fuzzyMatch(secret.key, query)) {
 					results.push({
 						type: 'secret',
 						project,
@@ -114,20 +118,20 @@ const searchResults = $derived(() => {
 						secret,
 						matchedText: secret.key,
 						subtitle: `${project.name} / ${env.name}`,
+						score: matchScore(secret.key, query),
 					});
 				}
 			}
 		}
 	}
 
-	// Sort: exact matches first, then by type (secrets, projects, environments)
+	// Sort: by score (higher first), then by type (secrets, projects, environments)
 	results.sort((a, b) => {
-		const aExact = a.matchedText.toLowerCase() === query;
-		const bExact = b.matchedText.toLowerCase() === query;
-		if (aExact && !bExact) return -1;
-		if (!aExact && bExact) return 1;
+		// First sort by score (higher is better)
+		const scoreDiff = (b.score ?? 0) - (a.score ?? 0);
+		if (scoreDiff !== 0) return scoreDiff;
 
-		// Prioritize secrets over projects/environments
+		// Then prioritize secrets over projects/environments
 		const typeOrder = { secret: 0, project: 1, environment: 2 };
 		return typeOrder[a.type] - typeOrder[b.type];
 	});
@@ -136,18 +140,23 @@ const searchResults = $derived(() => {
 });
 
 function handleSelect(result: SearchResult) {
-	if (result.type === 'secret' && result.environment) {
-		// Navigate to project with environment and highlight the secret
-		goto(
-			`/admin/projects/${result.project.id}?env=${result.environment.slug}&highlight=${encodeURIComponent(result.secret!.key)}`,
-		);
-	} else if (result.type === 'environment' && result.environment) {
-		goto(`/admin/projects/${result.project.id}?env=${result.environment.slug}`);
-	} else {
-		goto(`/admin/projects/${result.project.id}`);
-	}
+	// Close dialog and clear search first
 	searchQuery = '';
 	onOpenChange(false);
+
+	// Then navigate after a microtask to ensure dialog closes cleanly
+	setTimeout(() => {
+		if (result.type === 'secret' && result.environment) {
+			// Navigate to project with environment and highlight the secret
+			goto(
+				`/admin/projects/${result.project.id}?env=${result.environment.slug}&highlight=${encodeURIComponent(result.secret!.key)}`,
+			);
+		} else if (result.type === 'environment' && result.environment) {
+			goto(`/admin/projects/${result.project.id}?env=${result.environment.slug}`);
+		} else {
+			goto(`/admin/projects/${result.project.id}`);
+		}
+	}, 0);
 }
 
 function handleKeydown(e: KeyboardEvent) {
