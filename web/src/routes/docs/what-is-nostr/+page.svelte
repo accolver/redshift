@@ -8,7 +8,7 @@ import ProseHeading from '$lib/components/ProseHeading.svelte';
 	<meta name="description" content="Understanding the Nostr protocol and how Redshift uses it for decentralized secret management." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-6 py-12">
+<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
 	<h1 class="mb-4 text-4xl font-bold">What is Nostr?</h1>
 	<p class="mb-8 text-lg text-muted-foreground">
 		Understanding the decentralized protocol that powers Redshift.
@@ -126,10 +126,12 @@ Private key (nsec): nsec1secret...key
 		</p>
 
 		<ul>
-			<li><strong>NIP-01</strong> - Basic protocol (events, signatures, relays)</li>
-			<li><strong>NIP-07</strong> - Browser extension interface (Alby, nos2x)</li>
-			<li><strong>NIP-19</strong> - Bech32 encoding (npub, nsec formats)</li>
-			<li><strong>NIP-46</strong> - Remote signing (bunker connections)</li>
+			<li><strong><a href="https://nips.nostr.com/1" target="_blank" rel="noopener">NIP-01</a></strong> - Basic protocol (events, signatures, relays)</li>
+			<li><strong><a href="https://nips.nostr.com/7" target="_blank" rel="noopener">NIP-07</a></strong> - Browser extension interface (Alby, nos2x)</li>
+			<li><strong><a href="https://nips.nostr.com/19" target="_blank" rel="noopener">NIP-19</a></strong> - Bech32 encoding (npub, nsec formats)</li>
+			<li><strong><a href="https://nips.nostr.com/44" target="_blank" rel="noopener">NIP-44</a></strong> - Versioned encryption (XChaCha20-Poly1305)</li>
+			<li><strong><a href="https://nips.nostr.com/46" target="_blank" rel="noopener">NIP-46</a></strong> - Remote signing (bunker connections)</li>
+			<li><strong><a href="https://nips.nostr.com/59" target="_blank" rel="noopener">NIP-59</a></strong> - Gift Wrap (metadata protection)</li>
 		</ul>
 
 		<ProseHeading level={2} id="why-nostr-for-secrets">Why Nostr for Secrets?</ProseHeading>

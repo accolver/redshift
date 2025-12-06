@@ -9,7 +9,7 @@ import ProseHeading from '$lib/components/ProseHeading.svelte';
 	<meta name="description" content="Using the Redshift web admin interface to manage projects and secrets." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-6 py-12">
+<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
 	<h1 class="mb-4 text-4xl font-bold">Web Admin</h1>
 	<p class="mb-8 text-lg text-muted-foreground">
 		Manage your projects and secrets through a visual interface.

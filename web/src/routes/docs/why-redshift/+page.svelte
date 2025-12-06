@@ -8,7 +8,7 @@ import { CircleCheck, CircleX, Minus } from '@lucide/svelte';
 	<meta name="description" content="Compare Redshift with Doppler, HashiCorp Vault, AWS Secrets Manager, and other secret management solutions." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-6 py-12">
+<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
 	<h1 class="mb-4 text-4xl font-bold">Why Redshift?</h1>
 	<p class="mb-8 text-lg text-muted-foreground">
 		How Redshift compares to Doppler, Vault, and other secret management solutions.

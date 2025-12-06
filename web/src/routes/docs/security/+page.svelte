@@ -9,7 +9,7 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 	<meta name="description" content="Understanding Redshift's security model, encryption, and threat considerations." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-6 py-12">
+<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
 	<h1 class="mb-4 text-4xl font-bold">Security Model</h1>
 	<p class="mb-8 text-lg text-muted-foreground">
 		How Redshift protects your secrets and what threats it defends against.
@@ -70,20 +70,39 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			Your secrets are encrypted using your Nostr private key before being stored on relays. The encryption uses:
 		</p>
 		<ul>
-			<li><strong>NIP-44</strong> - Modern Nostr encryption standard</li>
+			<li><strong><a href="https://nips.nostr.com/44" target="_blank" rel="noopener">NIP-44</a></strong> - Modern Nostr encryption standard</li>
 			<li><strong>XChaCha20-Poly1305</strong> - Authenticated encryption</li>
 			<li><strong>secp256k1 ECDH</strong> - Key derivation from your Nostr keypair</li>
+		</ul>
+
+		<ProseHeading level={3} id="gift-wrap-nip-59">Gift Wrap (NIP-59)</ProseHeading>
+		<p>
+			Redshift uses <a href="https://nips.nostr.com/59" target="_blank" rel="noopener">NIP-59 Gift Wrap</a> to provide an additional layer of metadata protection. Gift wrapping involves three layers:
+		</p>
+		<ul>
+			<li><strong>Rumor</strong> - Your actual secret data, unsigned (provides deniability if leaked)</li>
+			<li><strong>Seal (Kind 13)</strong> - The rumor encrypted to the recipient, signed by you (proves authorship without revealing content)</li>
+			<li><strong>Gift Wrap (Kind 1059)</strong> - The seal encrypted with a random ephemeral key (hides the true author from relay operators)</li>
+		</ul>
+
+		<p>
+			This layered approach ensures:
+		</p>
+		<ul>
+			<li><strong>Content privacy</strong> - Only you can decrypt your secrets</li>
+			<li><strong>Metadata privacy</strong> - Relay operators cannot link events to your identity</li>
+			<li><strong>Deniability</strong> - Unsigned rumors cannot be authenticated if leaked</li>
 		</ul>
 
 		<p>
 			What relay operators see:
 		</p>
 		<CodeBlock language="json" code={`{
-  "kind": 30078,
-  "pubkey": "your_public_key",
-  "content": "encrypted_blob_they_cannot_read",
-  "tags": [["d", "project-id|environment"]],
-  "sig": "your_signature"
+  "kind": 1059,
+  "pubkey": "random_ephemeral_key",
+  "content": "encrypted_seal_they_cannot_read",
+  "tags": [["p", "your_public_key"]],
+  "sig": "ephemeral_key_signature"
 }`} />
 
 		<ProseHeading level={3} id="data-in-transit">Data in Transit</ProseHeading>

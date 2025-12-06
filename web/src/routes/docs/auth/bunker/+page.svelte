@@ -9,7 +9,7 @@ import { Shield, Server, Smartphone } from '@lucide/svelte';
 	<meta name="description" content="Authenticate with Redshift using a NIP-46 bunker for remote signing." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-6 py-12">
+<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
 	<h1 class="mb-4 text-4xl font-bold">Bunker (NIP-46)</h1>
 	<p class="mb-8 text-lg text-muted-foreground">
 		Connect to a remote signing service for enhanced security and automation.
