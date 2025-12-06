@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onMount } from 'svelte';
 import { Button } from '$lib/components/ui/button';
-import { Key, ChevronDown, LogOut, Radio, Search } from '@lucide/svelte';
+import { ChevronDown, LogOut, Radio, Search } from '@lucide/svelte';
 import {
 	getAuthState,
 	connectWithNip07,
@@ -126,9 +126,7 @@ function getDisplayName(pubkey: string): string {
 		<div class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
 			<div class="flex min-w-0 items-center gap-2 sm:gap-8">
 				<a href="/" class="flex shrink-0 items-center gap-2">
-					<div class="flex size-7 items-center justify-center rounded-md bg-gradient-to-br from-tokyo-blue to-tokyo-purple">
-						<Key class="size-3.5 text-white" />
-					</div>
+					<img src="/favicon.svg" alt="Redshift" class="size-7" />
 					<span class="hidden text-lg font-semibold sm:inline">Redshift</span>
 				</a>
 				<nav class="hidden items-center gap-1 sm:flex">

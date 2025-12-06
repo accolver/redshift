@@ -88,11 +88,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 	<nav class="glass fixed left-0 right-0 top-0 z-50 border-b border-border/50">
 		<div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
 			<a href="/" class="flex items-center gap-2">
-				<div
-					class="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-tokyo-blue to-tokyo-purple"
-				>
-					<Key class="size-4 text-white" />
-				</div>
+				<img src="/favicon.svg" alt="Redshift" class="size-8" />
 				<span class="text-lg font-semibold">Redshift</span>
 			</a>
 			<div class="hidden items-center gap-8 md:flex">
@@ -484,11 +480,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 	<footer class="border-t border-border/50 px-6 py-12">
 		<div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 md:flex-row">
 			<div class="flex items-center gap-2">
-				<div
-					class="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-tokyo-blue to-tokyo-purple"
-				>
-					<Key class="size-4 text-white" />
-				</div>
+				<img src="/favicon.svg" alt="Redshift" class="size-8" />
 				<span class="font-semibold">Redshift</span>
 			</div>
 			<div class="flex gap-8 text-sm text-foreground/60">
