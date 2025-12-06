@@ -153,7 +153,6 @@ informs strategic decisions.
 **Remember**: Every change should serve the ultimate purpose defined in L9. When
 in doubt, consult the Telos hierarchy.
 
-
 ## Slash Commands
 
 If your AI assistant supports slash commands, use these to interact with Telos:
@@ -176,3 +175,67 @@ traceable back to the ultimate goal. This creates:
 
 For more information, see
 [Telos Framework documentation](https://github.com/telos-framework/init).
+
+---
+
+## Project Coding Standards
+
+### UI Components
+
+1. **Use shadcn/ui for Svelte** - Prefer shadcn components over custom
+   implementations. Components are located in `web/src/lib/components/ui/`.
+
+2. **Transitions** - Add the `transition` class (or specific variants like
+   `transition-colors`, `transition-opacity`) to any element with a hover effect
+   or animation. This ensures smooth visual feedback.
+
+3. **Code Display Components**:
+   - Use `InlineCode` component (`$lib/components/InlineCode.svelte`) for inline
+     code snippets
+   - Use `CodeBlock` component (`$lib/components/CodeBlock.svelte`) for larger
+     code blocks
+
+4. **Theme Colors** - Always use Tokyo Night Storm theme colors. Available color
+   tokens:
+   - `tokyo-blue`, `tokyo-purple`, `tokyo-cyan`, `tokyo-green`
+   - `tokyo-orange`, `tokyo-red`
+   - Standard semantic colors: `foreground`, `background`, `muted`,
+     `muted-foreground`, `primary`, `destructive`, etc.
+
+### Code Organization
+
+5. **Extract Repeated Code** - Always extract repeated patterns into reusable
+   libs (`web/src/lib/`) or components (`web/src/lib/components/`). Follow DRY
+   principles.
+
+### Development Approach
+
+6. **Test-Driven Development** - Always follow TDD:
+   - Write tests first before implementing features
+   - Tests live in `web/tests/` and `cli/tests/`
+   - Run tests with `bun test` in respective directories
+
+### TypeScript Standards
+
+7. **No `any` Type** - Never use TypeScript's `any`. Always define proper types:
+   - Create interfaces/types in `web/src/lib/types/` or inline
+   - Use `unknown` with type guards if truly uncertain
+   - Leverage generics for flexible typing
+
+8. **Implicit Return Types** - Prefer implicit return types over explicit ones.
+   Let TypeScript infer return types unless:
+   - The function is part of a public API
+   - The inferred type is too complex or unclear
+   - You need to enforce a specific return type contract
+
+   ```typescript
+   // Preferred - implicit return type
+   function getUser(id: string) {
+     return users.find((u) => u.id === id);
+   }
+
+   // Only when necessary - explicit return type
+   function fetchData(): Promise<User[]> {
+     // Complex implementation where explicit type adds clarity
+   }
+   ```
