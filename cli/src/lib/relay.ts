@@ -10,7 +10,7 @@
 import type { Filter } from 'nostr-tools/filter';
 import { SimplePool } from 'nostr-tools/pool';
 import type { NostrEvent, UnsignedEvent } from './types';
-import { NostrKinds } from './types';
+import { NostrKinds, REDSHIFT_TYPE_TAG } from './types';
 import { RateLimiter, withPublishBackoff, withQueryBackoff } from './rate-limiter';
 
 /**
@@ -140,12 +140,18 @@ export function createRelayPool(relayUrls: string[], options: RelayPoolOptions =
 }
 
 /**
- * Create a filter for fetching Gift Wrap events addressed to a pubkey.
+ * Create a filter for fetching Redshift Gift Wrap events addressed to a pubkey.
+ *
+ * Filters by:
+ * - kind: 1059 (Gift Wrap)
+ * - p-tag: recipient pubkey
+ * - t-tag: "redshift-secrets" (to only get Redshift events, not DMs, etc.)
  */
 export function filterGiftWraps(pubkey: string, since?: number): Filter {
 	const filter: Filter = {
 		kinds: [NostrKinds.GIFT_WRAP],
 		'#p': [pubkey],
+		'#t': [REDSHIFT_TYPE_TAG],
 	};
 
 	if (since !== undefined) {

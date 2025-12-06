@@ -1,63 +1,21 @@
 /**
- * Core type definitions for Redshift
+ * Core type definitions for Redshift CLI
+ *
+ * Re-exports shared types from @redshift/crypto and adds CLI-specific types.
+ *
  * L4: Integration-Contractor - API Contracts
  */
 
-/**
- * A bundle of secrets stored as key-value pairs.
- * Values can be primitives or complex objects (JSON-serialized when injected to env).
- */
-export interface SecretBundle {
-	[key: string]: string | number | boolean | object;
-}
+// Re-export shared types from crypto package
+export type {
+	NostrEvent,
+	UnsignedEvent,
+	SecretBundle,
+	GiftWrapResult,
+	UnwrapResult,
+} from '@redshift/crypto';
 
-/**
- * Result of wrapping secrets in NIP-59 Gift Wrap
- */
-export interface GiftWrapResult {
-	/** The outer Gift Wrap event (kind 1059) */
-	event: NostrEvent;
-	/** The inner unsigned rumor before wrapping */
-	rumor: UnsignedEvent;
-}
-
-/**
- * A signed Nostr event
- */
-export interface NostrEvent {
-	id: string;
-	pubkey: string;
-	created_at: number;
-	kind: number;
-	tags: string[][];
-	content: string;
-	sig: string;
-}
-
-/**
- * An unsigned Nostr event (rumor)
- */
-export interface UnsignedEvent {
-	pubkey: string;
-	created_at: number;
-	kind: number;
-	tags: string[][];
-	content: string;
-}
-
-/**
- * Nostr event kinds used by Redshift
- */
-export const NostrKinds = {
-	/** NIP-59: Gift Wrap */
-	GIFT_WRAP: 1059,
-	/** NIP-59: Seal */
-	SEAL: 13,
-	/** NIP-09: Deletion Request */
-	DELETION: 5,
-	/** Parameterized Replaceable Event for secrets */
-	SECRET_BUNDLE: 30078,
-} as const;
+export { NostrKinds, REDSHIFT_TYPE_TAG } from '@redshift/crypto';
 
 /**
  * Configuration for a Redshift project
@@ -118,7 +76,9 @@ export interface ParsedCommand {
  */
 export interface Nip07Extension {
 	getPublicKey(): Promise<string>;
-	signEvent(event: UnsignedEvent): Promise<NostrEvent>;
+	signEvent(
+		event: import('@redshift/crypto').UnsignedEvent,
+	): Promise<import('@redshift/crypto').NostrEvent>;
 	getRelays?(): Promise<Record<string, { read: boolean; write: boolean }>>;
 	nip04?: {
 		encrypt(pubkey: string, plaintext: string): Promise<string>;

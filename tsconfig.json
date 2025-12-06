@@ -41,5 +41,5 @@
 		"types": ["bun-types"]
 	},
 	"include": ["cli/**/*"],
-	"exclude": ["node_modules", "web"]
+	"exclude": ["node_modules", "web", "packages"]
 }

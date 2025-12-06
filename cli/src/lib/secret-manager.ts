@@ -7,15 +7,15 @@
 
 import { getPublicKey } from 'nostr-tools/pure';
 import {
-	type UnwrapResult,
 	createDTag,
 	createDeletionEvent,
 	createTombstone,
 	parseDTag,
 	unwrapGiftWrap,
-	unwrapSecrets as unwrapSecretsRaw,
-	wrapSecrets as wrapSecretsRaw,
+	unwrapSecrets as unwrapSecretsFromEvent,
+	wrapSecrets as wrapSecretsToEvent,
 } from './crypto';
+import type { UnwrapResult } from './crypto';
 import type { RelayPool } from './relay';
 import { createRelayPool, filterGiftWraps } from './relay';
 import type { GiftWrapResult, NostrEvent, SecretBundle } from './types';
@@ -81,21 +81,21 @@ export class SecretManager {
 	/**
 	 * Wrap secrets into a Gift Wrap event
 	 */
-	async wrapSecrets(secrets: SecretBundle, dTag: string): Promise<GiftWrapResult> {
-		return wrapSecretsRaw(secrets, this.privateKey, dTag);
+	wrapSecrets(secrets: SecretBundle, dTag: string): GiftWrapResult {
+		return wrapSecretsToEvent(secrets, this.privateKey, dTag);
 	}
 
 	/**
 	 * Unwrap a Gift Wrap event to retrieve secrets
 	 */
-	async unwrapSecrets(event: NostrEvent): Promise<SecretBundle> {
-		return unwrapSecretsRaw(event, this.privateKey);
+	unwrapSecrets(event: NostrEvent): SecretBundle {
+		return unwrapSecretsFromEvent(event, this.privateKey);
 	}
 
 	/**
 	 * Unwrap a Gift Wrap event with full metadata
 	 */
-	async unwrapWithMetadata(event: NostrEvent): Promise<UnwrapResult> {
+	unwrapWithMetadata(event: NostrEvent): UnwrapResult {
 		return unwrapGiftWrap(event, this.privateKey);
 	}
 
@@ -116,7 +116,7 @@ export class SecretManager {
 
 		for (const gw of giftWraps) {
 			try {
-				const result = await unwrapGiftWrap(gw, this.privateKey);
+				const result = unwrapGiftWrap(gw, this.privateKey);
 
 				if (!result.dTag) {
 					continue; // Skip events without d-tag
@@ -197,7 +197,7 @@ export class SecretManager {
 
 		for (const gw of giftWraps) {
 			try {
-				const result = await unwrapGiftWrap(gw, this.privateKey);
+				const result = unwrapGiftWrap(gw, this.privateKey);
 
 				// Only consider events with matching d-tag
 				if (result.dTag !== targetDTag) {
@@ -229,7 +229,7 @@ export class SecretManager {
 		}
 
 		const dTag = createDTag(projectId, environment);
-		const { event } = await this.wrapSecrets(secrets, dTag);
+		const { event } = this.wrapSecrets(secrets, dTag);
 
 		await this.pool.publish(event);
 
@@ -245,7 +245,7 @@ export class SecretManager {
 		}
 
 		const dTag = createDTag(projectId, environment);
-		const { event } = await createTombstone(this.privateKey, dTag);
+		const { event } = createTombstone(this.privateKey, dTag);
 
 		await this.pool.publish(event);
 
@@ -260,7 +260,7 @@ export class SecretManager {
 			throw new Error('Not connected to relays. Call connect() first.');
 		}
 
-		const deletion = await createDeletionEvent(eventIds, this.privateKey, reason);
+		const deletion = createDeletionEvent(eventIds, this.privateKey, reason);
 		await this.pool.publish(deletion);
 
 		return deletion;
