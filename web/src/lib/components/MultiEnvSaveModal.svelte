@@ -8,13 +8,18 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from '$lib/components/ui/dialog';
+import InlineCode from '$lib/components/InlineCode.svelte';
 import { GitBranch, Check, LoaderCircle } from '@lucide/svelte';
-import type { Environment } from '$lib/types/nostr';
+import type { Environment, Secret } from '$lib/types/nostr';
 
 interface Props {
 	open: boolean;
-	secretKey: string;
-	secretValue: string;
+	/** Single secret key (for backward compatibility with inline save) */
+	secretKey?: string;
+	/** Single secret value (for backward compatibility with inline save) */
+	secretValue?: string;
+	/** Multiple secrets to save (for global save) */
+	secrets?: Secret[];
 	currentEnvSlug: string;
 	environments: Environment[];
 	onOpenChange: (open: boolean) => void;
@@ -23,13 +28,17 @@ interface Props {
 
 let {
 	open = $bindable(),
-	secretKey,
-	secretValue,
+	secretKey = '',
+	secretValue = '',
+	secrets = [],
 	currentEnvSlug,
 	environments,
 	onOpenChange,
 	onSave,
 }: Props = $props();
+
+// Determine if we're in multi-secret mode
+const isMultiSecret = $derived(secrets.length > 0);
 
 // Track which environments are selected (current env is always selected)
 let selectedEnvs = $state<Set<string>>(new Set());
@@ -91,18 +100,37 @@ function handleOpenChange(value: boolean) {
 		<DialogHeader>
 			<DialogTitle>Save to Multiple Environments</DialogTitle>
 			<DialogDescription>
-				Apply <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">{secretKey}</code> to other environments?
+				{#if isMultiSecret}
+					Apply {secrets.length} secret{secrets.length !== 1 ? 's' : ''} to other environments?
+				{:else}
+					Apply <InlineCode>{secretKey}</InlineCode> to other environments?
+				{/if}
 			</DialogDescription>
 		</DialogHeader>
 
 		<div class="space-y-4 py-4">
 			<!-- Value preview -->
-			<div class="rounded-lg border border-border bg-muted/50 p-3">
-				<p class="mb-1 text-xs font-medium text-muted-foreground">Value</p>
-				<p class="truncate font-mono text-sm">
-					{secretValue ? secretValue.slice(0, 50) + (secretValue.length > 50 ? '...' : '') : '(empty)'}
-				</p>
-			</div>
+			{#if isMultiSecret}
+				<div class="rounded-lg border border-border bg-muted/50 p-3">
+					<p class="mb-1 text-xs font-medium text-muted-foreground">Secrets to save</p>
+					<div class="max-h-24 space-y-1 overflow-y-auto">
+						{#each secrets as secret (secret.key)}
+							<p class="truncate font-mono text-sm">
+								<span class="font-medium">{secret.key}</span>
+								<span class="text-muted-foreground"> = </span>
+								<span class="text-muted-foreground">{secret.value.slice(0, 30)}{secret.value.length > 30 ? '...' : ''}</span>
+							</p>
+						{/each}
+					</div>
+				</div>
+			{:else}
+				<div class="rounded-lg border border-border bg-muted/50 p-3">
+					<p class="mb-1 text-xs font-medium text-muted-foreground">Value</p>
+					<p class="truncate font-mono text-sm">
+						{secretValue ? secretValue.slice(0, 50) + (secretValue.length > 50 ? '...' : '') : '(empty)'}
+					</p>
+				</div>
+			{/if}
 
 			<!-- Environment selection -->
 			<div class="space-y-2">
@@ -111,7 +139,7 @@ function handleOpenChange(value: boolean) {
 					<div class="flex gap-2">
 						<button
 							type="button"
-							class="text-xs text-muted-foreground hover:text-foreground"
+							class="cursor-pointer text-xs text-muted-foreground hover:text-foreground"
 							onclick={selectAll}
 						>
 							Select all
@@ -119,7 +147,7 @@ function handleOpenChange(value: boolean) {
 						<span class="text-muted-foreground">|</span>
 						<button
 							type="button"
-							class="text-xs text-muted-foreground hover:text-foreground"
+							class="cursor-pointer text-xs text-muted-foreground hover:text-foreground"
 							onclick={selectNone}
 						>
 							Current only
@@ -133,7 +161,7 @@ function handleOpenChange(value: boolean) {
 						{@const isCurrent = env.slug === currentEnvSlug}
 						<button
 							type="button"
-							class="flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors {isSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/50'}"
+							class="flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors {isSelected ? 'border-primary bg-primary/5' : 'border-border'} {isCurrent ? '' : 'cursor-pointer hover:border-muted-foreground/50 hover:bg-muted/30'}"
 							onclick={() => toggleEnv(env.slug)}
 							disabled={isCurrent}
 						>
