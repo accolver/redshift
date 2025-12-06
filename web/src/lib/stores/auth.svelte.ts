@@ -1,4 +1,4 @@
-import type { AuthState, ProfileMetadata } from '$lib/types/nostr';
+import type { AuthState, ProfileMetadata, NostrEvent, SignedEvent } from '$lib/types/nostr';
 import { SimplePool } from 'nostr-tools/pool';
 import {
 	secureStore,
@@ -6,10 +6,13 @@ import {
 	secureRemove,
 	isSecureStorageAvailable,
 } from './secure-storage';
+import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
+import { nip19, getPublicKey } from 'nostr-tools';
+import { BunkerSigner, parseBunkerInput } from 'nostr-tools/nip46';
 
 /**
  * Authentication store using Svelte 5 Runes
- * Handles NIP-07 browser extension and local nsec authentication
+ * Handles NIP-07 browser extension, local nsec, and NIP-46 bunker authentication
  *
  * Security: When using nsec, the private key is encrypted with a non-extractable
  * AES-GCM key stored in IndexedDB before being saved to sessionStorage.
@@ -17,6 +20,11 @@ import {
  */
 
 const NSEC_STORAGE_KEY = 'sk';
+const BUNKER_LOCAL_KEY = 'bunker_local_sk';
+const BUNKER_URI_KEY = 'bunker_uri';
+
+// Active bunker signer instance (kept in memory, not serializable)
+let activeBunkerSigner: BunkerSigner | null = null;
 
 // Default relays for fetching profile metadata
 const DEFAULT_RELAYS = [
@@ -99,6 +107,21 @@ export async function connectWithNip07(): Promise<boolean> {
 }
 
 /**
+ * Parse an nsec string (bech32 or hex) into a Uint8Array secret key
+ */
+function parseNsec(nsec: string): Uint8Array {
+	if (nsec.startsWith('nsec')) {
+		const decoded = nip19.decode(nsec);
+		if (decoded.type !== 'nsec') {
+			throw new Error('Invalid nsec format');
+		}
+		return decoded.data;
+	}
+	// Assume hex format
+	return Uint8Array.from(Buffer.from(nsec, 'hex'));
+}
+
+/**
  * Connect using a local nsec (private key)
  *
  * Security: The nsec is encrypted with a non-extractable AES-GCM key
@@ -106,22 +129,7 @@ export async function connectWithNip07(): Promise<boolean> {
  */
 export async function connectWithNsec(nsec: string): Promise<boolean> {
 	try {
-		// Dynamic import to avoid bundling nostr-tools for users who don't need it
-		const { nip19, getPublicKey } = await import('nostr-tools');
-
-		let secretKey: Uint8Array;
-
-		if (nsec.startsWith('nsec')) {
-			const decoded = nip19.decode(nsec);
-			if (decoded.type !== 'nsec') {
-				throw new Error('Invalid nsec format');
-			}
-			secretKey = decoded.data;
-		} else {
-			// Assume hex format
-			secretKey = Uint8Array.from(Buffer.from(nsec, 'hex'));
-		}
-
+		const secretKey = parseNsec(nsec);
 		const pubkey = getPublicKey(secretKey);
 
 		// Securely store the nsec (encrypted, cleared on tab close)
@@ -150,10 +158,92 @@ export async function connectWithNsec(nsec: string): Promise<boolean> {
 }
 
 /**
+ * Connect using a NIP-46 bunker URI
+ *
+ * The bunker URI format is: bunker://<remote-signer-pubkey>?relay=<relay-url>&secret=<secret>
+ *
+ * @param bunkerUri - The bunker connection URI (e.g., bunker://... or nostrconnect://...)
+ */
+export async function connectWithBunker(bunkerUri: string): Promise<boolean> {
+	try {
+		// Parse the bunker URI
+		const bunkerPointer = await parseBunkerInput(bunkerUri);
+		if (!bunkerPointer) {
+			throw new Error('Invalid bunker URI');
+		}
+
+		// Generate or retrieve a local secret key for the bunker session
+		let localSecretKey: Uint8Array;
+		if (isSecureStorageAvailable()) {
+			const storedLocalKey = await secureRetrieve(BUNKER_LOCAL_KEY);
+			if (storedLocalKey) {
+				localSecretKey = parseNsec(storedLocalKey);
+			} else {
+				localSecretKey = generateSecretKey();
+				const localNsec = nip19.nsecEncode(localSecretKey);
+				await secureStore(BUNKER_LOCAL_KEY, localNsec);
+			}
+		} else {
+			// Generate ephemeral key if secure storage unavailable
+			localSecretKey = generateSecretKey();
+		}
+
+		// Create the bunker signer instance
+		const pool = new SimplePool();
+		const bunker = BunkerSigner.fromBunker(localSecretKey, bunkerPointer, { pool });
+
+		// Connect to the bunker (this may prompt user approval in the bunker app)
+		await bunker.connect();
+
+		// Get the user's pubkey from the bunker
+		const pubkey = await bunker.getPublicKey();
+
+		// Store the bunker instance and URI
+		activeBunkerSigner = bunker;
+		if (isSecureStorageAvailable()) {
+			await secureStore(BUNKER_URI_KEY, bunkerUri);
+		}
+
+		authState = {
+			method: 'bunker',
+			pubkey,
+			isConnected: true,
+			error: null,
+			profile: null,
+		};
+
+		// Fetch profile in background
+		fetchProfile(pubkey).then((profile) => {
+			if (profile) authState.profile = profile;
+		});
+
+		return true;
+	} catch (err) {
+		const message = err instanceof Error ? err.message : 'Failed to connect to bunker';
+		authState.error = message;
+		return false;
+	}
+}
+
+/**
  * Disconnect and clear auth state
  */
-export function disconnect(): void {
+export async function disconnect(): Promise<void> {
+	// Clean up bunker connection if active
+	if (activeBunkerSigner) {
+		try {
+			await activeBunkerSigner.close();
+		} catch {
+			// Ignore errors during cleanup
+		}
+		activeBunkerSigner = null;
+	}
+
+	// Remove stored credentials
 	secureRemove(NSEC_STORAGE_KEY);
+	secureRemove(BUNKER_LOCAL_KEY);
+	secureRemove(BUNKER_URI_KEY);
+
 	authState = {
 		method: 'none',
 		pubkey: null,
@@ -178,17 +268,82 @@ export function clearError(): void {
 }
 
 /**
- * Try to restore auth from secure storage (for nsec) or check NIP-07
+ * Try to restore auth from secure storage (nsec or bunker)
  */
 export async function restoreAuth(): Promise<boolean> {
-	// First check for securely stored nsec
-	if (isSecureStorageAvailable()) {
-		const storedNsec = await secureRetrieve(NSEC_STORAGE_KEY);
-		if (storedNsec) {
-			return connectWithNsec(storedNsec);
-		}
+	if (!isSecureStorageAvailable()) {
+		return false;
 	}
 
-	// If no stored nsec, don't auto-connect NIP-07 (require explicit action)
+	// First check for securely stored nsec
+	const storedNsec = await secureRetrieve(NSEC_STORAGE_KEY);
+	if (storedNsec) {
+		return connectWithNsec(storedNsec);
+	}
+
+	// Check for stored bunker URI
+	const storedBunkerUri = await secureRetrieve(BUNKER_URI_KEY);
+	if (storedBunkerUri) {
+		return connectWithBunker(storedBunkerUri);
+	}
+
+	// If nothing stored, don't auto-connect (require explicit action)
 	return false;
+}
+
+/**
+ * Sign an event using the current authentication method
+ *
+ * For NIP-07: Uses the browser extension to sign
+ * For nsec: Signs locally using nostr-tools
+ * For bunker: Uses the remote NIP-46 signer
+ *
+ * @param event - The unsigned event to sign (must have kind, tags, content)
+ * @returns The signed event with id, pubkey, created_at, and sig
+ */
+export async function signEvent(event: NostrEvent): Promise<SignedEvent> {
+	if (!authState.isConnected || !authState.pubkey) {
+		throw new Error('Not authenticated');
+	}
+
+	// Ensure event has created_at
+	const eventWithTimestamp = {
+		...event,
+		created_at: event.created_at ?? Math.floor(Date.now() / 1000),
+	};
+
+	if (authState.method === 'nip07') {
+		// Use NIP-07 browser extension
+		if (!window.nostr) {
+			throw new Error('NIP-07 extension not available');
+		}
+		return await window.nostr.signEvent(eventWithTimestamp);
+	}
+
+	if (authState.method === 'nsec') {
+		// Sign locally using stored nsec
+		const storedNsec = await secureRetrieve(NSEC_STORAGE_KEY);
+		if (!storedNsec) {
+			throw new Error('Private key not found in secure storage');
+		}
+
+		const secretKey = parseNsec(storedNsec);
+
+		// Use nostr-tools finalizeEvent which adds id, pubkey, and sig
+		const signedEvent = finalizeEvent(eventWithTimestamp, secretKey);
+
+		return signedEvent as SignedEvent;
+	}
+
+	if (authState.method === 'bunker') {
+		// Use NIP-46 bunker for remote signing
+		if (!activeBunkerSigner) {
+			throw new Error('Bunker connection not available');
+		}
+
+		const signedEvent = await activeBunkerSigner.signEvent(eventWithTimestamp);
+		return signedEvent as SignedEvent;
+	}
+
+	throw new Error('No valid authentication method available');
 }

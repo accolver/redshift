@@ -13,6 +13,7 @@ import { Key, Globe, TriangleAlert, Link, Eye, EyeOff, LoaderCircle } from '@luc
 import {
 	connectWithNip07,
 	connectWithNsec,
+	connectWithBunker,
 	hasNip07Extension,
 	getAuthState,
 	clearError,
@@ -74,9 +75,15 @@ async function handleNsecConnect() {
 }
 
 async function handleBunkerConnect() {
-	// TODO: Implement bunker connection
-	// For now, show not implemented message
-	alert('Bunker connection coming soon. Use nsec or NIP-07 extension for now.');
+	if (!bunkerInput.trim()) return;
+
+	isConnecting = true;
+	const success = await connectWithBunker(bunkerInput.trim());
+	isConnecting = false;
+
+	if (success) {
+		bunkerInput = '';
+	}
 }
 
 function goBack() {

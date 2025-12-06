@@ -40,7 +40,7 @@ declare global {
 	}
 }
 
-export type AuthMethod = 'nip07' | 'nsec' | 'none';
+export type AuthMethod = 'nip07' | 'nsec' | 'bunker' | 'none';
 
 /**
  * Project environment (e.g., dev, staging, production)

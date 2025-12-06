@@ -8,7 +8,7 @@ import {
 	createEnvironment,
 	removeEnvironmentFromProject,
 } from '$lib/models/project';
-import { getAuthState } from './auth.svelte';
+import { getAuthState, signEvent } from './auth.svelte';
 
 /**
  * Projects store using Svelte 5 Runes + Applesauce EventStore
@@ -114,15 +114,8 @@ export async function createProject(name: string): Promise<Project> {
 		content: JSON.stringify(content),
 	};
 
-	// Sign the event using NIP-07 or local key
-	let signedEvent;
-	if (auth.method === 'nip07' && window.nostr) {
-		signedEvent = await window.nostr.signEvent(unsignedEvent);
-	} else {
-		// For local nsec, we'd need the secret key
-		// For now, throw an error - this should be implemented with proper key management
-		throw new Error('Local signing not yet implemented. Please use a NIP-07 extension.');
-	}
+	// Sign the event using the current auth method (NIP-07 or local nsec)
+	const signedEvent = await signEvent(unsignedEvent);
 
 	// Publish to relays (also adds to local EventStore)
 	await publishEvent(signedEvent);
@@ -196,14 +189,8 @@ export async function updateProject(
 		content: JSON.stringify(content),
 	};
 
-	// Sign and publish
-	let signedEvent;
-	if (auth.method === 'nip07' && window.nostr) {
-		signedEvent = await window.nostr.signEvent(unsignedEvent);
-	} else {
-		throw new Error('Local signing not yet implemented. Please use a NIP-07 extension.');
-	}
-
+	// Sign and publish using the current auth method
+	const signedEvent = await signEvent(unsignedEvent);
 	await publishEvent(signedEvent);
 
 	// Return updated project
@@ -271,14 +258,8 @@ export async function addEnvironment(
 		content: JSON.stringify(content),
 	};
 
-	// Sign and publish
-	let signedEvent;
-	if (auth.method === 'nip07' && window.nostr) {
-		signedEvent = await window.nostr.signEvent(unsignedEvent);
-	} else {
-		throw new Error('Local signing not yet implemented. Please use a NIP-07 extension.');
-	}
-
+	// Sign and publish using the current auth method
+	const signedEvent = await signEvent(unsignedEvent);
 	await publishEvent(signedEvent);
 
 	return newEnv;
@@ -318,14 +299,8 @@ export async function deleteEnvironment(projectId: string, slug: string): Promis
 		content: JSON.stringify(content),
 	};
 
-	// Sign and publish
-	let signedEvent;
-	if (auth.method === 'nip07' && window.nostr) {
-		signedEvent = await window.nostr.signEvent(unsignedEvent);
-	} else {
-		throw new Error('Local signing not yet implemented. Please use a NIP-07 extension.');
-	}
-
+	// Sign and publish using the current auth method
+	const signedEvent = await signEvent(unsignedEvent);
 	await publishEvent(signedEvent);
 }
 

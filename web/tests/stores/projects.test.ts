@@ -24,22 +24,13 @@ vi.mock('$lib/stores/auth.svelte', () => ({
 		error: null,
 		profile: null,
 	})),
+	signEvent: vi.fn().mockImplementation(async (event) => ({
+		...event,
+		id: 'mock-event-id-' + Date.now(),
+		pubkey: 'test-pubkey-123',
+		sig: 'mock-signature',
+	})),
 }));
-
-// Mock window.nostr for NIP-07 signing
-const mockSignEvent = vi.fn().mockImplementation(async (event) => ({
-	...event,
-	id: 'mock-event-id-' + Date.now(),
-	pubkey: 'test-pubkey-123',
-	sig: 'mock-signature',
-}));
-
-vi.stubGlobal('window', {
-	nostr: {
-		getPublicKey: vi.fn().mockResolvedValue('test-pubkey-123'),
-		signEvent: mockSignEvent,
-	},
-});
 
 // Now import the module under test
 import {
@@ -54,6 +45,7 @@ import {
 	unsubscribeFromProjects,
 } from '$lib/stores/projects.svelte';
 import { publishEvent } from '$lib/stores/nostr.svelte';
+import { signEvent } from '$lib/stores/auth.svelte';
 
 describe('Projects Store (Applesauce)', () => {
 	beforeEach(() => {
@@ -128,13 +120,13 @@ describe('Projects Store (Applesauce)', () => {
 			await createProject('Published Project');
 
 			expect(publishEvent).toHaveBeenCalledTimes(1);
-			expect(mockSignEvent).toHaveBeenCalledTimes(1);
+			expect(signEvent).toHaveBeenCalledTimes(1);
 		});
 
 		it('creates event with correct kind and d-tag', async () => {
 			await createProject('Tagged Project');
 
-			const signedCall = mockSignEvent.mock.calls[0][0];
+			const signedCall = vi.mocked(signEvent).mock.calls[0][0];
 			expect(signedCall.kind).toBe(30078);
 			expect(signedCall.tags).toContainEqual(['d', expect.any(String)]);
 		});
@@ -142,7 +134,7 @@ describe('Projects Store (Applesauce)', () => {
 		it('creates event with correct content structure', async () => {
 			await createProject('Content Project');
 
-			const signedCall = mockSignEvent.mock.calls[0][0];
+			const signedCall = vi.mocked(signEvent).mock.calls[0][0];
 			const content = JSON.parse(signedCall.content);
 
 			expect(content.type).toBe('project');

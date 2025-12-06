@@ -7,7 +7,7 @@ import {
 	upsertSecret,
 	removeSecret,
 } from '$lib/models/secrets';
-import { getAuthState } from './auth.svelte';
+import { getAuthState, signEvent } from './auth.svelte';
 
 /**
  * Secrets store using Svelte 5 Runes + Applesauce EventStore
@@ -129,13 +129,8 @@ export async function setSecret(key: string, value: string): Promise<void> {
 			content: JSON.stringify(content),
 		};
 
-		// Sign the event
-		let signedEvent;
-		if (auth.method === 'nip07' && window.nostr) {
-			signedEvent = await window.nostr.signEvent(unsignedEvent);
-		} else {
-			throw new Error('Local signing not yet implemented. Please use a NIP-07 extension.');
-		}
+		// Sign the event using the current auth method
+		const signedEvent = await signEvent(unsignedEvent);
 
 		// Publish to relays
 		await publishEvent(signedEvent);
@@ -176,13 +171,8 @@ export async function deleteSecret(key: string): Promise<void> {
 			content: JSON.stringify(content),
 		};
 
-		// Sign the event
-		let signedEvent;
-		if (auth.method === 'nip07' && window.nostr) {
-			signedEvent = await window.nostr.signEvent(unsignedEvent);
-		} else {
-			throw new Error('Local signing not yet implemented. Please use a NIP-07 extension.');
-		}
+		// Sign the event using the current auth method
+		const signedEvent = await signEvent(unsignedEvent);
 
 		// Publish to relays
 		await publishEvent(signedEvent);
