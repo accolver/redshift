@@ -12,7 +12,7 @@ export type SecretsSubcommand = 'list' | 'get' | 'set' | 'delete' | 'download' |
 
 export interface SecretsOptions {
 	subcommand: SecretsSubcommand;
-	/** Secret key for get/set/delete */
+	/** Secret key for get/set/delete, or file path for upload */
 	key?: string;
 	/** Secret value for set */
 	value?: string;
@@ -90,7 +90,7 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 				break;
 
 			case 'upload':
-				console.error('Upload command not yet implemented');
+				await uploadSecrets(manager, projectId, environment, options.key);
 				break;
 
 			default:
@@ -260,6 +260,153 @@ async function downloadSecrets(
 		const escaped = strValue.replace(/"/g, '\\"').replace(/\n/g, '\\n');
 		console.log(`${key}="${escaped}"`);
 	}
+}
+
+/**
+ * Upload secrets from a .env file.
+ */
+async function uploadSecrets(
+	manager: SecretManager,
+	projectId: string,
+	environment: string,
+	filePath?: string,
+): Promise<void> {
+	// Default to .env in current directory
+	const envFile = filePath || '.env';
+
+	// Check if file exists
+	const file = Bun.file(envFile);
+	const exists = await file.exists();
+
+	if (!exists) {
+		console.error(`Error: File not found: ${envFile}`);
+		console.error('Usage: redshift secrets upload [file]');
+		console.error('Default file is .env in current directory.');
+		process.exit(1);
+	}
+
+	// Read and parse the .env file
+	const content = await file.text();
+	const parsedSecrets = parseEnvFile(content);
+
+	if (Object.keys(parsedSecrets).length === 0) {
+		console.error('Error: No secrets found in file.');
+		console.error('File should be in .env format: KEY=value');
+		process.exit(1);
+	}
+
+	// Fetch existing secrets to merge
+	const existingSecrets = (await manager.fetchSecrets(projectId, environment)) || {};
+
+	// Merge with new secrets (new values overwrite existing)
+	const updatedSecrets = mergeSecrets(existingSecrets, parsedSecrets);
+
+	// Show what will be uploaded
+	const newKeys = Object.keys(parsedSecrets);
+	const existingKeys = Object.keys(existingSecrets);
+	const overwrittenKeys = newKeys.filter((k) => existingKeys.includes(k));
+	const addedKeys = newKeys.filter((k) => !existingKeys.includes(k));
+
+	console.log(`Uploading ${newKeys.length} secrets to ${projectId}/${environment}...`);
+	if (addedKeys.length > 0) {
+		console.log(`  Adding: ${addedKeys.join(', ')}`);
+	}
+	if (overwrittenKeys.length > 0) {
+		console.log(`  Overwriting: ${overwrittenKeys.join(', ')}`);
+	}
+
+	// Publish updated secrets
+	await manager.publishSecrets(projectId, environment, updatedSecrets);
+
+	console.log(`✓ Uploaded ${newKeys.length} secrets from ${envFile}`);
+}
+
+/**
+ * Parse a .env file content into a secrets object.
+ * Handles:
+ * - KEY=value
+ * - KEY="quoted value"
+ * - KEY='single quoted'
+ * - # comments
+ * - Empty lines
+ * - Escaped characters in quoted strings
+ */
+function parseEnvFile(content: string): Record<string, string | number | boolean> {
+	const secrets: Record<string, string | number | boolean> = {};
+	const lines = content.split('\n');
+
+	for (const line of lines) {
+		// Skip empty lines and comments
+		const trimmed = line.trim();
+		if (!trimmed || trimmed.startsWith('#')) {
+			continue;
+		}
+
+		// Find the first '=' to split key and value
+		const eqIndex = trimmed.indexOf('=');
+		if (eqIndex === -1) {
+			continue; // Invalid line, skip
+		}
+
+		const key = trimmed.slice(0, eqIndex).trim();
+		let value = trimmed.slice(eqIndex + 1);
+
+		// Skip invalid keys
+		if (!key || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+			continue;
+		}
+
+		// Parse the value
+		value = parseEnvValue(value);
+
+		// Try to parse as JSON (for numbers, booleans, objects)
+		try {
+			const parsed = JSON.parse(value);
+			if (typeof parsed === 'number' || typeof parsed === 'boolean') {
+				secrets[key] = parsed;
+				continue;
+			}
+		} catch {
+			// Not JSON, keep as string
+		}
+
+		secrets[key] = value;
+	}
+
+	return secrets;
+}
+
+/**
+ * Parse a .env value, handling quotes and escapes.
+ */
+function parseEnvValue(value: string): string {
+	value = value.trim();
+
+	// Handle double-quoted strings
+	if (value.startsWith('"') && value.endsWith('"')) {
+		value = value.slice(1, -1);
+		// Unescape special characters
+		value = value
+			.replace(/\\n/g, '\n')
+			.replace(/\\r/g, '\r')
+			.replace(/\\t/g, '\t')
+			.replace(/\\"/g, '"')
+			.replace(/\\\\/g, '\\');
+		return value;
+	}
+
+	// Handle single-quoted strings (no escaping)
+	if (value.startsWith("'") && value.endsWith("'")) {
+		return value.slice(1, -1);
+	}
+
+	// Handle inline comments (only if not quoted)
+	const commentIndex = value.indexOf(' #');
+	if (commentIndex !== -1) {
+		value = value.slice(0, commentIndex).trim();
+	}
+
+	return value;
 }
 
 /**

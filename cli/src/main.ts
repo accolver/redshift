@@ -47,6 +47,7 @@ Secrets Subcommands:
   secrets set <KEY> <VALUE>        Set a secret value
   secrets delete <KEY>             Delete a secret
   secrets download                 Download secrets as .env format
+  secrets upload [file]            Upload secrets from .env file (default: .env)
 
 Examples:
   redshift login

@@ -76,19 +76,22 @@ export function parseCommand(argv: string[]): ParsedCommand {
 			};
 		}
 
-		// Default secrets command (list)
-		const { values } = parseArgs({
+		// Default secrets command (list, get, delete, download, upload)
+		const { values, positionals } = parseArgs({
 			args: restArgs.slice(1),
 			options: {
 				env: { type: 'string', short: 'e' },
+				environment: { type: 'string' },
+				project: { type: 'string', short: 'p' },
 				format: { type: 'string', short: 'f' },
+				raw: { type: 'boolean', short: 'r' },
 			},
 			allowPositionals: true,
 		});
 
 		return {
 			command: 'secrets',
-			args: [subcommand ?? 'list'],
+			args: [subcommand ?? 'list', ...positionals],
 			flags: values as Record<string, string | boolean>,
 		};
 	}
