@@ -1,6 +1,16 @@
 <script lang="ts">
 import { page } from '$app/stores';
-import { Book, Key, Terminal, Shield, Globe, Zap, HelpCircle, ChevronRight } from '@lucide/svelte';
+import {
+	Book,
+	Key,
+	Terminal,
+	Shield,
+	Globe,
+	Zap,
+	HelpCircle,
+	ChevronRight,
+	Home,
+} from '@lucide/svelte';
 
 let { children } = $props();
 
@@ -54,6 +64,10 @@ function isActive(href: string): boolean {
 	<!-- Sidebar -->
 	<aside class="sticky top-0 hidden h-screen w-64 shrink-0 overflow-y-auto border-r border-border bg-card/50 lg:block">
 		<div class="p-6">
+			<a href="/" class="mb-4 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+				<Home class="size-4" />
+				Home
+			</a>
 			<a href="/docs" class="flex items-center gap-2 text-lg font-semibold">
 				<Book class="size-5 text-tokyo-blue" />
 				Documentation
