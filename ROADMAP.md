@@ -39,7 +39,6 @@ functional, with comprehensive test coverage.
 | -------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------- |
 | **Interactive project fetching** | `setup` command should fetch existing projects from relays instead of manual input | Partial (manual input works) |
 | **Keychain storage**             | Store nsec in system keychain (macOS Keychain, Linux Secret Service)               | Not started                  |
-| **Secret version history**       | View and restore previous versions of secrets                                      | Not started                  |
 | **Rate limiting for relays**     | Add rate limiting to relay queries to prevent abuse                                | Complete                     |
 | **Input validation**             | Validate secret keys before use in `secrets.ts` commands                           | Not started                  |
 | **Improved error handling**      | Better error handling in relay operations (avoid swallowing errors)                | Not started                  |
