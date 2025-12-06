@@ -17,9 +17,11 @@ import { getProjectsState, deleteProject, deleteEnvironment } from '$lib/stores/
 import {
 	getSecretsState,
 	getSecretsContext,
+	getMissingSecretsState,
 	subscribeToSecrets,
 	unsubscribeFromSecrets,
 	setSecret,
+	setSecretToMultipleEnvs,
 	deleteSecret,
 } from '$lib/stores/secrets.svelte';
 import { getAuthState } from '$lib/stores/auth.svelte';
@@ -61,6 +63,7 @@ import AddEnvironmentModal from '$lib/components/AddEnvironmentModal.svelte';
 import CreateProjectModal from '$lib/components/CreateProjectModal.svelte';
 import ExportSecretsModal from '$lib/components/ExportSecretsModal.svelte';
 import ImportSecretsModal from '$lib/components/ImportSecretsModal.svelte';
+import MultiEnvSaveModal from '$lib/components/MultiEnvSaveModal.svelte';
 import { goto } from '$app/navigation';
 
 // Get project ID from route
@@ -69,12 +72,22 @@ const projectId = $derived(page.params.id);
 // Reactive state
 const projectsState = $derived(getProjectsState());
 const secretsState = $derived(getSecretsState());
+const missingSecretsState = $derived(getMissingSecretsState());
 
 // Find the current project
 const project = $derived(projectsState.projects.find((p) => p.id === projectId));
 
-// Selected environment
+// Selected environment - check URL query param first
 let selectedEnvSlug = $state<string | null>(null);
+
+// Read environment from URL query param
+$effect(() => {
+	const urlEnv = page.url.searchParams.get('env');
+	if (urlEnv && project?.environments.some((e) => e.slug === urlEnv)) {
+		selectedEnvSlug = urlEnv;
+	}
+});
+
 const selectedEnv = $derived(
 	project?.environments.find((e) => e.slug === selectedEnvSlug) ?? project?.environments[0],
 );
@@ -85,6 +98,7 @@ let showAddEnvModal = $state(false);
 let showCreateProjectModal = $state(false);
 let showExportModal = $state(false);
 let showImportModal = $state(false);
+let showMultiEnvSaveModal = $state(false);
 let showDeleteProjectDialog = $state(false);
 let showDeleteEnvDialog = $state(false);
 let isDeleting = $state(false);
@@ -92,6 +106,10 @@ let isAddingSecret = $state(false);
 let newSecretKey = $state('');
 let newSecretValue = $state('');
 let showAddSecretRow = $state(false);
+
+// Pending secret for multi-env save
+let pendingSecretKey = $state('');
+let pendingSecretValue = $state('');
 
 // Sorting state
 type SortOption = 'asc' | 'desc' | 'newest' | 'oldest';
@@ -112,6 +130,28 @@ let savedSecrets = $state<Set<string>>(new Set());
 
 // Track copied secret for toast feedback
 let copiedKey = $state<string | null>(null);
+
+// Track highlighted secret from search navigation
+let highlightedKey = $state<string | null>(null);
+
+// Read highlight from URL query param and clear after a delay
+$effect(() => {
+	const highlight = page.url.searchParams.get('highlight');
+	if (highlight) {
+		highlightedKey = highlight;
+		// Scroll to the highlighted element after a short delay to ensure DOM is ready
+		setTimeout(() => {
+			const element = document.querySelector(`[data-secret-key="${highlight}"]`);
+			if (element) {
+				element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			}
+		}, 100);
+		// Auto-clear highlight after 3 seconds
+		setTimeout(() => {
+			highlightedKey = null;
+		}, 3000);
+	}
+});
 
 // Check if a secret has been modified
 function isSecretModified(originalKey: string): boolean {
@@ -323,7 +363,8 @@ const filteredSecrets = $derived(() => {
 // Subscribe to secrets when environment changes
 $effect(() => {
 	if (project && selectedEnv) {
-		subscribeToSecrets(project.id, selectedEnv.slug);
+		const allEnvSlugs = project.environments.map((e) => e.slug);
+		subscribeToSecrets(project.id, selectedEnv.slug, allEnvSlugs);
 	}
 });
 
@@ -401,6 +442,15 @@ function handleKeyInput(e: Event) {
 async function handleAddSecret() {
 	if (!newSecretKey.trim()) return;
 
+	// If project has multiple environments, show the multi-env save modal
+	if (project && project.environments.length > 1) {
+		pendingSecretKey = newSecretKey.trim().toUpperCase();
+		pendingSecretValue = newSecretValue;
+		showMultiEnvSaveModal = true;
+		return;
+	}
+
+	// Single environment, save directly
 	isAddingSecret = true;
 	try {
 		await setSecret(newSecretKey, newSecretValue);
@@ -409,6 +459,25 @@ async function handleAddSecret() {
 		showAddSecretRow = false;
 	} catch (err) {
 		console.error('Failed to add secret:', err);
+	} finally {
+		isAddingSecret = false;
+	}
+}
+
+async function handleMultiEnvSave(envSlugs: string[]) {
+	if (!project) return;
+
+	isAddingSecret = true;
+	try {
+		await setSecretToMultipleEnvs(project.id, pendingSecretKey, pendingSecretValue, envSlugs);
+		newSecretKey = '';
+		newSecretValue = '';
+		showAddSecretRow = false;
+		pendingSecretKey = '';
+		pendingSecretValue = '';
+	} catch (err) {
+		console.error('Failed to save secret:', err);
+		throw err; // Re-throw so the modal can show the error
 	} finally {
 		isAddingSecret = false;
 	}
@@ -434,6 +503,26 @@ function copyToClipboard(key: string, value: string) {
 
 function selectEnvironment(env: Environment) {
 	selectedEnvSlug = env.slug;
+}
+
+// Add a missing secret (creates with empty value, ready to fill in)
+function handleAddMissingSecret(key: string) {
+	// Pre-fill the add secret row with the key
+	newSecretKey = key;
+	newSecretValue = '';
+	showAddSecretRow = true;
+	// Scroll to top where the add row appears
+	setTimeout(() => {
+		const addRow = document.querySelector('[data-add-secret-row]');
+		if (addRow) {
+			addRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			// Focus the value input
+			const valueInput = addRow.querySelector('input[placeholder="Value"]') as HTMLInputElement;
+			if (valueInput) {
+				valueInput.focus();
+			}
+		}
+	}, 100);
 }
 
 function handleEnvironmentCreated(env: Environment) {
@@ -749,13 +838,59 @@ async function handleDeleteEnvironment() {
 						</div>
 					</div>
 
+					<!-- Action Required: Missing Secrets -->
+					{#if missingSecretsState.missing.length > 0 && !searchQuery}
+						<div class="mb-6" transition:slide={{ duration: 200 }}>
+							<div class="mb-3 flex items-center gap-2">
+								<TriangleAlert class="size-4 text-amber-500" />
+								<span class="text-sm font-medium text-amber-500">
+									Action Required ({missingSecretsState.missing.length})
+								</span>
+							</div>
+							<div class="space-y-2">
+								{#each missingSecretsState.missing as missing (missing.key)}
+									<div
+										class="group flex flex-col gap-2 rounded-lg border border-dashed border-amber-500/50 bg-amber-500/5 p-3 sm:flex-row sm:items-center"
+										transition:slide={{ duration: 200 }}
+									>
+										<!-- Status Icon -->
+										<div class="hidden size-8 items-center justify-center sm:flex">
+											<TriangleAlert class="size-4 text-amber-500" />
+										</div>
+										
+										<!-- Key -->
+										<div class="flex h-10 items-center rounded-lg border border-amber-500/30 bg-card px-3 sm:w-72">
+											<span class="truncate font-mono text-sm font-medium">{missing.key}</span>
+										</div>
+										
+										<!-- Info & Action -->
+										<div class="flex flex-1 items-center justify-between gap-2">
+											<span class="text-sm text-muted-foreground">
+												Exists in: {missing.existsIn.join(', ')}
+											</span>
+											<Button
+												variant="outline"
+												size="sm"
+												onclick={() => handleAddMissingSecret(missing.key)}
+												class="shrink-0"
+											>
+												<Plus class="mr-1 size-4" />
+												Add Value
+											</Button>
+										</div>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
 					<!-- Secrets List -->
 					<div class="space-y-2">
 						{#if secretsState.isLoading}
 							<div class="flex items-center justify-center py-12">
 								<LoaderCircle class="size-6 animate-spin text-muted-foreground" />
 							</div>
-						{:else if filteredSecrets().length === 0 && !showAddSecretRow}
+						{:else if filteredSecrets().length === 0 && !showAddSecretRow && missingSecretsState.missing.length === 0}
 							<div class="py-12 text-center text-muted-foreground">
 								{#if searchQuery}
 									<p>No secrets match "{searchQuery}"</p>
@@ -767,7 +902,7 @@ async function handleDeleteEnvironment() {
 						{:else}
 							<!-- Add Secret Row -->
 							{#if showAddSecretRow}
-								<div class="flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-3 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0" transition:slide={{ duration: 200 }}>
+								<div data-add-secret-row class="flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-3 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0" transition:slide={{ duration: 200 }}>
 									<!-- Status placeholder (hidden on mobile) -->
 									<div class="hidden size-8 items-center justify-center sm:flex">
 										<Circle class="size-4 text-muted-foreground/30" />
@@ -829,8 +964,10 @@ async function handleDeleteEnvironment() {
 							{#each filteredSecrets() as secret (secret.key)}
 								{@const edited = getEditedSecret(secret.key)}
 								{@const status = getSecretStatus(secret.key)}
+								{@const isHighlighted = highlightedKey === secret.key}
 								<div 
-									class="group flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-3 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0"
+									data-secret-key={secret.key}
+									class="group flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-3 transition-all duration-300 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0 {isHighlighted ? 'ring-2 ring-primary ring-offset-2 ring-offset-background sm:rounded-lg sm:p-2 sm:bg-primary/5' : ''}"
 									class:border-primary={status === 'dirty'}
 									transition:slide={{ duration: 200 }}
 									animate:flip={{ duration: 200 }}
@@ -1123,6 +1260,16 @@ async function handleDeleteEnvironment() {
 		existingSecrets={secretsState.secrets}
 		onOpenChange={(v) => (showImportModal = v)}
 		onImport={handleImportSecrets}
+	/>
+
+	<MultiEnvSaveModal
+		bind:open={showMultiEnvSaveModal}
+		secretKey={pendingSecretKey}
+		secretValue={pendingSecretValue}
+		currentEnvSlug={selectedEnv.slug}
+		environments={project.environments}
+		onOpenChange={(v) => (showMultiEnvSaveModal = v)}
+		onSave={handleMultiEnvSave}
 	/>
 {/if}
 

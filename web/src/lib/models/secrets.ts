@@ -1,4 +1,5 @@
-import { map } from 'rxjs/operators';
+import { map, combineLatestWith } from 'rxjs/operators';
+import { combineLatest, of } from 'rxjs';
 import type { Observable } from 'rxjs';
 import type { EventStore } from 'applesauce-core';
 import type { NostrEvent } from 'nostr-tools';
@@ -125,4 +126,83 @@ export function upsertSecret(secrets: Secret[], key: string, value: string): Sec
  */
 export function removeSecret(secrets: Secret[], key: string): Secret[] {
 	return secrets.filter((s) => s.key !== key);
+}
+
+/**
+ * Represents a secret that exists in other environments but not the current one
+ */
+export interface MissingSecret {
+	key: string;
+	existsIn: string[]; // Environment slugs where this secret exists
+}
+
+/**
+ * AllEnvironmentsSecretsModel - Returns secrets from all environments for a project
+ *
+ * Returns a map of environmentSlug -> Secret[]
+ */
+export function AllEnvironmentsSecretsModel(
+	eventStore: EventStore,
+	pubkey: string,
+	projectId: string,
+	environmentSlugs: string[],
+): Observable<Map<string, Secret[]>> {
+	if (environmentSlugs.length === 0) {
+		return of(new Map());
+	}
+
+	const observables = environmentSlugs.map((slug) => {
+		const dTag = getSecretsDTag(projectId, slug);
+		return eventStore.replaceable(REDSHIFT_KIND, pubkey, dTag).pipe(
+			map((event) => {
+				if (!event) return { slug, secrets: [] as Secret[] };
+				const bundle = parseSecretsEvent(event);
+				return { slug, secrets: bundle?.secrets ?? [] };
+			}),
+		);
+	});
+
+	return combineLatest(observables).pipe(
+		map((results) => {
+			const envMap = new Map<string, Secret[]>();
+			for (const { slug, secrets } of results) {
+				envMap.set(slug, secrets);
+			}
+			return envMap;
+		}),
+	);
+}
+
+/**
+ * Calculate missing secrets for the current environment
+ * Returns secrets that exist in other environments but not in the current one
+ */
+export function calculateMissingSecrets(
+	allEnvSecrets: Map<string, Secret[]>,
+	currentEnvSlug: string,
+): MissingSecret[] {
+	const currentSecrets = allEnvSecrets.get(currentEnvSlug) ?? [];
+	const currentKeys = new Set(currentSecrets.map((s) => s.key));
+
+	// Find all unique keys across all environments
+	const keyToEnvs = new Map<string, string[]>();
+
+	for (const [envSlug, secrets] of allEnvSecrets) {
+		if (envSlug === currentEnvSlug) continue;
+		for (const secret of secrets) {
+			if (!currentKeys.has(secret.key)) {
+				const envs = keyToEnvs.get(secret.key) ?? [];
+				envs.push(envSlug);
+				keyToEnvs.set(secret.key, envs);
+			}
+		}
+	}
+
+	// Convert to array and sort alphabetically
+	const missing: MissingSecret[] = [];
+	for (const [key, existsIn] of keyToEnvs) {
+		missing.push({ key, existsIn });
+	}
+
+	return missing.sort((a, b) => a.key.localeCompare(b.key));
 }
