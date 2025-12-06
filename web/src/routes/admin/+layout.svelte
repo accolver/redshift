@@ -124,6 +124,7 @@ function getDisplayName(pubkey: string): string {
 	<!-- Admin Header - full width with inner container -->
 	<header class="sticky top-0 z-40 border-b border-border/50 bg-card/95 backdrop-blur-sm">
 		<div class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
+			<!-- Left: Logo + Nav + Search -->
 			<div class="flex min-w-0 items-center gap-2 sm:gap-8">
 				<a href="/" class="flex shrink-0 items-center gap-2">
 					<img src="/favicon.svg" alt="Redshift" class="size-7" />
@@ -132,8 +133,6 @@ function getDisplayName(pubkey: string): string {
 				<nav class="hidden items-center gap-1 sm:flex">
 					<a href="/admin" class="rounded-md px-3 py-1.5 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground">Dashboard</a>
 				</nav>
-			</div>
-			<div class="flex shrink-0 items-center gap-1 sm:gap-3">
 				<!-- Search Button -->
 				{#if auth.isConnected}
 					<button
@@ -145,39 +144,11 @@ function getDisplayName(pubkey: string): string {
 						<kbd class="hidden rounded border border-border bg-background px-1.5 py-0.5 text-xs sm:inline">{isMac ? '⌘' : 'Ctrl'}K</kbd>
 					</button>
 				{/if}
+			</div>
 
-				<!-- Relay Status Indicator -->
-				{#if auth.isConnected}
-					<div class="relative">
-						<button
-							type="button"
-							class="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:gap-2 sm:px-2"
-							onclick={() => (relayDropdownOpen = !relayDropdownOpen)}
-							onblur={() => setTimeout(() => (relayDropdownOpen = false), 150)}
-							title="Relay status"
-						>
-							<Radio class="size-4" />
-							<span class="flex size-2 rounded-full {relayStatusInfo().color}"></span>
-						</button>
-						{#if relayDropdownOpen}
-							<div class="absolute right-0 top-full z-50 mt-1 w-64 rounded-md border border-border bg-card p-3 shadow-lg">
-								<div class="mb-2 flex items-center justify-between">
-									<span class="text-sm font-medium">Relay Status</span>
-									<span class="text-xs {relayStatusInfo().textColor}">{relayStatusInfo().label}</span>
-								</div>
-								<div class="space-y-1.5">
-									{#each DEFAULT_RELAYS as relay}
-										<div class="flex items-center gap-2 text-xs">
-											<span class="flex size-1.5 rounded-full {relayState.status === 'connected' ? 'bg-green-500' : 'bg-muted-foreground/40'}"></span>
-											<span class="truncate text-muted-foreground">{relay.replace('wss://', '')}</span>
-										</div>
-									{/each}
-								</div>
-							</div>
-						{/if}
-					</div>
-				{/if}
-
+			<!-- Right: User Avatar + Relay Status -->
+			<div class="flex shrink-0 items-center gap-1 sm:gap-3">
+				<!-- User Avatar -->
 				{#if auth.isConnected}
 					<div class="relative">
 						<button
@@ -220,6 +191,38 @@ function getDisplayName(pubkey: string): string {
 					<Button size="sm" onclick={() => (loginDialogOpen = true)}>
 						Connect
 					</Button>
+				{/if}
+
+				<!-- Relay Status Indicator -->
+				{#if auth.isConnected}
+					<div class="relative">
+						<button
+							type="button"
+							class="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:gap-2 sm:px-2"
+							onclick={() => (relayDropdownOpen = !relayDropdownOpen)}
+							onblur={() => setTimeout(() => (relayDropdownOpen = false), 150)}
+							title="Relay status"
+						>
+							<Radio class="size-4" />
+							<span class="flex size-2 rounded-full {relayStatusInfo().color}"></span>
+						</button>
+						{#if relayDropdownOpen}
+							<div class="absolute right-0 top-full z-50 mt-1 w-64 rounded-md border border-border bg-card p-3 shadow-lg">
+								<div class="mb-2 flex items-center justify-between">
+									<span class="text-sm font-medium">Relay Status</span>
+									<span class="text-xs {relayStatusInfo().textColor}">{relayStatusInfo().label}</span>
+								</div>
+								<div class="space-y-1.5">
+									{#each DEFAULT_RELAYS as relay}
+										<div class="flex items-center gap-2 text-xs">
+											<span class="flex size-1.5 rounded-full {relayState.status === 'connected' ? 'bg-green-500' : 'bg-muted-foreground/40'}"></span>
+											<span class="truncate text-muted-foreground">{relay.replace('wss://', '')}</span>
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
+					</div>
 				{/if}
 			</div>
 		</div>
