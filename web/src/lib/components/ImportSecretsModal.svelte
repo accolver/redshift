@@ -219,7 +219,7 @@ function readFile(file: File) {
 						></textarea>
 						<button
 							type="button"
-							class="absolute right-2 top-2 rounded bg-muted px-2 py-1 text-xs text-muted-foreground hover:bg-muted/80"
+							class="absolute right-2 top-2 rounded bg-muted px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/80"
 							onclick={() => (inputContent = '')}
 						>
 							Clear

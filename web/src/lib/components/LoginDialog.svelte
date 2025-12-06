@@ -196,7 +196,7 @@ function goBack() {
 						/>
 						<button
 							type="button"
-							class="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer p-1 text-muted-foreground hover:text-foreground"
+							class="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer p-1 text-muted-foreground transition-colors hover:text-foreground"
 							onclick={() => (showNsec = !showNsec)}
 						>
 							{#if showNsec}

@@ -712,7 +712,7 @@ async function handleDeleteEnvironment() {
 					<DropdownMenu>
 						<DropdownMenuTrigger>
 							{#snippet child({ props })}
-								<button {...props} class="flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-base font-semibold hover:bg-muted sm:gap-2 sm:px-2 sm:text-lg">
+								<button {...props} class="flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-base font-semibold transition-colors hover:bg-muted sm:gap-2 sm:px-2 sm:text-lg">
 									<span class="truncate">{project.name}</span>
 									<ChevronDown class="size-4 shrink-0 text-muted-foreground" />
 								</button>
@@ -738,7 +738,7 @@ async function handleDeleteEnvironment() {
 					<DropdownMenu>
 						<DropdownMenuTrigger>
 							{#snippet child({ props })}
-								<button {...props} class="flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-base font-semibold hover:bg-muted sm:gap-2 sm:px-2 sm:text-lg">
+								<button {...props} class="flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-base font-semibold transition-colors hover:bg-muted sm:gap-2 sm:px-2 sm:text-lg">
 									<GitBranch class="size-4 shrink-0" />
 									<span class="truncate">{selectedEnv?.name ?? 'Select Environment'}</span>
 									<ChevronDown class="size-4 shrink-0 text-muted-foreground" />
@@ -774,7 +774,7 @@ async function handleDeleteEnvironment() {
 					<DropdownMenu>
 						<DropdownMenuTrigger>
 							{#snippet child({ props })}
-								<button {...props} class="flex size-8 cursor-pointer items-center justify-center rounded-md hover:bg-muted">
+								<button {...props} class="flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-muted">
 									<Ellipsis class="size-4" />
 								</button>
 							{/snippet}
@@ -826,7 +826,7 @@ async function handleDeleteEnvironment() {
 									{#snippet child({ props })}
 										<button
 											{...props}
-											class="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+											class="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 											class:text-primary={sortBy !== 'asc'}
 										>
 											<ArrowUpDown class="size-4" />
@@ -869,7 +869,7 @@ async function handleDeleteEnvironment() {
 							<!-- Show/Hide All Button -->
 							<button
 								type="button"
-								class="flex size-8 cursor-pointer items-center justify-center rounded-md hover:bg-muted"
+								class="flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-muted"
 								class:text-primary={showAllSecrets}
 								class:text-muted-foreground={!showAllSecrets}
 								onclick={toggleAllVisibility}
@@ -1104,7 +1104,7 @@ async function handleDeleteEnvironment() {
 										</button>
 										<button
 											type="button"
-											class="flex size-8 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+											class="flex size-8 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 											onclick={() => toggleVisibility(secret.key)}
 											title={visibleSecrets.has(secret.key) ? 'Hide value' : 'Show value'}
 										>
@@ -1119,7 +1119,7 @@ async function handleDeleteEnvironment() {
 												{#snippet child({ props })}
 													<button
 														{...props}
-														class="flex size-8 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+														class="flex size-8 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 													>
 														<Ellipsis class="size-4" />
 													</button>
@@ -1265,7 +1265,7 @@ async function handleDeleteEnvironment() {
 					{#snippet child({ props })}
 						<button
 							{...props}
-							class="pointer-events-auto flex cursor-pointer items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-lg hover:bg-primary/90"
+							class="pointer-events-auto flex cursor-pointer items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-lg transition-colors hover:bg-primary/90"
 						>
 							<Plus class="size-5" />
 						</button>

@@ -150,7 +150,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 				<Button
 					size="lg"
 					href="/admin"
-					class="group h-12 gap-2 bg-gradient-to-r from-tokyo-blue to-tokyo-purple px-8 text-white hover:opacity-90"
+					class="group h-12 gap-2 bg-gradient-to-r from-tokyo-blue to-tokyo-purple px-8 text-white transition-opacity hover:opacity-90"
 				>
 					Start Building
 					<ArrowRight class="size-4 transition-transform group-hover:translate-x-1" />
@@ -159,7 +159,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 					variant="outline"
 					size="lg"
 					href="/docs"
-					class="h-12 border-border/50 bg-card/50 px-8 backdrop-blur-sm hover:bg-card"
+					class="h-12 border-border/50 bg-card/50 px-8 backdrop-blur-sm transition-colors hover:bg-card"
 				>
 					Read the Docs
 				</Button>
@@ -460,7 +460,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 				<Button
 					size="lg"
 					href="/admin"
-					class="group h-14 gap-2 bg-gradient-to-r from-tokyo-blue to-tokyo-purple px-10 text-lg text-white hover:opacity-90"
+					class="group h-14 gap-2 bg-gradient-to-r from-tokyo-blue to-tokyo-purple px-10 text-lg text-white transition-opacity hover:opacity-90"
 				>
 					Get Started Free
 					<ArrowRight class="size-5 transition-transform group-hover:translate-x-1" />
@@ -469,7 +469,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 					variant="outline"
 					size="lg"
 					href="/tutorial"
-					class="h-14 border-border/50 bg-card/50 px-10 text-lg backdrop-blur-sm hover:bg-card"
+					class="h-14 border-border/50 bg-card/50 px-10 text-lg backdrop-blur-sm transition-colors hover:bg-card"
 				>
 					View Tutorial
 				</Button>

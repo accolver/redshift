@@ -139,7 +139,7 @@ function handleOpenChange(value: boolean) {
 					<div class="flex gap-2">
 						<button
 							type="button"
-							class="cursor-pointer text-xs text-muted-foreground hover:text-foreground"
+							class="cursor-pointer text-xs text-muted-foreground transition-colors hover:text-foreground"
 							onclick={selectAll}
 						>
 							Select all
@@ -147,7 +147,7 @@ function handleOpenChange(value: boolean) {
 						<span class="text-muted-foreground">|</span>
 						<button
 							type="button"
-							class="cursor-pointer text-xs text-muted-foreground hover:text-foreground"
+							class="cursor-pointer text-xs text-muted-foreground transition-colors hover:text-foreground"
 							onclick={selectNone}
 						>
 							Current only
