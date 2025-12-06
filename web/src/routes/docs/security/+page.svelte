@@ -25,8 +25,8 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 				<Lock class="size-5 shrink-0 text-tokyo-blue" />
 				<div>
-					<p class="font-medium">Client-Side Encryption</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5">Client-Side Encryption</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						Secrets are encrypted before leaving your device
 					</p>
 				</div>
@@ -35,8 +35,8 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 				<Key class="size-5 shrink-0 text-tokyo-purple" />
 				<div>
-					<p class="font-medium">Your Keys Only</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5">Your Keys Only</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						Only you hold the keys to decrypt your data
 					</p>
 				</div>
@@ -45,8 +45,8 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 				<Shield class="size-5 shrink-0 text-tokyo-cyan" />
 				<div>
-					<p class="font-medium">Cryptographic Signatures</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5">Cryptographic Signatures</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						All data is signed to prevent tampering
 					</p>
 				</div>
@@ -55,8 +55,8 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 				<Globe class="size-5 shrink-0 text-tokyo-green" />
 				<div>
-					<p class="font-medium">Decentralized Storage</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5">Decentralized Storage</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						No single point of failure or control
 					</p>
 				</div>
@@ -137,8 +137,8 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-tokyo-green/30 bg-tokyo-green/5 p-4">
 				<Shield class="size-5 shrink-0 text-tokyo-green" />
 				<div>
-					<p class="font-medium text-tokyo-green">Compromised Relay Operators</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5 text-tokyo-green">Compromised Relay Operators</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						Relay operators cannot read your secrets - they only see encrypted blobs.
 					</p>
 				</div>
@@ -147,8 +147,8 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-tokyo-green/30 bg-tokyo-green/5 p-4">
 				<Shield class="size-5 shrink-0 text-tokyo-green" />
 				<div>
-					<p class="font-medium text-tokyo-green">Network Eavesdropping</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5 text-tokyo-green">Network Eavesdropping</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						Double encryption (TLS + Nostr) protects against network observers.
 					</p>
 				</div>
@@ -157,8 +157,8 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-tokyo-green/30 bg-tokyo-green/5 p-4">
 				<Shield class="size-5 shrink-0 text-tokyo-green" />
 				<div>
-					<p class="font-medium text-tokyo-green">Service Shutdown</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5 text-tokyo-green">Service Shutdown</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						Data is replicated across multiple relays. If one goes down, others have your data.
 					</p>
 				</div>
@@ -167,8 +167,8 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-tokyo-green/30 bg-tokyo-green/5 p-4">
 				<Shield class="size-5 shrink-0 text-tokyo-green" />
 				<div>
-					<p class="font-medium text-tokyo-green">Data Tampering</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5 text-tokyo-green">Data Tampering</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						Cryptographic signatures ensure data integrity. Tampered events are rejected.
 					</p>
 				</div>
@@ -177,8 +177,8 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-tokyo-green/30 bg-tokyo-green/5 p-4">
 				<Shield class="size-5 shrink-0 text-tokyo-green" />
 				<div>
-					<p class="font-medium text-tokyo-green">Account Termination</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5 text-tokyo-green">Account Termination</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						No accounts to terminate. Your identity is a cryptographic key you control.
 					</p>
 				</div>
@@ -190,8 +190,8 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-tokyo-red/30 bg-tokyo-red/5 p-4">
 				<Eye class="size-5 shrink-0 text-tokyo-red" />
 				<div>
-					<p class="font-medium text-tokyo-red">Compromised Device</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5 text-tokyo-red">Compromised Device</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						If your computer is compromised, an attacker could steal your private key or read decrypted secrets from memory.
 					</p>
 				</div>
@@ -200,8 +200,8 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-tokyo-red/30 bg-tokyo-red/5 p-4">
 				<Eye class="size-5 shrink-0 text-tokyo-red" />
 				<div>
-					<p class="font-medium text-tokyo-red">Lost Private Key</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5 text-tokyo-red">Lost Private Key</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						If you lose your nsec with no backup, your secrets are permanently inaccessible. There is no recovery mechanism.
 					</p>
 				</div>
@@ -210,8 +210,8 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-tokyo-red/30 bg-tokyo-red/5 p-4">
 				<Eye class="size-5 shrink-0 text-tokyo-red" />
 				<div>
-					<p class="font-medium text-tokyo-red">Stolen Private Key</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5 text-tokyo-red">Stolen Private Key</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						If someone obtains your nsec, they have full access to your identity and all secrets.
 					</p>
 				</div>
@@ -220,8 +220,8 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-tokyo-red/30 bg-tokyo-red/5 p-4">
 				<Eye class="size-5 shrink-0 text-tokyo-red" />
 				<div>
-					<p class="font-medium text-tokyo-red">Malicious Browser Extension</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5 text-tokyo-red">Malicious Browser Extension</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						A compromised NIP-07 extension could sign malicious events or leak your key.
 					</p>
 				</div>

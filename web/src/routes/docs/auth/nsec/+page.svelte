@@ -85,8 +85,8 @@ redshift secrets list`} />
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 				<Shield class="size-5 shrink-0 text-tokyo-blue" />
 				<div>
-					<p class="font-medium">Encrypted Storage</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5">Encrypted Storage</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						Your nsec is encrypted with a non-extractable AES-256-GCM key before storage. The encryption key lives in IndexedDB and cannot be exported.
 					</p>
 				</div>
@@ -95,8 +95,8 @@ redshift secrets list`} />
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 				<Shield class="size-5 shrink-0 text-tokyo-purple" />
 				<div>
-					<p class="font-medium">Session Storage</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5">Session Storage</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						The encrypted nsec is stored in sessionStorage, which is automatically cleared when you close the browser tab.
 					</p>
 				</div>
@@ -105,8 +105,8 @@ redshift secrets list`} />
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 				<Shield class="size-5 shrink-0 text-tokyo-cyan" />
 				<div>
-					<p class="font-medium">Local Signing</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5">Local Signing</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						All signing happens locally in your browser. Your decrypted key is only held in memory during signing operations.
 					</p>
 				</div>

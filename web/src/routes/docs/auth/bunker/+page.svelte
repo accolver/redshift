@@ -28,8 +28,8 @@ import { Shield, Server, Smartphone } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 				<Server class="size-5 shrink-0 text-tokyo-blue" />
 				<div>
-					<p class="font-medium">CI/CD Pipelines</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5">CI/CD Pipelines</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						Run builds that need secrets without embedding your nsec in environment variables.
 					</p>
 				</div>
@@ -38,8 +38,8 @@ import { Shield, Server, Smartphone } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 				<Shield class="size-5 shrink-0 text-tokyo-purple" />
 				<div>
-					<p class="font-medium">Enhanced Security</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5">Enhanced Security</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						Keep your key on a hardened server or air-gapped device.
 					</p>
 				</div>
@@ -48,8 +48,8 @@ import { Shield, Server, Smartphone } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 				<Smartphone class="size-5 shrink-0 text-tokyo-cyan" />
 				<div>
-					<p class="font-medium">Mobile Signing</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5">Mobile Signing</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						Use your phone as a signing device for desktop sessions.
 					</p>
 				</div>
@@ -58,8 +58,8 @@ import { Shield, Server, Smartphone } from '@lucide/svelte';
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 				<Server class="size-5 shrink-0 text-tokyo-green" />
 				<div>
-					<p class="font-medium">Team Access</p>
-					<p class="text-sm text-muted-foreground">
+					<p class="font-medium leading-5">Team Access</p>
+					<p class="mt-1 text-sm text-muted-foreground">
 						Multiple team members can sign with a shared identity (with proper controls).
 					</p>
 				</div>
