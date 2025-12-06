@@ -1,4 +1,5 @@
 <script lang="ts">
+import ProseHeading from '$lib/components/ProseHeading.svelte';
 import { Globe, Key, Shield } from '@lucide/svelte';
 </script>
 
@@ -14,7 +15,7 @@ import { Globe, Key, Shield } from '@lucide/svelte';
 	</p>
 
 	<section class="prose prose-invert max-w-none">
-		<h2>Overview</h2>
+		<ProseHeading level={2} id="overview">Overview</ProseHeading>
 		<p>
 			Unlike traditional secret managers that use email/password or OAuth, Redshift authenticates using cryptographic keys. Your Nostr identity (a public/private key pair) is used to:
 		</p>
@@ -25,7 +26,7 @@ import { Globe, Key, Shield } from '@lucide/svelte';
 			<li><strong>Access your data</strong> - Your public key identifies which data belongs to you</li>
 		</ul>
 
-		<h2>Authentication Methods</h2>
+		<ProseHeading level={2} id="authentication-methods">Authentication Methods</ProseHeading>
 		<p>Redshift supports three authentication methods, each with different security trade-offs:</p>
 
 		<div class="not-prose my-8 space-y-4">
@@ -84,7 +85,7 @@ import { Globe, Key, Shield } from '@lucide/svelte';
 			</a>
 		</div>
 
-		<h2>Security Comparison</h2>
+		<ProseHeading level={2} id="security-comparison">Security Comparison</ProseHeading>
 		<div class="not-prose my-8 overflow-x-auto">
 			<table class="w-full text-sm">
 				<thead>
@@ -121,7 +122,7 @@ import { Globe, Key, Shield } from '@lucide/svelte';
 			*Bunker security depends on how well the remote signer is secured.
 		</p>
 
-		<h2>Which Should I Use?</h2>
+		<ProseHeading level={2} id="which-should-i-use">Which Should I Use?</ProseHeading>
 		<ul>
 			<li><strong>For most users:</strong> Use a <a href="/docs/auth/extension">browser extension</a> like Alby</li>
 			<li><strong>For CLI-only usage:</strong> Use <a href="/docs/auth/nsec">nsec</a> with careful key management</li>
@@ -129,7 +130,7 @@ import { Globe, Key, Shield } from '@lucide/svelte';
 			<li><strong>For maximum security:</strong> Use a bunker with hardware signing</li>
 		</ul>
 
-		<h2>Creating a New Identity</h2>
+		<ProseHeading level={2} id="creating-a-new-identity">Creating a New Identity</ProseHeading>
 		<p>
 			If you don't have a Nostr identity yet, you can create one in several ways:
 		</p>

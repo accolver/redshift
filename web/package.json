@@ -24,6 +24,7 @@
 		"@tailwindcss/vite": "^4.1.17",
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/svelte": "^5.2.9",
+		"@types/prismjs": "^1.26.5",
 		"@vitest/ui": "^4.0.15",
 		"fake-indexeddb": "^6.2.5",
 		"jsdom": "^27.2.0",
@@ -43,6 +44,7 @@
 		"bits-ui": "^2.14.4",
 		"clsx": "^2.1.1",
 		"nostr-tools": "^2.18.2",
+		"prismjs": "^1.30.0",
 		"svelte-motion": "^0.12.2",
 		"tailwind-merge": "^3.4.0",
 		"tailwind-variants": "^3.2.2"

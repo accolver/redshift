@@ -1,5 +1,6 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
+import ProseHeading from '$lib/components/ProseHeading.svelte';
 import { TriangleAlert, Shield } from '@lucide/svelte';
 </script>
 
@@ -28,7 +29,7 @@ import { TriangleAlert, Shield } from '@lucide/svelte';
 	</div>
 
 	<section class="prose prose-invert max-w-none">
-		<h2>When to Use nsec</h2>
+		<ProseHeading level={2} id="when-to-use-nsec">When to Use nsec</ProseHeading>
 		<p>
 			Entering your nsec directly is useful when:
 		</p>
@@ -39,7 +40,7 @@ import { TriangleAlert, Shield } from '@lucide/svelte';
 			<li>You need quick access without extension setup</li>
 		</ul>
 
-		<h2>Web Admin</h2>
+		<ProseHeading level={2} id="web-admin">Web Admin</ProseHeading>
 		<p>To authenticate with nsec in the web admin:</p>
 		<ol>
 			<li>Go to <a href="/admin">/admin</a></li>
@@ -49,10 +50,10 @@ import { TriangleAlert, Shield } from '@lucide/svelte';
 			<li>Click "Connect"</li>
 		</ol>
 
-		<h2>CLI</h2>
+		<ProseHeading level={2} id="cli">CLI</ProseHeading>
 		<p>To authenticate via command line:</p>
 
-		<CodeBlock code={`# Interactive login
+		<CodeBlock language="bash" code={`# Interactive login
 redshift login
 # Select "Enter nsec manually"
 # Paste your nsec when prompted
@@ -64,18 +65,18 @@ redshift login --nsec nsec1...
 export REDSHIFT_NSEC=nsec1...
 redshift secrets list`} />
 
-		<h2>Key Formats</h2>
+		<ProseHeading level={2} id="key-formats">Key Formats</ProseHeading>
 		<p>Redshift accepts private keys in two formats:</p>
 
-		<h3>Bech32 (nsec)</h3>
+		<ProseHeading level={3} id="bech32-nsec">Bech32 (nsec)</ProseHeading>
 		<p>The standard Nostr format, starts with <code>nsec1</code>:</p>
-		<CodeBlock code="nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5" />
+		<CodeBlock code="nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5" language="text" />
 
-		<h3>Hex</h3>
+		<ProseHeading level={3} id="hex">Hex</ProseHeading>
 		<p>Raw 64-character hexadecimal:</p>
-		<CodeBlock code="67dea2ed018072d675f5415ecfaed7d2597555e202d85b3d65ea4e58d2d92ffa" />
+		<CodeBlock code="67dea2ed018072d675f5415ecfaed7d2597555e202d85b3d65ea4e58d2d92ffa" language="text" />
 
-		<h2>How We Protect Your Key</h2>
+		<ProseHeading level={2} id="how-we-protect-your-key">How We Protect Your Key</ProseHeading>
 		<p>
 			When you enter your nsec in the web admin, Redshift takes several steps to protect it:
 		</p>
@@ -112,7 +113,7 @@ redshift secrets list`} />
 			</div>
 		</div>
 
-		<h2>Security Best Practices</h2>
+		<ProseHeading level={2} id="security-best-practices">Security Best Practices</ProseHeading>
 		<ul>
 			<li><strong>Use a dedicated key</strong> - Consider generating a key just for Redshift, separate from your main Nostr identity</li>
 			<li><strong>Avoid public computers</strong> - Never enter your nsec on shared or untrusted devices</li>
@@ -121,12 +122,12 @@ redshift secrets list`} />
 			<li><strong>Clear when done</strong> - Click "Disconnect" to clear your session</li>
 		</ul>
 
-		<h2>Generating a New Key</h2>
+		<ProseHeading level={2} id="generating-a-new-key">Generating a New Key</ProseHeading>
 		<p>
 			If you need a new Nostr identity for Redshift:
 		</p>
 
-		<CodeBlock code={`# Using the Redshift CLI
+		<CodeBlock language="bash" code={`# Using the Redshift CLI
 redshift login
 # Select "Generate new identity"
 
@@ -147,12 +148,12 @@ console.log('npub:', npubEncode(pk))`} />
 			</p>
 		</div>
 
-		<h2>CLI Environment Variables</h2>
+		<ProseHeading level={2} id="cli-environment-variables">CLI Environment Variables</ProseHeading>
 		<p>
 			For automation and CI/CD, you can provide credentials via environment variables:
 		</p>
 
-		<CodeBlock code={`# Set nsec via environment variable
+		<CodeBlock language="bash" code={`# Set nsec via environment variable
 export REDSHIFT_NSEC="nsec1..."
 
 # Now all commands use this identity
@@ -163,7 +164,7 @@ redshift run -- npm start`} />
 			This is more secure than passing <code>--nsec</code> on the command line, which may be visible in shell history or process listings.
 		</p>
 
-		<h2>Migrating to a Browser Extension</h2>
+		<ProseHeading level={2} id="migrating-to-a-browser-extension">Migrating to a Browser Extension</ProseHeading>
 		<p>
 			If you've been using nsec directly and want to upgrade to a more secure setup:
 		</p>

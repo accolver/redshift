@@ -1,5 +1,6 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
+import ProseHeading from '$lib/components/ProseHeading.svelte';
 import { Shield, Server, Smartphone } from '@lucide/svelte';
 </script>
 
@@ -15,14 +16,14 @@ import { Shield, Server, Smartphone } from '@lucide/svelte';
 	</p>
 
 	<section class="prose prose-invert max-w-none">
-		<h2>What is a Bunker?</h2>
+		<ProseHeading level={2} id="what-is-a-bunker">What is a Bunker?</ProseHeading>
 		<p>
 			A bunker (defined in NIP-46) is a remote signing service that holds your private key and signs requests on your behalf. Instead of your key living in your browser or CLI, it stays securely on a separate server or device.
 		</p>
 
 		<p>Think of it like a hardware wallet for your Nostr identity - the key never leaves the secure environment, and all signing requests go through it.</p>
 
-		<h2>When to Use a Bunker</h2>
+		<ProseHeading level={2} id="when-to-use-a-bunker">When to Use a Bunker</ProseHeading>
 		<div class="not-prose my-6 grid gap-4 sm:grid-cols-2">
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 				<Server class="size-5 shrink-0 text-tokyo-blue" />
@@ -65,12 +66,12 @@ import { Shield, Server, Smartphone } from '@lucide/svelte';
 			</div>
 		</div>
 
-		<h2>Bunker URI Format</h2>
+		<ProseHeading level={2} id="bunker-uri-format">Bunker URI Format</ProseHeading>
 		<p>
 			Bunker connections use a special URI format:
 		</p>
 
-		<CodeBlock code={`bunker://<signer-pubkey>?relay=<relay-url>&secret=<connection-secret>
+		<CodeBlock language="bash" code={`bunker://<signer-pubkey>?relay=<relay-url>&secret=<connection-secret>
 
 # Example:
 bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=wss://relay.nsecbunker.com&secret=abc123`} />
@@ -82,9 +83,9 @@ bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=
 			<li><strong>secret</strong> - A shared secret to authenticate the connection</li>
 		</ul>
 
-		<h2>Connecting to a Bunker</h2>
+		<ProseHeading level={2} id="connecting-to-a-bunker">Connecting to a Bunker</ProseHeading>
 
-		<h3>Web Admin</h3>
+		<ProseHeading level={3} id="web-admin">Web Admin</ProseHeading>
 		<ol>
 			<li>Go to <a href="/admin">/admin</a></li>
 			<li>Click "Connect"</li>
@@ -94,8 +95,8 @@ bunker://3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d?relay=
 			<li>Approve the connection in your bunker app (if required)</li>
 		</ol>
 
-		<h3>CLI</h3>
-		<CodeBlock code={`# Interactive
+		<ProseHeading level={3} id="cli">CLI</ProseHeading>
+		<CodeBlock language="bash" code={`# Interactive
 redshift login
 # Select "Use bunker URL"
 # Paste your bunker URI
@@ -107,9 +108,9 @@ redshift login --bunker "bunker://..."
 export REDSHIFT_BUNKER="bunker://..."
 redshift secrets list`} />
 
-		<h2>Popular Bunker Services</h2>
+		<ProseHeading level={2} id="popular-bunker-services">Popular Bunker Services</ProseHeading>
 
-		<h3>nsecBunker</h3>
+		<ProseHeading level={3} id="nsecbunker">nsecBunker</ProseHeading>
 		<p>
 			A popular self-hosted bunker solution. You can run it on your own server to maintain full control.
 		</p>
@@ -117,7 +118,7 @@ redshift secrets list`} />
 			github.com/kind-0/nsecbunker →
 		</a>
 
-		<h3>Amber (Android)</h3>
+		<ProseHeading level={3} id="amber-android">Amber (Android)</ProseHeading>
 		<p>
 			An Android app that acts as a bunker, letting you sign requests on your phone.
 		</p>
@@ -125,12 +126,12 @@ redshift secrets list`} />
 			github.com/greenart7c3/Amber →
 		</a>
 
-		<h2>Self-Hosting a Bunker</h2>
+		<ProseHeading level={2} id="self-hosting-a-bunker">Self-Hosting a Bunker</ProseHeading>
 		<p>
 			For maximum security, run your own bunker:
 		</p>
 
-		<CodeBlock code={`# Clone nsecBunker
+		<CodeBlock language="bash" code={`# Clone nsecBunker
 git clone https://github.com/kind-0/nsecbunker
 cd nsecbunker
 
@@ -145,12 +146,12 @@ docker-compose up -d`} />
 			This gives you full control over the signing infrastructure while keeping your key off developer machines.
 		</p>
 
-		<h2>CI/CD Integration</h2>
+		<ProseHeading level={2} id="cicd-integration">CI/CD Integration</ProseHeading>
 		<p>
 			Bunkers are ideal for CI/CD because you don't need to store your nsec in CI secrets:
 		</p>
 
-		<CodeBlock code={`# GitHub Actions example
+		<CodeBlock language="bash" code={`# GitHub Actions example
 name: Deploy
 on: push
 
@@ -180,7 +181,7 @@ jobs:
 			<li>Rate limit requests</li>
 		</ul>
 
-		<h2>How It Works</h2>
+		<ProseHeading level={2} id="how-it-works">How It Works</ProseHeading>
 		<p>
 			The NIP-46 flow:
 		</p>
@@ -197,7 +198,7 @@ jobs:
 			All communication is encrypted end-to-end. The relay cannot read the signing requests or responses.
 		</p>
 
-		<h2>Security Considerations</h2>
+		<ProseHeading level={2} id="security-considerations">Security Considerations</ProseHeading>
 		<ul>
 			<li><strong>Bunker security is critical</strong> - A compromised bunker means a compromised identity</li>
 			<li><strong>Use HTTPS relays</strong> - Ensure the relay connection is encrypted</li>
@@ -206,23 +207,23 @@ jobs:
 			<li><strong>Limit permissions</strong> - Configure the bunker to only allow necessary operations</li>
 		</ul>
 
-		<h2>Troubleshooting</h2>
+		<ProseHeading level={2} id="troubleshooting">Troubleshooting</ProseHeading>
 
-		<h3>"Failed to connect to bunker"</h3>
+		<ProseHeading level={3} id="failed-to-connect-to-bunker">"Failed to connect to bunker"</ProseHeading>
 		<ul>
 			<li>Check that the bunker service is running</li>
 			<li>Verify the relay URL is correct and accessible</li>
 			<li>Ensure the connection secret matches</li>
 		</ul>
 
-		<h3>"Connection timed out"</h3>
+		<ProseHeading level={3} id="connection-timed-out">"Connection timed out"</ProseHeading>
 		<ul>
 			<li>The bunker may require manual approval - check your bunker app</li>
 			<li>Network issues between client and relay</li>
 			<li>Bunker server may be overloaded</li>
 		</ul>
 
-		<h3>"Signing request rejected"</h3>
+		<ProseHeading level={3} id="signing-request-rejected">"Signing request rejected"</ProseHeading>
 		<ul>
 			<li>The bunker may have permission restrictions</li>
 			<li>Manual approval was denied</li>

@@ -1,5 +1,7 @@
 <script lang="ts">
-import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
+import CodeBlock from '$lib/components/CodeBlock.svelte';
+import ProseHeading from '$lib/components/ProseHeading.svelte';
+import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 </script>
 
 <svelte:head>
@@ -14,7 +16,7 @@ import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
 	</p>
 
 	<section class="prose prose-invert max-w-none">
-		<h2>Overview</h2>
+		<ProseHeading level={2} id="overview">Overview</ProseHeading>
 		<p>
 			Redshift is designed with a "zero trust" architecture. We assume that relay operators, network observers, and even the Redshift servers themselves could be compromised. Your secrets are protected through client-side encryption using keys only you control.
 		</p>
@@ -61,9 +63,9 @@ import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
 			</div>
 		</div>
 
-		<h2>Encryption</h2>
+		<ProseHeading level={2} id="encryption">Encryption</ProseHeading>
 		
-		<h3>Data at Rest</h3>
+		<ProseHeading level={3} id="data-at-rest">Data at Rest</ProseHeading>
 		<p>
 			Your secrets are encrypted using your Nostr private key before being stored on relays. The encryption uses:
 		</p>
@@ -76,15 +78,15 @@ import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
 		<p>
 			What relay operators see:
 		</p>
-		<pre><code>{`{
+		<CodeBlock language="json" code={`{
   "kind": 30078,
   "pubkey": "your_public_key",
   "content": "encrypted_blob_they_cannot_read",
   "tags": [["d", "project-id|environment"]],
   "sig": "your_signature"
-}`}</code></pre>
+}`} />
 
-		<h3>Data in Transit</h3>
+		<ProseHeading level={3} id="data-in-transit">Data in Transit</ProseHeading>
 		<p>
 			All communication with relays uses WebSocket Secure (WSS), providing TLS encryption for the transport layer. Combined with application-layer encryption, this means:
 		</p>
@@ -94,9 +96,9 @@ import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
 			<li>Only you can decrypt the actual secret values</li>
 		</ul>
 
-		<h2>Key Management</h2>
+		<ProseHeading level={2} id="key-management">Key Management</ProseHeading>
 
-		<h3>Browser Extension (NIP-07)</h3>
+		<ProseHeading level={3} id="browser-extension-nip-07">Browser Extension (NIP-07)</ProseHeading>
 		<p>
 			When using a browser extension like Alby:
 		</p>
@@ -106,7 +108,7 @@ import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
 			<li>Each signing request requires extension approval (unless auto-approved)</li>
 		</ul>
 
-		<h3>nsec Direct Entry</h3>
+		<ProseHeading level={3} id="nsec-direct-entry">nsec Direct Entry</ProseHeading>
 		<p>
 			When entering your nsec in the web admin:
 		</p>
@@ -117,7 +119,7 @@ import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
 			<li>Decryption only happens in memory during signing operations</li>
 		</ul>
 
-		<h3>Bunker (NIP-46)</h3>
+		<ProseHeading level={3} id="bunker-nip-46">Bunker (NIP-46)</ProseHeading>
 		<p>
 			When using a bunker:
 		</p>
@@ -128,9 +130,9 @@ import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
 			<li>Security depends on the bunker's security</li>
 		</ul>
 
-		<h2>Threat Model</h2>
+		<ProseHeading level={2} id="threat-model">Threat Model</ProseHeading>
 
-		<h3>What Redshift Protects Against</h3>
+		<ProseHeading level={3} id="what-redshift-protects-against">What Redshift Protects Against</ProseHeading>
 		<div class="not-prose my-6 space-y-3">
 			<div class="flex items-start gap-3 rounded-lg border border-tokyo-green/30 bg-tokyo-green/5 p-4">
 				<Shield class="size-5 shrink-0 text-tokyo-green" />
@@ -183,7 +185,7 @@ import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
 			</div>
 		</div>
 
-		<h3>What Redshift Does NOT Protect Against</h3>
+		<ProseHeading level={3} id="what-redshift-does-not-protect-against">What Redshift Does NOT Protect Against</ProseHeading>
 		<div class="not-prose my-6 space-y-3">
 			<div class="flex items-start gap-3 rounded-lg border border-tokyo-red/30 bg-tokyo-red/5 p-4">
 				<Eye class="size-5 shrink-0 text-tokyo-red" />
@@ -226,9 +228,9 @@ import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
 			</div>
 		</div>
 
-		<h2>Best Practices</h2>
+		<ProseHeading level={2} id="best-practices">Best Practices</ProseHeading>
 
-		<h3>Key Security</h3>
+		<ProseHeading level={3} id="key-security">Key Security</ProseHeading>
 		<ul>
 			<li><strong>Back up your nsec</strong> - Store it in a password manager or secure offline location</li>
 			<li><strong>Use a unique key</strong> - Consider a dedicated Nostr identity for Redshift</li>
@@ -236,7 +238,7 @@ import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
 			<li><strong>Use a bunker for CI/CD</strong> - Don't embed your main nsec in CI secrets</li>
 		</ul>
 
-		<h3>Device Security</h3>
+		<ProseHeading level={3} id="device-security">Device Security</ProseHeading>
 		<ul>
 			<li><strong>Keep devices updated</strong> - Apply security patches promptly</li>
 			<li><strong>Use full-disk encryption</strong> - Protects data if device is stolen</li>
@@ -244,7 +246,7 @@ import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
 			<li><strong>Avoid public computers</strong> - Never enter your nsec on untrusted devices</li>
 		</ul>
 
-		<h3>Operational Security</h3>
+		<ProseHeading level={3} id="operational-security">Operational Security</ProseHeading>
 		<ul>
 			<li><strong>Rotate secrets regularly</strong> - Change API keys and passwords periodically</li>
 			<li><strong>Use separate environments</strong> - Don't use production secrets in development</li>
@@ -252,7 +254,7 @@ import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
 			<li><strong>Disconnect when done</strong> - End sessions explicitly</li>
 		</ul>
 
-		<h2>Open Source & Auditing</h2>
+		<ProseHeading level={2} id="open-source-and-auditing">Open Source & Auditing</ProseHeading>
 		<p>
 			Redshift is open source. You can review the code, run your own instance, or audit the cryptographic implementations:
 		</p>
@@ -262,7 +264,7 @@ import { Shield, Lock, Globe, Key, Eye, Server } from '@lucide/svelte';
 			<li>No proprietary cryptography - standard Nostr NIPs only</li>
 		</ul>
 
-		<h2>Reporting Security Issues</h2>
+		<ProseHeading level={2} id="reporting-security-issues">Reporting Security Issues</ProseHeading>
 		<p>
 			If you discover a security vulnerability, please report it responsibly:
 		</p>

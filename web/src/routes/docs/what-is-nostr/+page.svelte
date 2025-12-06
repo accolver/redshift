@@ -1,5 +1,6 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
+import ProseHeading from '$lib/components/ProseHeading.svelte';
 </script>
 
 <svelte:head>
@@ -14,7 +15,7 @@ import CodeBlock from '$lib/components/CodeBlock.svelte';
 	</p>
 
 	<section class="prose prose-invert max-w-none">
-		<h2>Nostr in a Nutshell</h2>
+		<ProseHeading level={2} id="nostr-in-a-nutshell">Nostr in a Nutshell</ProseHeading>
 		<p>
 			<strong>Nostr</strong> (Notes and Other Stuff Transmitted by Relays) is a simple, open protocol for creating censorship-resistant global networks. Think of it as a decentralized alternative to platforms like Twitter or Slack, but the underlying technology can be used for much more than social media.
 		</p>
@@ -27,9 +28,9 @@ import CodeBlock from '$lib/components/CodeBlock.svelte';
 			<li><strong>Relays store and forward</strong> - Independent servers (relays) store and distribute data. You can use any relay, or run your own.</li>
 		</ol>
 
-		<h2>How Nostr Works</h2>
+		<ProseHeading level={2} id="how-nostr-works">How Nostr Works</ProseHeading>
 
-		<h3>Keys = Identity</h3>
+		<ProseHeading level={3} id="keys-identity">Keys = Identity</ProseHeading>
 		<p>
 			Your Nostr identity is a public/private key pair using the secp256k1 curve (the same as Bitcoin). Your <strong>public key</strong> (npub) is your identity that others can see. Your <strong>private key</strong> (nsec) proves you are the owner of that identity.
 		</p>
@@ -38,9 +39,9 @@ import CodeBlock from '$lib/components/CodeBlock.svelte';
 Public key (npub): npub1abc123...xyz
 Private key (nsec): nsec1secret...key
 
-# Never share your nsec!`} />
+# Never share your nsec!`} language="bash" />
 
-		<h3>Events = Data</h3>
+		<ProseHeading level={3} id="events-data">Events = Data</ProseHeading>
 		<p>
 			All data in Nostr is represented as "events" - JSON objects with a specific structure:
 		</p>
@@ -53,7 +54,7 @@ Private key (nsec): nsec1secret...key
   "tags": [["tag", "value"]],
   "content": "Your data here",
   "sig": "cryptographic_signature"
-}`} />
+}`} language="json" />
 
 		<p>Key fields:</p>
 		<ul>
@@ -62,7 +63,7 @@ Private key (nsec): nsec1secret...key
 			<li><strong>sig</strong> - Your cryptographic signature proving you created this</li>
 		</ul>
 
-		<h3>Relays = Storage</h3>
+		<ProseHeading level={3} id="relays-storage">Relays = Storage</ProseHeading>
 		<p>
 			Relays are simple servers that receive, store, and forward events. They're like email servers, but for Nostr data. Key properties:
 		</p>
@@ -74,7 +75,7 @@ Private key (nsec): nsec1secret...key
 			<li><strong>No single point of failure</strong> - If a relay bans you, use another</li>
 		</ul>
 
-		<h2>How Redshift Uses Nostr</h2>
+		<ProseHeading level={2} id="how-redshift-uses-nostr">How Redshift Uses Nostr</ProseHeading>
 		<p>
 			Redshift leverages Nostr's architecture for secret management:
 		</p>
@@ -106,7 +107,7 @@ Private key (nsec): nsec1secret...key
 			</tbody>
 		</table>
 
-		<h3>Security Model</h3>
+		<ProseHeading level={3} id="security-model">Security Model</ProseHeading>
 		<p>
 			Your secrets are <strong>encrypted before leaving your device</strong>. Relay operators can see that you have data, but cannot read its contents. Only someone with your private key can decrypt your secrets.
 		</p>
@@ -117,9 +118,9 @@ Private key (nsec): nsec1secret...key
   "pubkey": "your_npub",
   "content": "encrypted_blob_they_cannot_read",
   "tags": [["d", "project-id"]]
-}`} />
+}`} language="json" />
 
-		<h2>NIPs: Nostr Implementation Possibilities</h2>
+		<ProseHeading level={2} id="nips">NIPs: Nostr Implementation Possibilities</ProseHeading>
 		<p>
 			Nostr is extended through NIPs - specifications that define how different features work. Redshift uses several NIPs:
 		</p>
@@ -131,7 +132,7 @@ Private key (nsec): nsec1secret...key
 			<li><strong>NIP-46</strong> - Remote signing (bunker connections)</li>
 		</ul>
 
-		<h2>Why Nostr for Secrets?</h2>
+		<ProseHeading level={2} id="why-nostr-for-secrets">Why Nostr for Secrets?</ProseHeading>
 		<p>
 			Traditional secret managers require you to trust a company with your most sensitive data. Nostr flips this:
 		</p>
@@ -143,14 +144,14 @@ Private key (nsec): nsec1secret...key
 			<li><strong>Censorship resistant</strong> - No single entity can revoke your access</li>
 		</ul>
 
-		<h2>Learn More</h2>
+		<ProseHeading level={2} id="learn-more">Learn More</ProseHeading>
 		<ul>
 			<li><a href="https://nostr.com" target="_blank" rel="noopener">nostr.com</a> - Official resources</li>
 			<li><a href="https://github.com/nostr-protocol/nips" target="_blank" rel="noopener">NIPs Repository</a> - Protocol specifications</li>
 			<li><a href="https://nostr.how" target="_blank" rel="noopener">nostr.how</a> - Beginner's guide</li>
 		</ul>
 
-		<h2>Next Steps</h2>
+		<ProseHeading level={2} id="next-steps">Next Steps</ProseHeading>
 		<p>
 			Now that you understand Nostr, learn <a href="/docs/why-redshift">why Redshift vs. other secret managers</a> or dive into <a href="/docs/auth">authentication options</a>.
 		</p>

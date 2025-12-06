@@ -1,6 +1,7 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
-import { CheckCircle } from '@lucide/svelte';
+import ProseHeading from '$lib/components/ProseHeading.svelte';
+import { CircleCheck } from '@lucide/svelte';
 </script>
 
 <svelte:head>
@@ -15,7 +16,7 @@ import { CheckCircle } from '@lucide/svelte';
 	</p>
 
 	<section class="prose prose-invert max-w-none">
-		<h2>What is NIP-07?</h2>
+		<ProseHeading level={2} id="what-is-nip-07">What is NIP-07?</ProseHeading>
 		<p>
 			NIP-07 is a Nostr standard that allows websites to request signatures from a browser extension without ever accessing your private key. The extension holds your key securely and signs requests on your behalf.
 		</p>
@@ -28,7 +29,7 @@ import { CheckCircle } from '@lucide/svelte';
 			<li>Works across multiple Nostr apps</li>
 		</ul>
 
-		<h2>Recommended Extensions</h2>
+		<ProseHeading level={2} id="recommended-extensions">Recommended Extensions</ProseHeading>
 		<div class="not-prose my-6 space-y-4">
 			<div class="flex items-start gap-4 rounded-lg border border-border bg-card p-4">
 				<div class="flex size-12 shrink-0 items-center justify-center rounded-lg bg-[#FFD84D]/10">
@@ -76,14 +77,14 @@ import { CheckCircle } from '@lucide/svelte';
 			</div>
 		</div>
 
-		<h2>Setup Guide</h2>
+		<ProseHeading level={2} id="setup-guide">Setup Guide</ProseHeading>
 
-		<h3>1. Install an Extension</h3>
+		<ProseHeading level={3} id="install-an-extension">1. Install an Extension</ProseHeading>
 		<p>
 			Install one of the extensions above. We recommend Alby for most users.
 		</p>
 
-		<h3>2. Create or Import Keys</h3>
+		<ProseHeading level={3} id="create-or-import-keys">2. Create or Import Keys</ProseHeading>
 		<p>
 			When you first open the extension, you'll be prompted to either:
 		</p>
@@ -98,7 +99,7 @@ import { CheckCircle } from '@lucide/svelte';
 			</p>
 		</div>
 
-		<h3>3. Connect to Redshift</h3>
+		<ProseHeading level={3} id="connect-to-redshift">3. Connect to Redshift</ProseHeading>
 		<p>
 			With the extension installed, connecting to Redshift is automatic:
 		</p>
@@ -112,11 +113,11 @@ import { CheckCircle } from '@lucide/svelte';
 		</ol>
 
 		<p><strong>CLI:</strong></p>
-		<CodeBlock code={`redshift login
+		<CodeBlock language="bash" code={`redshift login
 # Select "NIP-07 Browser Extension"
 # A browser window will open for approval`} />
 
-		<h2>How It Works</h2>
+		<ProseHeading level={2} id="how-it-works">How It Works</ProseHeading>
 		<p>
 			When Redshift needs to sign something (create a project, save secrets, etc.):
 		</p>
@@ -134,7 +135,7 @@ import { CheckCircle } from '@lucide/svelte';
 			At no point does Redshift see your private key - only the signatures it produces.
 		</p>
 
-		<h2>Auto-Approval (Optional)</h2>
+		<ProseHeading level={2} id="auto-approval">Auto-Approval (Optional)</ProseHeading>
 		<p>
 			Clicking "Approve" for every action can get tedious. Most extensions let you auto-approve requests from trusted domains:
 		</p>
@@ -153,42 +154,42 @@ import { CheckCircle } from '@lucide/svelte';
 			<li>Set redshiftapp.com to "Allow"</li>
 		</ol>
 
-		<h2>Security Considerations</h2>
+		<ProseHeading level={2} id="security-considerations">Security Considerations</ProseHeading>
 		<div class="not-prose my-6 space-y-3">
 			<div class="flex items-center gap-3">
-				<CheckCircle class="size-5 text-tokyo-green" />
+				<CircleCheck class="size-5 text-tokyo-green" />
 				<span>Private key never exposed to websites</span>
 			</div>
 			<div class="flex items-center gap-3">
-				<CheckCircle class="size-5 text-tokyo-green" />
+				<CircleCheck class="size-5 text-tokyo-green" />
 				<span>Per-site permission controls</span>
 			</div>
 			<div class="flex items-center gap-3">
-				<CheckCircle class="size-5 text-tokyo-green" />
+				<CircleCheck class="size-5 text-tokyo-green" />
 				<span>Easy to revoke access</span>
 			</div>
 			<div class="flex items-center gap-3">
-				<CheckCircle class="size-5 text-tokyo-green" />
+				<CircleCheck class="size-5 text-tokyo-green" />
 				<span>Works across multiple Nostr apps</span>
 			</div>
 		</div>
 
-		<h2>Troubleshooting</h2>
+		<ProseHeading level={2} id="troubleshooting">Troubleshooting</ProseHeading>
 
-		<h3>"No NIP-07 extension found"</h3>
+		<ProseHeading level={3} id="no-nip-07-extension-found">"No NIP-07 extension found"</ProseHeading>
 		<ul>
 			<li>Make sure the extension is installed and enabled</li>
 			<li>Refresh the page after installing</li>
 			<li>Check if the extension is unlocked (some require a password)</li>
 		</ul>
 
-		<h3>"User rejected the request"</h3>
+		<ProseHeading level={3} id="user-rejected-the-request">"User rejected the request"</ProseHeading>
 		<ul>
 			<li>You clicked "Deny" in the extension popup</li>
 			<li>Try again and click "Allow" or "Sign"</li>
 		</ul>
 
-		<h3>Extension popup doesn't appear</h3>
+		<ProseHeading level={3} id="extension-popup-doesnt-appear">Extension popup doesn't appear</ProseHeading>
 		<ul>
 			<li>Click the extension icon in your toolbar to open it manually</li>
 			<li>The popup might be blocked - check browser popup settings</li>

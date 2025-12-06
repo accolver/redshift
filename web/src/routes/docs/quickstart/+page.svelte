@@ -1,5 +1,6 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
+import ProseHeading from '$lib/components/ProseHeading.svelte';
 </script>
 
 <svelte:head>
@@ -14,7 +15,7 @@ import CodeBlock from '$lib/components/CodeBlock.svelte';
 	</p>
 
 	<section class="prose prose-invert max-w-none">
-		<h2>1. Authenticate</h2>
+		<ProseHeading level={2} id="authenticate">1. Authenticate</ProseHeading>
 		<p>
 			First, log in with your Nostr identity. If you don't have one, Redshift can generate one for you:
 		</p>
@@ -26,7 +27,7 @@ import CodeBlock from '$lib/components/CodeBlock.svelte';
 # > NIP-07 Browser Extension (recommended)
 #   Enter nsec manually
 #   Use bunker URL
-#   Generate new identity`} />
+#   Generate new identity`} language="bash" />
 
 		<p>
 			For most users, we recommend using a <strong>NIP-07 browser extension</strong> like 
@@ -35,7 +36,7 @@ import CodeBlock from '$lib/components/CodeBlock.svelte';
 			See the <a href="/docs/auth">Authentication docs</a> for all options.
 		</p>
 
-		<h2>2. Create a Project</h2>
+		<ProseHeading level={2} id="create-project">2. Create a Project</ProseHeading>
 		<p>
 			Projects organize your secrets. You might have one project per application:
 		</p>
@@ -44,13 +45,13 @@ import CodeBlock from '$lib/components/CodeBlock.svelte';
 redshift serve
 
 # Or create directly via CLI
-# Projects are created in the web admin for now`} />
+# Projects are created in the web admin for now`} language="bash" />
 
 		<p>
 			Visit <a href="/admin">/admin</a> to create projects and environments through the web interface.
 		</p>
 
-		<h2>3. Set Up Your Directory</h2>
+		<ProseHeading level={2} id="setup-directory">3. Set Up Your Directory</ProseHeading>
 		<p>
 			Link a directory to a project/environment:
 		</p>
@@ -62,7 +63,7 @@ redshift setup
 # ? Select a project: my-app
 # ? Select an environment: development
 # 
-# ✓ Created .redshift.json`} />
+# ✓ Created .redshift.json`} language="bash" />
 
 		<p>
 			This creates a <code>.redshift.json</code> file in your project:
@@ -71,7 +72,7 @@ redshift setup
 		<CodeBlock code={`{
   "project": "my-app",
   "environment": "development"
-}`} />
+}`} language="json" />
 
 		<div class="not-prose my-6 rounded-lg border border-tokyo-orange/50 bg-tokyo-orange/10 p-4">
 			<p class="text-sm">
@@ -79,7 +80,7 @@ redshift setup
 			</p>
 		</div>
 
-		<h2>4. Add Secrets</h2>
+		<ProseHeading level={2} id="add-secrets">4. Add Secrets</ProseHeading>
 		<p>
 			Add secrets via the web admin or CLI:
 		</p>
@@ -95,9 +96,9 @@ redshift secrets list
 # Output:
 # DATABASE_URL  postgres://localhost/mydb
 # API_KEY       sk-...
-# STRIPE_SECRET sk_test_...`} />
+# STRIPE_SECRET sk_test_...`} language="bash" />
 
-		<h2>5. Run Your Application</h2>
+		<ProseHeading level={2} id="run-application">5. Run Your Application</ProseHeading>
 		<p>
 			Use <code>redshift run</code> to inject secrets as environment variables:
 		</p>
@@ -108,9 +109,9 @@ redshift run -- python app.py
 redshift run -- go run main.go
 
 # Secrets are available as environment variables
-# process.env.DATABASE_URL, os.environ['API_KEY'], etc.`} />
+# process.env.DATABASE_URL, os.environ['API_KEY'], etc.`} language="bash" />
 
-		<h2>Example: Node.js App</h2>
+		<ProseHeading level={2} id="nodejs-example">Example: Node.js App</ProseHeading>
 		<p>Here's a complete example for a Node.js application:</p>
 
 		<CodeBlock code={`# 1. Install dependencies
@@ -141,9 +142,9 @@ redshift secrets set API_KEY "my-secret-key"
 redshift secrets set NODE_ENV "development"
 
 # 5. Run with secrets
-redshift run -- node index.js`} />
+redshift run -- node index.js`} language="bash" />
 
-		<h2>Next Steps</h2>
+		<ProseHeading level={2} id="next-steps">Next Steps</ProseHeading>
 		<ul>
 			<li><a href="/docs/auth">Learn about authentication options</a></li>
 			<li><a href="/docs/cli">Explore all CLI commands</a></li>

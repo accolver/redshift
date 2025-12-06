@@ -1,6 +1,6 @@
 <script lang="ts">
-import { Button } from '$lib/components/ui/button';
 import { ArrowRight, Key, Shield, Terminal, Globe } from '@lucide/svelte';
+import ProseHeading from '$lib/components/ProseHeading.svelte';
 </script>
 
 <svelte:head>
@@ -78,7 +78,7 @@ import { ArrowRight, Key, Shield, Terminal, Globe } from '@lucide/svelte';
 
 	<!-- Overview -->
 	<section class="prose prose-invert max-w-none">
-		<h2>What is Redshift?</h2>
+		<ProseHeading level={2} id="what-is-redshift">What is Redshift?</ProseHeading>
 		<p>
 			Redshift is a <strong>decentralized secret manager</strong> that lets you store and manage environment variables, API keys, and other sensitive configuration without trusting a centralized service.
 		</p>
@@ -92,7 +92,7 @@ import { ArrowRight, Key, Shield, Terminal, Globe } from '@lucide/svelte';
 			<li><strong>Familiar workflow</strong> - Doppler-compatible CLI commands</li>
 		</ul>
 
-		<h2>How it works</h2>
+		<ProseHeading level={2} id="how-it-works">How it works</ProseHeading>
 		<p>Redshift uses your Nostr identity (a public/private key pair) to:</p>
 
 		<ol>
@@ -106,7 +106,7 @@ import { ArrowRight, Key, Shield, Terminal, Globe } from '@lucide/svelte';
 			When you run <code>redshift run -- npm start</code>, the CLI fetches your encrypted secrets from relays, decrypts them locally, and injects them as environment variables into your process.
 		</p>
 
-		<h2>Getting help</h2>
+		<ProseHeading level={2} id="getting-help">Getting help</ProseHeading>
 		<p>
 			If you run into issues or have questions:
 		</p>

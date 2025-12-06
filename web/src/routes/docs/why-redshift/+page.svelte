@@ -1,5 +1,6 @@
 <script lang="ts">
-import { CheckCircle, XCircle, Minus } from '@lucide/svelte';
+import ProseHeading from '$lib/components/ProseHeading.svelte';
+import { CircleCheck, CircleX, Minus } from '@lucide/svelte';
 </script>
 
 <svelte:head>
@@ -14,7 +15,7 @@ import { CheckCircle, XCircle, Minus } from '@lucide/svelte';
 	</p>
 
 	<section class="prose prose-invert max-w-none">
-		<h2>The Problem with Traditional Secret Managers</h2>
+		<ProseHeading level={2} id="the-problem">The Problem with Traditional Secret Managers</ProseHeading>
 		<p>
 			Most secret management tools share a common architecture: your secrets are stored on someone else's servers, encrypted with keys they control. This creates several issues:
 		</p>
@@ -27,7 +28,7 @@ import { CheckCircle, XCircle, Minus } from '@lucide/svelte';
 			<li><strong>Cost scaling</strong> - Pricing often scales with usage, team size, or secrets count</li>
 		</ul>
 
-		<h2>The Redshift Difference</h2>
+		<ProseHeading level={2} id="the-redshift-difference">The Redshift Difference</ProseHeading>
 		<p>
 			Redshift takes a fundamentally different approach:
 		</p>
@@ -59,7 +60,7 @@ import { CheckCircle, XCircle, Minus } from '@lucide/svelte';
 			</div>
 		</div>
 
-		<h2>Feature Comparison</h2>
+		<ProseHeading level={2} id="feature-comparison">Feature Comparison</ProseHeading>
 		<div class="not-prose my-8 overflow-x-auto">
 			<table class="w-full text-sm">
 				<thead>
@@ -74,77 +75,77 @@ import { CheckCircle, XCircle, Minus } from '@lucide/svelte';
 				<tbody class="divide-y divide-border">
 					<tr>
 						<td class="px-4 py-3">Client-side encryption</td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><XCircle class="mx-auto size-5 text-tokyo-red" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
 						<td class="px-4 py-3 text-center"><Minus class="mx-auto size-5 text-muted-foreground" /></td>
-						<td class="px-4 py-3 text-center"><XCircle class="mx-auto size-5 text-tokyo-red" /></td>
+						<td class="px-4 py-3 text-center"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
 					</tr>
 					<tr>
 						<td class="px-4 py-3">No vendor lock-in</td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><XCircle class="mx-auto size-5 text-tokyo-red" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
 						<td class="px-4 py-3 text-center"><Minus class="mx-auto size-5 text-muted-foreground" /></td>
-						<td class="px-4 py-3 text-center"><XCircle class="mx-auto size-5 text-tokyo-red" /></td>
+						<td class="px-4 py-3 text-center"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
 					</tr>
 					<tr>
 						<td class="px-4 py-3">Self-hostable</td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><XCircle class="mx-auto size-5 text-tokyo-red" /></td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><XCircle class="mx-auto size-5 text-tokyo-red" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
 					</tr>
 					<tr>
 						<td class="px-4 py-3">Free for individuals</td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><XCircle class="mx-auto size-5 text-tokyo-red" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
 					</tr>
 					<tr>
 						<td class="px-4 py-3">No infrastructure to manage</td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><XCircle class="mx-auto size-5 text-tokyo-red" /></td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
 					</tr>
 					<tr>
 						<td class="px-4 py-3">Censorship resistant</td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><XCircle class="mx-auto size-5 text-tokyo-red" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
 						<td class="px-4 py-3 text-center"><Minus class="mx-auto size-5 text-muted-foreground" /></td>
-						<td class="px-4 py-3 text-center"><XCircle class="mx-auto size-5 text-tokyo-red" /></td>
+						<td class="px-4 py-3 text-center"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
 					</tr>
 					<tr>
 						<td class="px-4 py-3">Familiar CLI (Doppler-compatible)</td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><XCircle class="mx-auto size-5 text-tokyo-red" /></td>
-						<td class="px-4 py-3 text-center"><XCircle class="mx-auto size-5 text-tokyo-red" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
+						<td class="px-4 py-3 text-center"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
 					</tr>
 					<tr>
 						<td class="px-4 py-3">Team sharing</td>
 						<td class="px-4 py-3 text-center"><Minus class="mx-auto size-5 text-muted-foreground" /></td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
 					</tr>
 					<tr>
 						<td class="px-4 py-3">Audit logs</td>
 						<td class="px-4 py-3 text-center"><Minus class="mx-auto size-5 text-muted-foreground" /></td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
-						<td class="px-4 py-3 text-center"><CheckCircle class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
+						<td class="px-4 py-3 text-center"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
 					</tr>
 				</tbody>
 			</table>
 		</div>
 		<p class="text-sm text-muted-foreground">
-			<CheckCircle class="inline size-4 text-tokyo-green" /> = Full support, 
+			<CircleCheck class="inline size-4 text-tokyo-green" /> = Full support, 
 			<Minus class="inline size-4 text-muted-foreground" /> = Partial/Coming soon, 
-			<XCircle class="inline size-4 text-tokyo-red" /> = Not available
+			<CircleX class="inline size-4 text-tokyo-red" /> = Not available
 		</p>
 
-		<h2>When to Use Redshift</h2>
+		<ProseHeading level={2} id="when-to-use-redshift">When to Use Redshift</ProseHeading>
 		<p><strong>Redshift is ideal for:</strong></p>
 		<ul>
 			<li>Solo developers and small teams</li>
@@ -163,7 +164,7 @@ import { CheckCircle, XCircle, Minus } from '@lucide/svelte';
 			<li>Professional support SLAs</li>
 		</ul>
 
-		<h2>Migrating from Doppler</h2>
+		<ProseHeading level={2} id="migrating-from-doppler">Migrating from Doppler</ProseHeading>
 		<p>
 			Redshift's CLI is designed to be Doppler-compatible, making migration straightforward:
 		</p>
@@ -201,7 +202,7 @@ import { CheckCircle, XCircle, Minus } from '@lucide/svelte';
 			</table>
 		</div>
 
-		<h2>The Bottom Line</h2>
+		<ProseHeading level={2} id="the-bottom-line">The Bottom Line</ProseHeading>
 		<p>
 			Redshift offers a fundamentally different trust model. Instead of trusting a company with your secrets, you trust cryptography. Your secrets are encrypted with keys only you control, and stored on a decentralized network with no single point of failure.
 		</p>
@@ -210,7 +211,7 @@ import { CheckCircle, XCircle, Minus } from '@lucide/svelte';
 			This comes with trade-offs - you're responsible for backing up your Nostr keys, and some enterprise features aren't available yet. But for developers who value sovereignty and simplicity, Redshift offers a compelling alternative to the status quo.
 		</p>
 
-		<h2>Get Started</h2>
+		<ProseHeading level={2} id="get-started">Get Started</ProseHeading>
 		<p>
 			Ready to try Redshift? <a href="/docs/installation">Install the CLI</a> and follow the <a href="/docs/quickstart">Quick Start guide</a>.
 		</p>

@@ -1,6 +1,7 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
-import { CheckCircle } from '@lucide/svelte';
+import ProseHeading from '$lib/components/ProseHeading.svelte';
+import { CircleCheck } from '@lucide/svelte';
 </script>
 
 <svelte:head>
@@ -15,32 +16,32 @@ import { CheckCircle } from '@lucide/svelte';
 	</p>
 
 	<section class="prose prose-invert max-w-none">
-		<h2>Quick Install (Recommended)</h2>
+		<ProseHeading level={2} id="quick-install">Quick Install (Recommended)</ProseHeading>
 		<p>
 			The fastest way to install Redshift is using the install script. This works on macOS, Linux, and Windows (WSL):
 		</p>
 
-		<CodeBlock code="curl -fsSL https://redshiftapp.com/install | sh" />
+		<CodeBlock code="curl -fsSL https://redshiftapp.com/install | sh" language="bash" />
 
 		<p>
 			This will download the latest release and install it to <code>~/.redshift/bin</code>, then add it to your PATH.
 		</p>
 
-		<h2>Package Managers</h2>
+		<ProseHeading level={2} id="package-managers">Package Managers</ProseHeading>
 
-		<h3>npm / Bun</h3>
+		<ProseHeading level={3} id="npm-bun">npm / Bun</ProseHeading>
 		<p>If you prefer using a JavaScript package manager:</p>
 		<CodeBlock code={`# Using npm
 npm install -g @redshift/cli
 
 # Using bun
-bun add -g @redshift/cli`} />
+bun add -g @redshift/cli`} language="bash" />
 
-		<h3>Homebrew (macOS)</h3>
+		<ProseHeading level={3} id="homebrew">Homebrew (macOS)</ProseHeading>
 		<p>Coming soon:</p>
-		<CodeBlock code="brew install redshift" />
+		<CodeBlock code="brew install redshift" language="bash" />
 
-		<h2>Manual Installation</h2>
+		<ProseHeading level={2} id="manual-installation">Manual Installation</ProseHeading>
 		<p>
 			Download the appropriate binary for your platform from the 
 			<a href="https://github.com/accolver/redshift/releases" target="_blank" rel="noopener">GitHub releases page</a>:
@@ -55,34 +56,34 @@ bun add -g @redshift/cli`} />
 
 		<p>Then make it executable and move to your PATH:</p>
 		<CodeBlock code={`chmod +x redshift-*
-sudo mv redshift-* /usr/local/bin/redshift`} />
+sudo mv redshift-* /usr/local/bin/redshift`} language="bash" />
 
-		<h2>Verify Installation</h2>
+		<ProseHeading level={2} id="verify-installation">Verify Installation</ProseHeading>
 		<p>Confirm Redshift is installed correctly:</p>
 		<CodeBlock code={`redshift --version
-# Output: redshift v0.1.0`} />
+# Output: redshift v0.1.0`} language="bash" />
 
-		<h2>System Requirements</h2>
+		<ProseHeading level={2} id="system-requirements">System Requirements</ProseHeading>
 		<div class="not-prose my-6 space-y-3">
 			<div class="flex items-center gap-3">
-				<CheckCircle class="size-5 text-tokyo-green" />
+				<CircleCheck class="size-5 text-tokyo-green" />
 				<span>macOS 12+ (Monterey or later)</span>
 			</div>
 			<div class="flex items-center gap-3">
-				<CheckCircle class="size-5 text-tokyo-green" />
+				<CircleCheck class="size-5 text-tokyo-green" />
 				<span>Linux (glibc 2.17+, most modern distributions)</span>
 			</div>
 			<div class="flex items-center gap-3">
-				<CheckCircle class="size-5 text-tokyo-green" />
+				<CircleCheck class="size-5 text-tokyo-green" />
 				<span>Windows 10+ with WSL2</span>
 			</div>
 			<div class="flex items-center gap-3">
-				<CheckCircle class="size-5 text-tokyo-green" />
+				<CircleCheck class="size-5 text-tokyo-green" />
 				<span>Node.js 18+ (only for npm installation)</span>
 			</div>
 		</div>
 
-		<h2>Next Steps</h2>
+		<ProseHeading level={2} id="next-steps">Next Steps</ProseHeading>
 		<p>
 			Now that Redshift is installed, continue to the <a href="/docs/quickstart">Quick Start guide</a> to create your first project and store some secrets.
 		</p>

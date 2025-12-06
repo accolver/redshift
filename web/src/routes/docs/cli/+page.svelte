@@ -1,5 +1,6 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
+import ProseHeading from '$lib/components/ProseHeading.svelte';
 </script>
 
 <svelte:head>
@@ -14,7 +15,7 @@ import CodeBlock from '$lib/components/CodeBlock.svelte';
 	</p>
 
 	<section class="prose prose-invert max-w-none">
-		<h2>Global Options</h2>
+		<ProseHeading level={2} id="global-options">Global Options</ProseHeading>
 		<p>These options are available for all commands:</p>
 
 		<div class="not-prose my-6 overflow-x-auto">
@@ -44,18 +45,18 @@ import CodeBlock from '$lib/components/CodeBlock.svelte';
 
 		<hr />
 
-		<h2 id="login">redshift login</h2>
+		<ProseHeading level={2} id="login">redshift login</ProseHeading>
 		<p>Authenticate with your Nostr identity.</p>
 
-		<CodeBlock code={`redshift login [options]
+		<CodeBlock language="bash" code={`redshift login [options]
 
 Options:
   --nsec <nsec>      Login with private key directly
   --bunker <uri>     Login via NIP-46 bunker
   --generate         Generate a new Nostr identity`} />
 
-		<h3>Examples</h3>
-		<CodeBlock code={`# Interactive login (recommended)
+		<ProseHeading level={3} id="login-examples">Examples</ProseHeading>
+		<CodeBlock language="bash" code={`# Interactive login (recommended)
 redshift login
 
 # Login with nsec
@@ -67,7 +68,7 @@ redshift login --bunker "bunker://pubkey?relay=wss://...&secret=..."
 # Generate new identity
 redshift login --generate`} />
 
-		<h3>Environment Variables</h3>
+		<ProseHeading level={3} id="login-environment-variables">Environment Variables</ProseHeading>
 		<ul>
 			<li><code>REDSHIFT_NSEC</code> - Private key for authentication</li>
 			<li><code>REDSHIFT_BUNKER</code> - Bunker URI for remote signing</li>
@@ -75,17 +76,17 @@ redshift login --generate`} />
 
 		<hr />
 
-		<h2 id="setup">redshift setup</h2>
+		<ProseHeading level={2} id="setup">redshift setup</ProseHeading>
 		<p>Configure a project and environment for the current directory.</p>
 
-		<CodeBlock code={`redshift setup [options]
+		<CodeBlock language="bash" code={`redshift setup [options]
 
 Options:
   --project <name>       Project name or ID
   --environment <slug>   Environment slug (e.g., dev, staging, prod)`} />
 
-		<h3>Examples</h3>
-		<CodeBlock code={`# Interactive setup
+		<ProseHeading level={3} id="setup-examples">Examples</ProseHeading>
+		<CodeBlock language="bash" code={`# Interactive setup
 redshift setup
 
 # Direct setup
@@ -94,25 +95,25 @@ redshift setup --project my-app --environment development`} />
 		<p>
 			This creates a <code>.redshift.json</code> file in the current directory:
 		</p>
-		<CodeBlock code={`{
+		<CodeBlock language="json" code={`{
   "project": "my-app",
   "environment": "development"
 }`} />
 
 		<hr />
 
-		<h2 id="run">redshift run</h2>
+		<ProseHeading level={2} id="run">redshift run</ProseHeading>
 		<p>Inject secrets as environment variables and run a command.</p>
 
-		<CodeBlock code={`redshift run [options] -- <command> [args...]
+		<CodeBlock language="bash" code={`redshift run [options] -- <command> [args...]
 
 Options:
   --project <name>       Override project (instead of .redshift.json)
   --environment <slug>   Override environment
   --fallback <file>      Fallback .env file if secrets unavailable`} />
 
-		<h3>Examples</h3>
-		<CodeBlock code={`# Run with secrets
+		<ProseHeading level={3} id="run-examples">Examples</ProseHeading>
+		<CodeBlock language="bash" code={`# Run with secrets
 redshift run -- npm start
 redshift run -- python manage.py runserver
 redshift run -- go run main.go
@@ -125,20 +126,20 @@ redshift run --fallback .env.local -- npm start`} />
 
 		<hr />
 
-		<h2 id="secrets">redshift secrets</h2>
+		<ProseHeading level={2} id="secrets">redshift secrets</ProseHeading>
 		<p>Manage secrets for a project/environment.</p>
 
-		<h3>secrets list</h3>
+		<ProseHeading level={3} id="secrets-list">secrets list</ProseHeading>
 		<p>List all secrets in the current environment.</p>
-		<CodeBlock code={`redshift secrets list [options]
+		<CodeBlock language="bash" code={`redshift secrets list [options]
 
 Options:
   --json       Output as JSON
   --keys-only  Only show key names, not values`} />
 
-		<h3>secrets set</h3>
+		<ProseHeading level={3} id="secrets-set">secrets set</ProseHeading>
 		<p>Set a secret value.</p>
-		<CodeBlock code={`redshift secrets set <key> <value>
+		<CodeBlock language="bash" code={`redshift secrets set <key> <value>
 
 # Examples
 redshift secrets set DATABASE_URL "postgres://localhost/mydb"
@@ -147,23 +148,23 @@ redshift secrets set API_KEY "sk-..."
 # Read from stdin (for sensitive values)
 echo "secret-value" | redshift secrets set API_KEY`} />
 
-		<h3>secrets get</h3>
+		<ProseHeading level={3} id="secrets-get">secrets get</ProseHeading>
 		<p>Get a single secret value.</p>
-		<CodeBlock code={`redshift secrets get <key>
+		<CodeBlock language="bash" code={`redshift secrets get <key>
 
 # Example
 redshift secrets get DATABASE_URL`} />
 
-		<h3>secrets delete</h3>
+		<ProseHeading level={3} id="secrets-delete">secrets delete</ProseHeading>
 		<p>Delete a secret.</p>
-		<CodeBlock code={`redshift secrets delete <key>
+		<CodeBlock language="bash" code={`redshift secrets delete <key>
 
 # Example
 redshift secrets delete OLD_API_KEY`} />
 
-		<h3>secrets import</h3>
+		<ProseHeading level={3} id="secrets-import">secrets import</ProseHeading>
 		<p>Import secrets from a file.</p>
-		<CodeBlock code={`redshift secrets import <file>
+		<CodeBlock language="bash" code={`redshift secrets import <file>
 
 # Import from .env file
 redshift secrets import .env
@@ -171,9 +172,9 @@ redshift secrets import .env
 # Import from JSON
 redshift secrets import secrets.json`} />
 
-		<h3>secrets export</h3>
+		<ProseHeading level={3} id="secrets-export">secrets export</ProseHeading>
 		<p>Export secrets to a file.</p>
-		<CodeBlock code={`redshift secrets export [options]
+		<CodeBlock language="bash" code={`redshift secrets export [options]
 
 Options:
   --format <type>   Output format: env, json, yaml (default: env)
@@ -185,18 +186,18 @@ redshift secrets export --format json > secrets.json`} />
 
 		<hr />
 
-		<h2 id="serve">redshift serve</h2>
+		<ProseHeading level={2} id="serve">redshift serve</ProseHeading>
 		<p>Start the local web admin UI.</p>
 
-		<CodeBlock code={`redshift serve [options]
+		<CodeBlock language="bash" code={`redshift serve [options]
 
 Options:
   --port <port>   Port to listen on (default: 3000)
   --host <host>   Host to bind to (default: localhost)
   --open          Open browser automatically`} />
 
-		<h3>Examples</h3>
-		<CodeBlock code={`# Start server
+		<ProseHeading level={3} id="serve-examples">Examples</ProseHeading>
+		<CodeBlock language="bash" code={`# Start server
 redshift serve
 
 # Custom port
@@ -207,7 +208,7 @@ redshift serve --open`} />
 
 		<hr />
 
-		<h2>Environment Variables</h2>
+		<ProseHeading level={2} id="environment-variables">Environment Variables</ProseHeading>
 		<p>Redshift respects these environment variables:</p>
 
 		<div class="not-prose my-6 overflow-x-auto">
@@ -239,18 +240,18 @@ redshift serve --open`} />
 			</table>
 		</div>
 
-		<h2>Configuration Files</h2>
+		<ProseHeading level={2} id="configuration-files">Configuration Files</ProseHeading>
 		
-		<h3>.redshift.json (Project Config)</h3>
+		<ProseHeading level={3} id="redshift-json">.redshift.json (Project Config)</ProseHeading>
 		<p>Located in your project directory, specifies which project/environment to use:</p>
-		<CodeBlock code={`{
+		<CodeBlock language="json" code={`{
   "project": "my-app",
   "environment": "development"
 }`} />
 
-		<h3>~/.config/redshift/config.json (Global Config)</h3>
+		<ProseHeading level={3} id="global-config">~/.config/redshift/config.json (Global Config)</ProseHeading>
 		<p>Global settings and cached credentials:</p>
-		<CodeBlock code={`{
+		<CodeBlock language="json" code={`{
   "relays": [
     "wss://relay.damus.io",
     "wss://relay.primal.net"
@@ -258,7 +259,7 @@ redshift serve --open`} />
   "defaultProject": "my-app"
 }`} />
 
-		<h2>Exit Codes</h2>
+		<ProseHeading level={2} id="exit-codes">Exit Codes</ProseHeading>
 		<div class="not-prose my-6 overflow-x-auto">
 			<table class="w-full text-sm">
 				<thead>

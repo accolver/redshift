@@ -1,4 +1,6 @@
 <script lang="ts">
+import CodeBlock from '$lib/components/CodeBlock.svelte';
+import ProseHeading from '$lib/components/ProseHeading.svelte';
 </script>
 
 <svelte:head>
@@ -13,24 +15,24 @@
 	</p>
 
 	<section class="prose prose-invert max-w-none">
-		<h2>Accessing the Web Admin</h2>
+		<ProseHeading level={2} id="accessing-the-web-admin">Accessing the Web Admin</ProseHeading>
 		<p>There are two ways to access the Redshift web admin:</p>
 
-		<h3>Hosted Version</h3>
+		<ProseHeading level={3} id="hosted-version">Hosted Version</ProseHeading>
 		<p>
 			Visit <a href="https://redshiftapp.com/admin" target="_blank">redshiftapp.com/admin</a> to use the hosted web admin. This connects directly to Nostr relays from your browser - no data passes through our servers.
 		</p>
 
-		<h3>Local Version</h3>
+		<ProseHeading level={3} id="local-version">Local Version</ProseHeading>
 		<p>
 			Run the web admin locally using the CLI:
 		</p>
-		<pre><code>redshift serve --open</code></pre>
+		<CodeBlock language="bash" code="redshift serve --open" />
 		<p>
 			This starts a local server at <code>http://localhost:3000</code> with the same functionality.
 		</p>
 
-		<h2>Connecting</h2>
+		<ProseHeading level={2} id="connecting">Connecting</ProseHeading>
 		<p>
 			When you first open the web admin, you'll need to connect with your Nostr identity:
 		</p>
@@ -46,7 +48,7 @@
 			<li>Approve the connection if prompted by your extension</li>
 		</ol>
 
-		<h2>Dashboard</h2>
+		<ProseHeading level={2} id="dashboard">Dashboard</ProseHeading>
 		<p>
 			After connecting, you'll see your dashboard showing all your projects. From here you can:
 		</p>
@@ -57,9 +59,9 @@
 			<li>Access global search (⌘K / Ctrl+K)</li>
 		</ul>
 
-		<h2>Managing Projects</h2>
+		<ProseHeading level={2} id="managing-projects">Managing Projects</ProseHeading>
 		
-		<h3>Creating a Project</h3>
+		<ProseHeading level={3} id="creating-a-project">Creating a Project</ProseHeading>
 		<ol>
 			<li>Click "New Project" on the dashboard</li>
 			<li>Enter a project name (e.g., "my-api", "frontend")</li>
@@ -69,7 +71,7 @@
 			New projects automatically include a "Development" environment. You can add more environments like staging and production.
 		</p>
 
-		<h3>Project Settings</h3>
+		<ProseHeading level={3} id="project-settings">Project Settings</ProseHeading>
 		<p>Click on a project to access its settings:</p>
 		<ul>
 			<li><strong>Rename</strong> - Change the project name</li>
@@ -77,12 +79,12 @@
 			<li><strong>Delete</strong> - Remove the project and all its secrets</li>
 		</ul>
 
-		<h2>Managing Environments</h2>
+		<ProseHeading level={2} id="managing-environments">Managing Environments</ProseHeading>
 		<p>
 			Environments let you separate secrets for different stages (dev, staging, prod):
 		</p>
 
-		<h3>Adding an Environment</h3>
+		<ProseHeading level={3} id="adding-an-environment">Adding an Environment</ProseHeading>
 		<ol>
 			<li>Open a project</li>
 			<li>Click "Add Environment"</li>
@@ -90,14 +92,14 @@
 			<li>Click "Add"</li>
 		</ol>
 
-		<h3>Switching Environments</h3>
+		<ProseHeading level={3} id="switching-environments">Switching Environments</ProseHeading>
 		<p>
 			Use the environment tabs at the top of the project page to switch between environments. Each environment has its own set of secrets.
 		</p>
 
-		<h2>Managing Secrets</h2>
+		<ProseHeading level={2} id="managing-secrets">Managing Secrets</ProseHeading>
 
-		<h3>Adding Secrets</h3>
+		<ProseHeading level={3} id="adding-secrets">Adding Secrets</ProseHeading>
 		<ol>
 			<li>Open a project and select an environment</li>
 			<li>Click "Add Secret" or use the inline form</li>
@@ -106,17 +108,17 @@
 			<li>Click "Save" or press Enter</li>
 		</ol>
 
-		<h3>Editing Secrets</h3>
+		<ProseHeading level={3} id="editing-secrets">Editing Secrets</ProseHeading>
 		<p>
 			Click on any secret value to edit it inline. Press Enter to save or Escape to cancel.
 		</p>
 
-		<h3>Deleting Secrets</h3>
+		<ProseHeading level={3} id="deleting-secrets">Deleting Secrets</ProseHeading>
 		<p>
 			Click the trash icon next to a secret to delete it. This action requires confirmation.
 		</p>
 
-		<h3>Bulk Operations</h3>
+		<ProseHeading level={3} id="bulk-operations">Bulk Operations</ProseHeading>
 		<p>
 			Use the Import/Export buttons to work with multiple secrets:
 		</p>
@@ -125,7 +127,7 @@
 			<li><strong>Export</strong> - Download secrets as .env or JSON format</li>
 		</ul>
 
-		<h2>Search</h2>
+		<ProseHeading level={2} id="search">Search</ProseHeading>
 		<p>
 			Press <kbd>⌘K</kbd> (Mac) or <kbd>Ctrl+K</kbd> (Windows/Linux) to open global search:
 		</p>
@@ -135,7 +137,7 @@
 			<li>Quick navigation to any project or environment</li>
 		</ul>
 
-		<h2>Relay Status</h2>
+		<ProseHeading level={2} id="relay-status">Relay Status</ProseHeading>
 		<p>
 			The relay indicator in the header shows your connection status:
 		</p>
@@ -148,7 +150,7 @@
 			Click the indicator to see details about which relays are connected.
 		</p>
 
-		<h2>Security Notes</h2>
+		<ProseHeading level={2} id="security-notes">Security Notes</ProseHeading>
 		<ul>
 			<li><strong>Client-side encryption</strong> - All secrets are encrypted in your browser before being sent to relays</li>
 			<li><strong>No server storage</strong> - The hosted version doesn't store any of your data</li>
@@ -156,7 +158,7 @@
 			<li><strong>Disconnect when done</strong> - Click your profile and "Disconnect" when finished</li>
 		</ul>
 
-		<h2>Keyboard Shortcuts</h2>
+		<ProseHeading level={2} id="keyboard-shortcuts">Keyboard Shortcuts</ProseHeading>
 		<div class="not-prose my-6 overflow-x-auto">
 			<table class="w-full text-sm">
 				<thead>

@@ -360,3 +360,46 @@
 .prose :where(a):not(:where([class~="not-prose"], [class~="not-prose"] *)):hover {
 	text-decoration: underline;
 }
+
+/* Linkable prose headings */
+.prose-heading {
+	scroll-margin-top: 5rem;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.prose-heading-link {
+	opacity: 0;
+	color: var(--muted-foreground);
+	transition: opacity 0.15s ease, color 0.15s ease;
+	flex-shrink: 0;
+}
+
+.prose-heading:hover .prose-heading-link,
+.prose-heading-link:focus {
+	opacity: 1;
+}
+
+.prose-heading-link:hover {
+	color: var(--tokyo-blue);
+}
+
+/* Highlight target heading when navigated via hash */
+.prose-heading:target {
+	animation: heading-highlight 2s ease-out;
+}
+
+@keyframes heading-highlight {
+	0% {
+		background-color: rgba(122, 162, 247, 0.2);
+		margin-left: -0.5rem;
+		padding-left: 0.5rem;
+		border-radius: 0.25rem;
+	}
+	100% {
+		background-color: transparent;
+		margin-left: 0;
+		padding-left: 0;
+	}
+}
