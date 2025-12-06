@@ -54,7 +54,7 @@
 	--sidebar-ring: #7aa2f7;
 
 	/* Base Settings */
-	--font-sans: Inter, system-ui, sans-serif;
+	--font-sans: "Space Grotesk", system-ui, sans-serif;
 	--font-serif: "Source Serif 4", serif;
 	--font-mono: "JetBrains Mono", "Fira Code", monospace;
 	--radius: 0.5rem;
