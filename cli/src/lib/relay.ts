@@ -48,10 +48,13 @@ export function createRelayPool(relayUrls: string[]): RelayPool {
 		pool,
 
 		subscribe(filter, onEvent, onEose) {
-			const sub = pool.subscribeMany(relayUrls, [filter], {
+			const params: { onevent: (event: NostrEvent) => void; oneose?: () => void } = {
 				onevent: (event) => onEvent(event as NostrEvent),
-				oneose: onEose,
-			});
+			};
+			if (onEose) {
+				params.oneose = onEose;
+			}
+			const sub = pool.subscribeMany(relayUrls, filter, params);
 			return { close: () => sub.close() };
 		},
 

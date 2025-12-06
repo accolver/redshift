@@ -172,31 +172,6 @@ export function parseCommand(argv: string[]): ParsedCommand {
 }
 
 /**
- * Inject secrets into an environment object.
- * Complex values (objects/arrays) are JSON.stringify'd.
- *
- * @param env - The base environment object
- * @param secrets - The secrets to inject
- * @returns New environment object with secrets merged
- */
-export function injectSecrets(env: NodeJS.ProcessEnv, secrets: SecretBundle): NodeJS.ProcessEnv {
-	const result: NodeJS.ProcessEnv = { ...env };
-
-	for (const [key, value] of Object.entries(secrets)) {
-		if (typeof value === 'string') {
-			result[key] = value;
-		} else if (typeof value === 'number' || typeof value === 'boolean') {
-			result[key] = String(value);
-		} else {
-			// Complex values (objects, arrays) are JSON-serialized
-			result[key] = JSON.stringify(value);
-		}
-	}
-
-	return result;
-}
-
-/**
  * Format secrets for display (with values masked).
  *
  * @param secrets - The secrets to format

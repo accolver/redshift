@@ -28,6 +28,7 @@ import {
 	saveConfig,
 } from '../lib/config';
 import { decodeNsec, validateNsec } from '../lib/crypto';
+import type { BunkerAuth } from '../lib/types';
 
 export interface LoginOptions {
 	nsec?: string;
@@ -96,7 +97,7 @@ async function loginWithNsec(nsec: string): Promise<void> {
 	const config = await loadConfig();
 	config.authMethod = 'nsec';
 	config.nsec = nsec;
-	config.bunker = undefined;
+	delete config.bunker;
 	await saveConfig(config);
 
 	console.log('\n✓ Logged in successfully!');
@@ -122,12 +123,15 @@ async function loginWithBunker(bunkerUrl: string): Promise<void> {
 		const npub = npubEncode(connection.userPubkey);
 
 		// Save bunker auth
-		await saveBunkerAuth({
+		const bunkerAuth: BunkerAuth = {
 			bunkerPubkey: connection.bunkerPointer.pubkey,
 			relays: connection.bunkerPointer.relays,
-			secret: connection.bunkerPointer.secret || undefined,
 			clientSecretKey: Buffer.from(connection.clientSecretKey).toString('hex'),
-		});
+		};
+		if (connection.bunkerPointer.secret) {
+			bunkerAuth.secret = connection.bunkerPointer.secret;
+		}
+		await saveBunkerAuth(bunkerAuth);
 
 		console.log('\n✓ Connected to bunker successfully!');
 		console.log(`  User: ${npub}`);
@@ -159,12 +163,15 @@ async function loginWithNostrConnect(): Promise<void> {
 		const npub = npubEncode(connection.userPubkey);
 
 		// Save bunker auth
-		await saveBunkerAuth({
+		const bunkerAuth: BunkerAuth = {
 			bunkerPubkey: connection.bunkerPointer.pubkey,
 			relays: connection.bunkerPointer.relays,
-			secret: connection.bunkerPointer.secret || undefined,
 			clientSecretKey: Buffer.from(connection.clientSecretKey).toString('hex'),
-		});
+		};
+		if (connection.bunkerPointer.secret) {
+			bunkerAuth.secret = connection.bunkerPointer.secret;
+		}
+		await saveBunkerAuth(bunkerAuth);
 
 		console.log('\n✓ Connected successfully!');
 		console.log(`  User: ${npub}`);

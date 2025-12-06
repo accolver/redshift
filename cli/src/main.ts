@@ -79,26 +79,30 @@ async function main(): Promise<void> {
 			console.log(`redshift v${VERSION}`);
 			break;
 
-		case 'login':
-			await loginCommand({
-				nsec: typeof flags.nsec === 'string' ? flags.nsec : undefined,
-				bunker: typeof flags.bunker === 'string' ? flags.bunker : undefined,
+		case 'login': {
+			const loginOpts: import('./commands/login').LoginOptions = {
 				connect: flags.connect === true,
 				force: flags.force === true,
-			});
+			};
+			if (typeof flags.nsec === 'string') loginOpts.nsec = flags.nsec;
+			if (typeof flags.bunker === 'string') loginOpts.bunker = flags.bunker;
+			await loginCommand(loginOpts);
 			break;
+		}
 
 		case 'logout':
 			await logoutCommand();
 			break;
 
-		case 'setup':
-			await setupCommand({
-				project: typeof flags.project === 'string' ? flags.project : undefined,
-				environment: typeof flags.environment === 'string' ? flags.environment : undefined,
+		case 'setup': {
+			const setupOpts: import('./commands/setup').SetupOptions = {
 				force: flags.force === true,
-			});
+			};
+			if (typeof flags.project === 'string') setupOpts.project = flags.project;
+			if (typeof flags.environment === 'string') setupOpts.environment = flags.environment;
+			await setupCommand(setupOpts);
 			break;
+		}
 
 		case 'run': {
 			if (cmdArgs.length === 0) {
@@ -106,11 +110,12 @@ async function main(): Promise<void> {
 				console.error('Usage: redshift run -- <command>');
 				process.exit(1);
 			}
-			await runCommand({
+			const runOpts: import('./commands/run').RunOptions = {
 				command: cmdArgs,
-				project: typeof flags.project === 'string' ? flags.project : undefined,
-				environment: typeof flags.environment === 'string' ? flags.environment : undefined,
-			});
+			};
+			if (typeof flags.project === 'string') runOpts.project = flags.project;
+			if (typeof flags.environment === 'string') runOpts.environment = flags.environment;
+			await runCommand(runOpts);
 			break;
 		}
 
@@ -124,18 +129,18 @@ async function main(): Promise<void> {
 				process.exit(1);
 			}
 
-			await secretsCommand({
+			const secretsOpts: import('./commands/secrets').SecretsOptions = {
 				subcommand,
-				key: cmdArgs[1],
-				value: cmdArgs[2],
-				project: typeof flags.project === 'string' ? flags.project : undefined,
-				environment: typeof flags.environment === 'string' ? flags.environment : undefined,
 				raw: flags.raw === true,
-				format:
-					flags.format === 'json' || flags.format === 'env' || flags.format === 'table'
-						? flags.format
-						: undefined,
-			});
+			};
+			if (cmdArgs[1]) secretsOpts.key = cmdArgs[1];
+			if (cmdArgs[2]) secretsOpts.value = cmdArgs[2];
+			if (typeof flags.project === 'string') secretsOpts.project = flags.project;
+			if (typeof flags.environment === 'string') secretsOpts.environment = flags.environment;
+			if (flags.format === 'json' || flags.format === 'env' || flags.format === 'table') {
+				secretsOpts.format = flags.format;
+			}
+			await secretsCommand(secretsOpts);
 			break;
 		}
 

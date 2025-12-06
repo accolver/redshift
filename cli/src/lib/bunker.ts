@@ -224,6 +224,13 @@ export class BunkerSecretManager {
 	}
 
 	/**
+	 * Get the relay URLs for publishing
+	 */
+	getRelays(): string[] {
+		return this.relays;
+	}
+
+	/**
 	 * Sign an event using the bunker
 	 */
 	async signEvent(event: EventTemplate): Promise<VerifiedEvent> {

@@ -6,7 +6,8 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { formatSecrets, injectSecrets, parseCommand } from '../../src/commands/parser';
+import { formatSecrets, parseCommand } from '../../src/commands/parser';
+import { injectSecrets } from '../../src/lib/secret-manager';
 import type { SecretBundle } from '../../src/lib/types';
 
 describe('parseCommand', () => {

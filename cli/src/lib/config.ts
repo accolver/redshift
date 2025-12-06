@@ -182,16 +182,20 @@ export async function getAuth(): Promise<AuthResult | null> {
 		const url = new URL(envBunker);
 		const bunkerPubkey = url.hostname || url.pathname.replace('//', '');
 		const relays = url.searchParams.getAll('relay');
-		const secret = url.searchParams.get('secret') || undefined;
+		const secret = url.searchParams.get('secret');
+
+		const bunkerAuth: BunkerAuth = {
+			bunkerPubkey,
+			relays,
+			clientSecretKey: '', // Will need to generate or retrieve
+		};
+		if (secret) {
+			bunkerAuth.secret = secret;
+		}
 
 		return {
 			method: 'bunker',
-			bunker: {
-				bunkerPubkey,
-				relays,
-				secret,
-				clientSecretKey: '', // Will need to generate or retrieve
-			},
+			bunker: bunkerAuth,
 			source: 'env',
 		};
 	}
@@ -220,7 +224,7 @@ export async function saveBunkerAuth(bunker: BunkerAuth): Promise<void> {
 	config.authMethod = 'bunker';
 	config.bunker = bunker;
 	// Clear nsec when switching to bunker
-	config.nsec = undefined;
+	delete config.nsec;
 	await saveConfig(config);
 }
 
@@ -229,8 +233,8 @@ export async function saveBunkerAuth(bunker: BunkerAuth): Promise<void> {
  */
 export async function clearAuth(): Promise<void> {
 	const config = await loadConfig();
-	config.authMethod = undefined;
-	config.nsec = undefined;
-	config.bunker = undefined;
+	delete config.authMethod;
+	delete config.nsec;
+	delete config.bunker;
 	await saveConfig(config);
 }
