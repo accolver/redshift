@@ -28,10 +28,10 @@ functional, with comprehensive test coverage.
 
 ### High Priority
 
-| Feature                         | Description                                                                            | Status                        |
-| ------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------- |
-| **Binary embeds SvelteKit app** | `redshift serve` currently shows placeholder HTML instead of the actual built admin UI | Not started                   |
-| **`secrets upload` command**    | Import secrets from .env file via CLI                                                  | Returns "not yet implemented" |
+| Feature                         | Description                                                                  | Status   |
+| ------------------------------- | ---------------------------------------------------------------------------- | -------- |
+| **Binary embeds SvelteKit app** | `redshift serve` serves the actual SvelteKit admin UI embedded in the binary | Complete |
+| **`secrets upload` command**    | Import secrets from .env file via CLI: `redshift secrets upload [file]`      | Complete |
 
 ### Medium Priority
 
