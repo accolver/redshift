@@ -25,9 +25,7 @@ import {
 	setSecretToMultipleEnvs,
 	deleteSecret,
 } from '$lib/stores/secrets.svelte';
-import { getAuthState } from '$lib/stores/auth.svelte';
-import { publishEvent, REDSHIFT_KIND, getSecretsDTag } from '$lib/stores/nostr.svelte';
-import { createSecretsContent } from '$lib/models/secrets';
+import { getAuthState, supportsEncryption } from '$lib/stores/auth.svelte';
 import {
 	ChevronDown,
 	Plus,
@@ -217,6 +215,12 @@ async function saveAllChanges() {
 
 	if (toSave.length === 0 && !hasNewSecret) return;
 
+	// Check if encryption is supported
+	if (!supportsEncryption()) {
+		console.error('NIP-59 encryption requires nsec authentication');
+		return;
+	}
+
 	// If project has multiple environments, show the multi-env save modal
 	if (project && project.environments.length > 1) {
 		// Collect all secrets that need to be saved
@@ -247,77 +251,22 @@ async function saveAllChanges() {
 	savingSecrets = new Set(savingSecrets);
 
 	try {
-		// Build the new secrets array with all changes applied
-		let updatedSecrets = [...secretsState.secrets];
-		const keysToRemove: string[] = [];
-
+		// Save each secret using the store (which handles Gift Wrap encryption)
 		for (const [originalKey, edited] of toSave) {
-			const originalIndex = updatedSecrets.findIndex((s) => s.key === originalKey);
-
-			if (originalIndex !== -1) {
-				// If key changed, mark old for removal and add new
-				if (edited.key !== originalKey) {
-					keysToRemove.push(originalKey);
-					// Check if new key already exists (update it) or add new
-					const existingNewIndex = updatedSecrets.findIndex((s) => s.key === edited.key);
-					if (existingNewIndex !== -1) {
-						updatedSecrets[existingNewIndex] = { key: edited.key, value: edited.value };
-					} else {
-						updatedSecrets.push({ key: edited.key, value: edited.value });
-					}
-				} else {
-					// Just update the value
-					updatedSecrets[originalIndex] = { key: edited.key, value: edited.value };
-				}
+			// If key changed, delete old and add new
+			if (edited.key !== originalKey) {
+				await deleteSecret(originalKey);
 			}
+			await setSecret(edited.key, edited.value);
 		}
-
-		// Remove old keys that were renamed
-		updatedSecrets = updatedSecrets.filter((s) => !keysToRemove.includes(s.key));
 
 		// Add new secret if present
 		if (hasNewSecret) {
-			const trimmedKey = newSecretKey.trim();
-			// Check if key already exists
-			const existingIndex = updatedSecrets.findIndex((s) => s.key === trimmedKey);
-			if (existingIndex !== -1) {
-				updatedSecrets[existingIndex] = { key: trimmedKey, value: newSecretValue };
-			} else {
-				updatedSecrets.push({ key: trimmedKey, value: newSecretValue });
-			}
-			// Track for saving state
+			const trimmedKey = newSecretKey.trim().toUpperCase();
+			await setSecret(trimmedKey, newSecretValue);
 			savingSecrets.add(trimmedKey);
 			savedKeyMap.set('__new__', trimmedKey);
 		}
-
-		// Now save all secrets at once
-		const auth = getAuthState();
-		if (!auth.isConnected || !auth.pubkey) {
-			throw new Error('Must be connected to save secrets');
-		}
-
-		const { projectId, environmentSlug } = getSecretsContext();
-		if (!projectId || !environmentSlug) {
-			throw new Error('No project/environment selected');
-		}
-
-		const content = createSecretsContent(updatedSecrets);
-
-		const unsignedEvent = {
-			kind: REDSHIFT_KIND,
-			created_at: Math.floor(Date.now() / 1000),
-			tags: [['d', getSecretsDTag(projectId, environmentSlug)]],
-			content: JSON.stringify(content),
-		};
-
-		let signedEvent;
-		if (auth.method === 'nip07' && window.nostr) {
-			signedEvent = await window.nostr.signEvent(unsignedEvent);
-		} else {
-			throw new Error('Local signing not yet implemented.');
-		}
-
-		await publishEvent(signedEvent);
 
 		// Mark all as saved (use the new keys)
 		for (const [originalKey, newKey] of savedKeyMap) {
@@ -411,6 +360,7 @@ $effect(() => {
 	if (currentProjectId && currentEnvSlug) {
 		// Use untrack to read environments without creating dependency on array changes
 		const allEnvSlugs = untrack(() => project?.environments.map((e) => e.slug) ?? []);
+		// subscribeToSecrets is async but effect can't await - it handles errors internally
 		subscribeToSecrets(currentProjectId, currentEnvSlug, allEnvSlugs);
 	}
 });
@@ -650,44 +600,26 @@ async function handleImportSecrets(
 		return;
 	}
 
-	const { projectId, environmentSlug } = getSecretsContext();
-	if (!projectId || !environmentSlug) {
-		console.error('No project/environment selected');
+	if (!supportsEncryption()) {
+		console.error('NIP-59 encryption requires nsec authentication');
 		return;
 	}
 
-	let finalSecrets: import('$lib/types/nostr').Secret[];
-
-	if (mode === 'replace') {
-		// Replace all existing secrets with imported ones
-		finalSecrets = importedSecrets;
-	} else {
-		// Merge: add new, update existing
-		const existingMap = new Map(secretsState.secrets.map((s) => [s.key, s]));
-		for (const imported of importedSecrets) {
-			existingMap.set(imported.key, imported);
-		}
-		finalSecrets = Array.from(existingMap.values());
-	}
-
 	try {
-		const content = createSecretsContent(finalSecrets);
-
-		const unsignedEvent = {
-			kind: REDSHIFT_KIND,
-			created_at: Math.floor(Date.now() / 1000),
-			tags: [['d', getSecretsDTag(projectId, environmentSlug)]],
-			content: JSON.stringify(content),
-		};
-
-		let signedEvent;
-		if (auth.method === 'nip07' && window.nostr) {
-			signedEvent = await window.nostr.signEvent(unsignedEvent);
-		} else {
-			throw new Error('Local signing not yet implemented.');
+		if (mode === 'replace') {
+			// Delete existing secrets that aren't in the import
+			const importedKeys = new Set(importedSecrets.map((s) => s.key));
+			for (const existing of secretsState.secrets) {
+				if (!importedKeys.has(existing.key)) {
+					await deleteSecret(existing.key);
+				}
+			}
 		}
 
-		await publishEvent(signedEvent);
+		// Add/update all imported secrets
+		for (const secret of importedSecrets) {
+			await setSecret(secret.key, secret.value);
+		}
 	} catch (err) {
 		console.error('Failed to import secrets:', err);
 	}

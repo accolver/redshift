@@ -1,24 +1,25 @@
-import type { SecretsState, Secret } from '$lib/types/nostr';
-import type { Subscription } from 'rxjs';
-import { eventStore, publishEvent, REDSHIFT_KIND, getSecretsDTag } from './nostr.svelte';
-import {
-	SecretsModel,
-	AllEnvironmentsSecretsModel,
-	calculateMissingSecrets,
-	createSecretsContent,
-	upsertSecret,
-	removeSecret,
-	type MissingSecret,
-} from '$lib/models/secrets';
-import { getAuthState, signEvent } from './auth.svelte';
-
 /**
- * Secrets store using Svelte 5 Runes + Applesauce EventStore
+ * Secrets Store using NIP-59 Gift Wrap Encryption
  *
- * Manages secrets for the currently selected project/environment
+ * This store manages secrets for the currently selected project/environment.
+ * All secrets are encrypted using NIP-59 Gift Wrap before being published
+ * to relays, ensuring end-to-end encryption.
+ *
+ * L5: Journey-Validator - Secret management workflow
+ * L4: Integration-Contractor - NIP-59 protocol compliance
  */
 
-// Secrets state using $state rune
+import type { SecretsState, Secret } from '$lib/types/nostr';
+import type { Subscription } from 'rxjs';
+import { eventStore, publishEvent } from './nostr.svelte';
+import { GiftWrapSecretsModel, AllGiftWrapSecretsModel } from '$lib/models/gift-wrap-secrets';
+import { calculateMissingSecrets, type MissingSecret } from '$lib/models/secrets';
+import { getAuthState, getPrivateKey, supportsEncryption } from './auth.svelte';
+import { wrapSecrets, createDTag } from '$lib/crypto';
+
+/**
+ * Secrets state using $state rune
+ */
 let secretsState = $state<SecretsState>({
 	secrets: [],
 	isLoading: false,
@@ -26,7 +27,9 @@ let secretsState = $state<SecretsState>({
 	error: null,
 });
 
-// Missing secrets state (secrets that exist in other environments but not current)
+/**
+ * Missing secrets state (secrets that exist in other environments but not current)
+ */
 let missingSecretsState = $state<{
 	missing: MissingSecret[];
 	isLoading: boolean;
@@ -35,15 +38,26 @@ let missingSecretsState = $state<{
 	isLoading: false,
 });
 
-// All environments secrets (for cross-env comparison)
+/**
+ * All environments secrets (for cross-env comparison)
+ */
 let allEnvSecretsState = $state<Map<string, Secret[]>>(new Map());
 
-// Current context
+/**
+ * Current context
+ */
 let currentProjectId: string | null = null;
 let currentEnvironmentSlug: string | null = null;
 let currentEnvironmentSlugs: string[] = [];
 
-// Track active subscriptions
+/**
+ * Cached private key for the current session
+ */
+let cachedPrivateKey: Uint8Array | null = null;
+
+/**
+ * Track active subscriptions
+ */
 let subscription: Subscription | null = null;
 let allEnvSubscription: Subscription | null = null;
 
@@ -76,14 +90,29 @@ export function getAllEnvSecretsState(): Map<string, Secret[]> {
 }
 
 /**
- * Subscribe to secrets for a specific project/environment
+ * Convert Secret[] to SecretBundle (Record<string, string>) format
+ */
+function secretsToBundle(secrets: Secret[]): Record<string, string> {
+	const bundle: Record<string, string> = {};
+	for (const secret of secrets) {
+		bundle[secret.key] = secret.value;
+	}
+	return bundle;
+}
+
+/**
+ * Subscribe to secrets for a specific project/environment.
+ * Uses NIP-59 Gift Wrap for encrypted storage.
+ *
+ * @param projectId - The project ID
+ * @param environmentSlug - The environment slug
  * @param allEnvironmentSlugs - All environment slugs in the project (for missing secrets calculation)
  */
-export function subscribeToSecrets(
+export async function subscribeToSecrets(
 	projectId: string,
 	environmentSlug: string,
 	allEnvironmentSlugs?: string[],
-): void {
+): Promise<void> {
 	const auth = getAuthState();
 
 	if (!auth.isConnected || !auth.pubkey) {
@@ -91,6 +120,25 @@ export function subscribeToSecrets(
 		secretsState.error = 'Not authenticated';
 		return;
 	}
+
+	// Check if encryption is supported
+	if (!supportsEncryption()) {
+		secretsState.secrets = [];
+		secretsState.error =
+			'NIP-59 encryption requires nsec authentication or a NIP-07 extension with NIP-44 support';
+		return;
+	}
+
+	// Get the private key for decryption
+	const privateKey = await getPrivateKey();
+	if (!privateKey) {
+		secretsState.secrets = [];
+		secretsState.error = 'Could not retrieve private key for decryption';
+		return;
+	}
+
+	// Cache the private key for publishing
+	cachedPrivateKey = privateKey;
 
 	// Skip if already subscribed to the same project/environment
 	if (
@@ -119,30 +167,35 @@ export function subscribeToSecrets(
 	secretsState.isLoading = true;
 	secretsState.error = null;
 
-	// Subscribe to SecretsModel from EventStore
-	subscription = SecretsModel(eventStore, auth.pubkey, projectId, environmentSlug).subscribe({
-		next: (secrets) => {
-			secretsState.secrets = secrets;
-			secretsState.isLoading = false;
-			secretsState.error = null;
+	// Subscribe to GiftWrapSecretsModel (decrypts Gift Wrap events)
+	subscription = GiftWrapSecretsModel(eventStore, privateKey, projectId, environmentSlug).subscribe(
+		{
+			next: (secrets) => {
+				secretsState.secrets = secrets;
+				secretsState.isLoading = false;
+				secretsState.error = null;
 
-			// Recalculate missing secrets when current env secrets change
-			if (allEnvSecretsState.size > 0) {
-				missingSecretsState.missing = calculateMissingSecrets(allEnvSecretsState, environmentSlug);
-			}
+				// Recalculate missing secrets when current env secrets change
+				if (allEnvSecretsState.size > 0) {
+					missingSecretsState.missing = calculateMissingSecrets(
+						allEnvSecretsState,
+						environmentSlug,
+					);
+				}
+			},
+			error: (err) => {
+				secretsState.error = err instanceof Error ? err.message : 'Failed to load secrets';
+				secretsState.isLoading = false;
+			},
 		},
-		error: (err) => {
-			secretsState.error = err instanceof Error ? err.message : 'Failed to load secrets';
-			secretsState.isLoading = false;
-		},
-	});
+	);
 
 	// Subscribe to all environments for missing secrets calculation
 	if (currentEnvironmentSlugs.length > 1) {
 		missingSecretsState.isLoading = true;
-		allEnvSubscription = AllEnvironmentsSecretsModel(
+		allEnvSubscription = AllGiftWrapSecretsModel(
 			eventStore,
-			auth.pubkey,
+			privateKey,
 			projectId,
 			currentEnvironmentSlugs,
 		).subscribe({
@@ -177,19 +230,37 @@ export function unsubscribeFromSecrets(): void {
 	currentProjectId = null;
 	currentEnvironmentSlug = null;
 	currentEnvironmentSlugs = [];
+	cachedPrivateKey = null;
 }
 
 /**
- * Set a secret (add or update)
+ * Add or update a secret in the array
+ */
+function upsertSecret(secrets: Secret[], key: string, value: string): Secret[] {
+	const existing = secrets.findIndex((s) => s.key === key);
+	if (existing >= 0) {
+		return secrets.map((s, i) => (i === existing ? { key, value } : s));
+	}
+	return [...secrets, { key, value }];
+}
+
+/**
+ * Remove a secret from the array
+ */
+function removeSecretFromArray(secrets: Secret[], key: string): Secret[] {
+	return secrets.filter((s) => s.key !== key);
+}
+
+/**
+ * Set a secret (add or update) using NIP-59 Gift Wrap
  */
 export async function setSecret(key: string, value: string): Promise<void> {
 	if (!currentProjectId || !currentEnvironmentSlug) {
 		throw new Error('No project/environment selected');
 	}
 
-	const auth = getAuthState();
-	if (!auth.isConnected || !auth.pubkey) {
-		throw new Error('Must be connected to set secrets');
+	if (!cachedPrivateKey) {
+		throw new Error('Private key not available. Please re-authenticate.');
 	}
 
 	const trimmedKey = key.trim().toUpperCase();
@@ -203,21 +274,17 @@ export async function setSecret(key: string, value: string): Promise<void> {
 	try {
 		// Update secrets array
 		const updatedSecrets = upsertSecret(secretsState.secrets, trimmedKey, value);
-		const content = createSecretsContent(updatedSecrets);
 
-		// Create the unsigned event
-		const unsignedEvent = {
-			kind: REDSHIFT_KIND,
-			created_at: Math.floor(Date.now() / 1000),
-			tags: [['d', getSecretsDTag(currentProjectId, currentEnvironmentSlug)]],
-			content: JSON.stringify(content),
-		};
+		// Convert to bundle format and wrap with NIP-59
+		const bundle = secretsToBundle(updatedSecrets);
+		const dTag = createDTag(currentProjectId, currentEnvironmentSlug);
+		const { event } = wrapSecrets(bundle, cachedPrivateKey, dTag);
 
-		// Sign the event using the current auth method
-		const signedEvent = await signEvent(unsignedEvent);
+		// Publish the Gift Wrap event
+		await publishEvent(event);
 
-		// Publish to relays
-		await publishEvent(signedEvent);
+		// Optimistically update local state
+		secretsState.secrets = updatedSecrets;
 	} catch (err) {
 		secretsState.error = err instanceof Error ? err.message : 'Failed to save secret';
 		throw err;
@@ -227,8 +294,7 @@ export async function setSecret(key: string, value: string): Promise<void> {
 }
 
 /**
- * Set a secret to multiple environments
- * Used for the multi-environment save feature
+ * Set a secret to multiple environments using NIP-59 Gift Wrap
  */
 export async function setSecretToMultipleEnvs(
 	projectId: string,
@@ -236,9 +302,8 @@ export async function setSecretToMultipleEnvs(
 	value: string,
 	environmentSlugs: string[],
 ): Promise<void> {
-	const auth = getAuthState();
-	if (!auth.isConnected || !auth.pubkey) {
-		throw new Error('Must be connected to set secrets');
+	if (!cachedPrivateKey) {
+		throw new Error('Private key not available. Please re-authenticate.');
 	}
 
 	const trimmedKey = key.trim().toUpperCase();
@@ -257,21 +322,14 @@ export async function setSecretToMultipleEnvs(
 
 			// Update secrets array
 			const updatedSecrets = upsertSecret(currentSecrets, trimmedKey, value);
-			const content = createSecretsContent(updatedSecrets);
 
-			// Create the unsigned event
-			const unsignedEvent = {
-				kind: REDSHIFT_KIND,
-				created_at: Math.floor(Date.now() / 1000),
-				tags: [['d', getSecretsDTag(projectId, envSlug)]],
-				content: JSON.stringify(content),
-			};
+			// Convert to bundle format and wrap with NIP-59
+			const bundle = secretsToBundle(updatedSecrets);
+			const dTag = createDTag(projectId, envSlug);
+			const { event } = wrapSecrets(bundle, cachedPrivateKey, dTag);
 
-			// Sign the event using the current auth method
-			const signedEvent = await signEvent(unsignedEvent);
-
-			// Publish to relays
-			await publishEvent(signedEvent);
+			// Publish the Gift Wrap event
+			await publishEvent(event);
 		}
 	} catch (err) {
 		secretsState.error = err instanceof Error ? err.message : 'Failed to save secret';
@@ -282,16 +340,15 @@ export async function setSecretToMultipleEnvs(
 }
 
 /**
- * Delete a secret
+ * Delete a secret using NIP-59 Gift Wrap
  */
 export async function deleteSecret(key: string): Promise<void> {
 	if (!currentProjectId || !currentEnvironmentSlug) {
 		throw new Error('No project/environment selected');
 	}
 
-	const auth = getAuthState();
-	if (!auth.isConnected || !auth.pubkey) {
-		throw new Error('Must be connected to delete secrets');
+	if (!cachedPrivateKey) {
+		throw new Error('Private key not available. Please re-authenticate.');
 	}
 
 	secretsState.isSaving = true;
@@ -299,22 +356,18 @@ export async function deleteSecret(key: string): Promise<void> {
 
 	try {
 		// Remove secret from array
-		const updatedSecrets = removeSecret(secretsState.secrets, key);
-		const content = createSecretsContent(updatedSecrets);
+		const updatedSecrets = removeSecretFromArray(secretsState.secrets, key);
 
-		// Create the unsigned event
-		const unsignedEvent = {
-			kind: REDSHIFT_KIND,
-			created_at: Math.floor(Date.now() / 1000),
-			tags: [['d', getSecretsDTag(currentProjectId, currentEnvironmentSlug)]],
-			content: JSON.stringify(content),
-		};
+		// Convert to bundle format and wrap with NIP-59
+		const bundle = secretsToBundle(updatedSecrets);
+		const dTag = createDTag(currentProjectId, currentEnvironmentSlug);
+		const { event } = wrapSecrets(bundle, cachedPrivateKey, dTag);
 
-		// Sign the event using the current auth method
-		const signedEvent = await signEvent(unsignedEvent);
+		// Publish the Gift Wrap event
+		await publishEvent(event);
 
-		// Publish to relays
-		await publishEvent(signedEvent);
+		// Optimistically update local state
+		secretsState.secrets = updatedSecrets;
 	} catch (err) {
 		secretsState.error = err instanceof Error ? err.message : 'Failed to delete secret';
 		throw err;
