@@ -115,6 +115,29 @@ describe('Project Model', () => {
 		it('removes leading and trailing hyphens', () => {
 			expect(normalizeSlug('-my-project-')).toBe('my-project');
 		});
+
+		// Environment slug scenarios
+		it('normalizes environment-style inputs', () => {
+			expect(normalizeSlug('Production')).toBe('production');
+			expect(normalizeSlug('Staging')).toBe('staging');
+			expect(normalizeSlug('dev')).toBe('dev');
+			expect(normalizeSlug('prd')).toBe('prd');
+		});
+
+		it('handles mixed case with spaces (like "Foobar baz")', () => {
+			expect(normalizeSlug('Foobar baz')).toBe('foobar-baz');
+			expect(normalizeSlug('This is the secret')).toBe('this-is-the-secret');
+		});
+
+		it('handles input with only invalid characters', () => {
+			expect(normalizeSlug('!!!')).toBe('');
+			expect(normalizeSlug('   ')).toBe('');
+		});
+
+		it('preserves numbers', () => {
+			expect(normalizeSlug('stage1')).toBe('stage1');
+			expect(normalizeSlug('v2-beta')).toBe('v2-beta');
+		});
 	});
 
 	describe('validateSlug', () => {

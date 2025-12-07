@@ -12,6 +12,7 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import InlineCode from '$lib/components/InlineCode.svelte';
 import { addEnvironment } from '$lib/stores/projects.svelte';
+import { normalizeSlug } from '$lib/models/project';
 import type { Environment } from '$lib/types/nostr';
 
 interface Props {
@@ -28,6 +29,7 @@ let envName = $state('');
 let envSlug = $state('');
 let isCreating = $state(false);
 let error = $state<string | null>(null);
+let slugManuallyEdited = $state(false);
 
 // Auto-generate slug from name
 function handleNameChange(e: Event) {
@@ -35,19 +37,14 @@ function handleNameChange(e: Event) {
 	envName = target.value;
 	// Auto-generate slug if user hasn't manually edited it
 	if (!slugManuallyEdited) {
-		envSlug = target.value
-			.toLowerCase()
-			.trim()
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-|-$/g, '');
+		envSlug = normalizeSlug(target.value);
 	}
 }
 
-let slugManuallyEdited = $state(false);
-
 function handleSlugChange(e: Event) {
 	const target = e.target as HTMLInputElement;
-	envSlug = target.value;
+	// Normalize slug as user types
+	envSlug = normalizeSlug(target.value);
 	slugManuallyEdited = true;
 }
 
@@ -122,11 +119,13 @@ function handleOpenChange(value: boolean) {
 						value={envSlug}
 						oninput={handleSlugChange}
 						placeholder="prod"
-						class="font-mono lowercase"
+						class="font-mono"
 						disabled={isCreating}
 					/>
+					<p class="text-xs text-muted-foreground">Lowercase letters, numbers, and hyphens only.</p>
 					<p class="text-xs text-muted-foreground">
-						Used in CLI commands: <InlineCode>redshift run -p {projectSlug} -e {envSlug || 'slug'}</InlineCode>
+						CLI command:<br />
+						<InlineCode>redshift run -p {projectSlug} -e {normalizedSlug || 'slug'}</InlineCode>
 					</p>
 				</div>
 
