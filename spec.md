@@ -52,15 +52,22 @@ architecture powered by **Bun**.
 The CLI must mimic the doppler command structure to ensure familiarity.
 
 - redshift login
-  - Accepts an nsec (Nostr Private Key).
+  - Accepts an nsec (Nostr Private Key) via `--nsec` flag or interactive prompt.
+  - **Hidden input:** nsec is not echoed when typing interactively.
   - Stores it securely in the system keychain or an encrypted local config file
     (\~/.redshift/config).
+  - Supports NIP-46 bunker connection via `--bunker` flag.
   - _Security Note:_ If the environment variable REDSHIFT\_NSEC is present,
     bypass login/storage and use that key (CI/CD support).
 - redshift setup
   - Interactive guide to select a Project and Environment for the current
     directory.
-  - Writes a redshift.yaml file locally (referencing project IDs, not secrets).
+  - **Fetches existing projects from relays** before prompting, allowing users
+    to select from a numbered list or create a new project.
+  - Fetches environments for selected project to enable environment selection.
+  - Falls back to manual input if relay fetching fails.
+  - Writes a redshift.yaml file locally (referencing project slugs, not
+    secrets).
 - redshift run \-- \<command\>
   - Fetches the latest secrets for the configured Project/Env.
   - Injects them into process.env.
@@ -70,9 +77,25 @@ The CLI must mimic the doppler command structure to ensure familiarity.
 - redshift secrets set \<KEY\> \<VALUE\>
   - Updates a specific secret in the active environment.
   - Creates a new version of the secret bundle and publishes it.
+- redshift secrets upload \[file\]
+  - Imports secrets from a .env file (defaults to `.env` in current directory).
+  - Parses .env format with quotes, escapes, comments, and type inference.
+  - Merges with existing secrets (new values overwrite existing).
+  - Shows summary of added/overwritten keys before publishing.
+- redshift secrets download
+  - Exports secrets as .env format to stdout.
+- redshift secrets list/get/delete
+  - Additional secret management commands.
+  - Support `-p/--project` and `-e/--environment` flags to override config.
+  - Support `--format` (table, json, env) and `--raw` flags.
 - redshift serve
   - Starts a local web server (e.g., http://localhost:3000) hosting the embedded
     Admin UI.
+- redshift upgrade
+  - Self-updates the CLI binary from GitHub releases.
+  - Detects OS/architecture and downloads appropriate binary.
+  - Supports `--force` for downgrade and `--version` for specific versions.
+  - Creates backup before replacing binary for safety.
 
 ##### **2.2.2. The Web Administration Dashboard**
 
@@ -88,6 +111,12 @@ The CLI must mimic the doppler command structure to ensure familiarity.
   - **Drag-and-Drop:** Support ordering or grouping if applicable.
   - **Subtle Motion:** Use svelte-motion for transitions (e.g., list items
     sliding in, modals fading).
+  - **Global Search:** Fuzzy search across all projects and secrets with
+    highlighting (space-to-underscore matching).
+  - **Multi-Environment Save:** Save the same secret to multiple environments at
+    once.
+  - **Missing Secrets Detection:** Visual indicators for secrets present in some
+    environments but missing in others.
 
 ##### **2.2.3. Data Structure & Protocol**
 
@@ -340,6 +369,24 @@ Redshift supports three authentication methods, in order of preference:
 **Rule:** The Web app MUST prefer NIP-07 and show warnings for local key usage.
 The CLI MUST check `REDSHIFT_NSEC` environment variable before reading config.
 
+#### **4.6.1. Secure Storage for Local NSEC (Web)**
+
+When using local nsec in the web app, secrets are encrypted before storage:
+
+```typescript
+// Uses IndexedDB + Web Crypto API
+// 1. Generate non-extractable AES-GCM key (stored in IndexedDB)
+// 2. Encrypt nsec with that key before storing in sessionStorage
+// 3. XSS attacker reading sessionStorage only gets ciphertext
+```
+
+**Security Properties:**
+
+- Encryption key is non-extractable (cannot read raw key bytes via JS)
+- Defense-in-depth against XSS (attacker needs same-origin to call decrypt())
+- **Limitation:** Sophisticated XSS could still call crypto.subtle.decrypt()
+- **Recommendation:** Use NIP-07 extension for maximum security
+
 #### **4.7. Event Structure**
 
 Secret bundles use Kind 30078 (Arbitrary Custom App Data) as the inner rumor:
@@ -351,15 +398,87 @@ Secret bundles use Kind 30078 (Arbitrary Custom App Data) as the inner rumor:
   pubkey: userPubkey,
   created_at: timestamp,
   tags: [
-    ["d", "projectId|environment"],  // Replaceable event identifier
+    ["d", "projectSlug|environment"],  // Replaceable event identifier
   ],
   content: JSON.stringify({ KEY: "value", ... })
 }
 ```
 
-**d-tag format:** `{projectId}|{environment}` (pipe-separated)
+**d-tag format:** `{projectSlug}|{environment}` (pipe-separated)
+
+- **projectSlug**: Immutable, lowercase with hyphens only (e.g., `my-app`)
+- **environment**: Environment slug (e.g., `dev`, `staging`, `production`)
+- **Example**: `keyfate|production`
 
 **Tombstone:** Empty content `{}` indicates deletion (logical delete).
+
+#### **4.8. Project Schema**
+
+Projects have two identifiers for different purposes:
+
+```typescript
+interface Project {
+  id: string; // Internal UUID (for event d-tags)
+  slug: string; // Immutable, CLI-friendly identifier
+  displayName: string; // Human-readable name (can be changed)
+  environments: Environment[];
+  createdAt: number;
+}
+```
+
+**Slug Rules:**
+
+- Lowercase only, hyphens allowed (no underscores or spaces)
+- Must start with a letter, end with a letter or number
+- 2-50 characters, no consecutive hyphens
+- **Immutable after creation** - used in d-tags for secrets
+- Auto-generated from displayName on project creation
+
+**Why Two Identifiers:**
+
+- `slug`: Used in CLI commands (`redshift secrets list -p my-app`) and d-tags
+- `displayName`: Shown in UI, can be renamed without breaking CLI workflows
+
+#### **4.9. URL Routing**
+
+Web app URLs use human-readable slugs instead of internal IDs:
+
+- **Old:** `/admin/projects/a1b2c3d4`
+- **New:** `/admin/projects/keyfate`
+
+This makes URLs:
+
+- Shareable and bookmarkable
+- Consistent with CLI commands
+- Easier to understand at a glance
+
+#### **4.10. Environment Schema**
+
+Environments within a project:
+
+```typescript
+interface Environment {
+  id: string; // Internal UUID
+  slug: string; // Normalized identifier (lowercase, hyphens)
+  name: string; // Human-readable name
+  createdAt: number;
+}
+```
+
+**Default Environment:** New projects are created with a default "dev"
+environment.
+
+**Validation:** Environment slugs are normalized (lowercase, special chars to
+hyphens).
+
+#### **4.11. Session Persistence**
+
+The web app supports seamless page refresh:
+
+- Auth state is restored from secure storage on page load
+- Project routes show a loading state while auth restoration completes
+- Projects are auto-fetched once authentication is restored
+- Users don't see "Project not found" errors on refresh
 
 ### ---
 
