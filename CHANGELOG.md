@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/accolver/redshift/compare/v0.6.0...v0.6.1) (2025-12-07)
+
+
+### Bug Fixes
+
+* **web:** autofocus key input when adding new secret ([2f73f22](https://github.com/accolver/redshift/commit/2f73f22fdddea77c15a5809715d7eb8a1c63d87e))
+
 ## [0.6.0](https://github.com/accolver/redshift/compare/v0.5.1...v0.6.0) (2025-12-07)
 
 
