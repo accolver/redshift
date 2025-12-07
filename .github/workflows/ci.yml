@@ -98,9 +98,11 @@ jobs:
           file dist/redshift-linux-x64
 
   # Test on macOS to verify keychain integration works
+  # This job is optional and doesn't block other workflows
   test-macos:
     name: macOS Tests (Keychain)
     runs-on: macos-latest
+    continue-on-error: true  # Don't fail the workflow if macOS runners are unavailable
 
     steps:
       - uses: actions/checkout@v4

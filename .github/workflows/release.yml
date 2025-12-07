@@ -52,20 +52,17 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            target: bun-linux-x64
+          - target: bun-linux-x64
             artifact: redshift-linux-x64
-          - os: ubuntu-latest
-            target: bun-linux-arm64
+          - target: bun-linux-arm64
             artifact: redshift-linux-arm64
-          - os: macos-latest
-            target: bun-darwin-x64
+          # Cross-compile macOS binaries from Linux for faster, more reliable builds
+          - target: bun-darwin-x64
             artifact: redshift-darwin-x64
-          - os: macos-latest
-            target: bun-darwin-arm64
+          - target: bun-darwin-arm64
             artifact: redshift-darwin-arm64
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
