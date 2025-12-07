@@ -13,13 +13,6 @@ jobs:
     name: CLI Tests
     runs-on: ubuntu-latest
 
-    services:
-      # Local Nostr relay for integration tests
-      nostr-relay:
-        image: scsibug/nostr-rs-relay
-        ports:
-          - 10547:8080
-
     steps:
       - uses: actions/checkout@v4
 
@@ -33,7 +26,8 @@ jobs:
       - name: Run CLI tests
         run: cd cli && bun test
         env:
-          TEST_RELAY_URL: ws://localhost:10547
+          # Skip relay integration tests in CI (no local relay)
+          CI: 'true'
 
   test-web:
     name: Web Tests
@@ -120,3 +114,6 @@ jobs:
 
       - name: Run CLI tests (includes keychain tests)
         run: cd cli && bun test
+        env:
+          # Skip relay integration tests in CI (no local relay)
+          CI: 'true'

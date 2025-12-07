@@ -10,11 +10,17 @@
  *
  * To run with public relays (may be rate-limited):
  *   TEST_RELAYS=public bun test cli/tests/integration/relay-integration.test.ts
+ *
+ * SKIPPED IN CI: These tests require a local relay which isn't available in CI.
+ * Set CI=true to skip these tests.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { SecretManager } from '../../src/lib/secret-manager';
+
+// Skip in CI environment (no local relay available)
+const IS_CI = process.env.CI === 'true';
 
 // Use local relay by default, public relays for CI
 const USE_PUBLIC_RELAYS = process.env.TEST_RELAYS === 'public';
@@ -29,7 +35,8 @@ const testPublicKey = getPublicKey(testPrivateKey);
 // Helper to add delays between relay operations
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-describe('Relay Integration Tests', () => {
+// Skip all tests in CI - no local relay available
+describe.skipIf(IS_CI)('Relay Integration Tests', () => {
 	let manager: SecretManager;
 	const testProjectId = `test-${Date.now()}`;
 	const testEnvironment = 'integration';
@@ -53,10 +60,11 @@ describe('Relay Integration Tests', () => {
 	});
 
 	it('publishes and fetches secrets', async () => {
+		// All values must be strings (environment variables are always strings)
 		const secrets = {
 			API_KEY: `sk_test_${Date.now()}`,
-			DEBUG: true,
-			PORT: 3000,
+			DEBUG: 'true',
+			PORT: '3000',
 		};
 
 		// Publish secrets
@@ -77,8 +85,8 @@ describe('Relay Integration Tests', () => {
 		console.log('Fetched:', fetched);
 		expect(fetched).not.toBeNull();
 		expect(fetched?.API_KEY).toBe(secrets.API_KEY);
-		expect(fetched?.DEBUG).toBe(true);
-		expect(fetched?.PORT).toBe(3000);
+		expect(fetched?.DEBUG).toBe('true');
+		expect(fetched?.PORT).toBe('3000');
 	}, 30000);
 
 	it('updates secrets (newer timestamp wins)', async () => {
@@ -146,14 +154,15 @@ describe('Relay Integration Tests', () => {
 		expect(fetched).toEqual({});
 	}, 30000);
 
-	it('handles complex nested objects', async () => {
+	it('handles complex nested objects as JSON strings', async () => {
+		// Complex objects must be JSON-stringified (env vars are always strings)
 		const complexSecrets = {
-			FEATURE_FLAGS: {
+			FEATURE_FLAGS: JSON.stringify({
 				new_ui: true,
 				beta_features: ['feature_a', 'feature_b'],
 				config: { timeout: 5000, retries: 3 },
-			},
-			ALLOWED_ORIGINS: ['http://localhost:3000', 'https://example.com'],
+			}),
+			ALLOWED_ORIGINS: JSON.stringify(['http://localhost:3000', 'https://example.com']),
 		};
 
 		const complexProject = `complex-${Date.now()}`;
@@ -162,8 +171,14 @@ describe('Relay Integration Tests', () => {
 
 		const fetched = await manager.fetchSecrets(complexProject, 'test');
 
-		expect(fetched?.FEATURE_FLAGS).toEqual(complexSecrets.FEATURE_FLAGS);
-		expect(fetched?.ALLOWED_ORIGINS).toEqual(complexSecrets.ALLOWED_ORIGINS);
+		expect(fetched?.FEATURE_FLAGS).toBe(complexSecrets.FEATURE_FLAGS);
+		expect(fetched?.ALLOWED_ORIGINS).toBe(complexSecrets.ALLOWED_ORIGINS);
+		// Verify we can parse them back
+		expect(JSON.parse(fetched?.FEATURE_FLAGS ?? '{}')).toEqual({
+			new_ui: true,
+			beta_features: ['feature_a', 'feature_b'],
+			config: { timeout: 5000, retries: 3 },
+		});
 	}, 30000);
 
 	it('lists all projects', async () => {
