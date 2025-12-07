@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/accolver/redshift/compare/v0.4.0...v0.4.1) (2025-12-07)
+
+
+### Bug Fixes
+
+* **web:** remove crypto tests from web - use pure logic tests only ([36a5b71](https://github.com/accolver/redshift/commit/36a5b71f34357ef4b1c2c921e7705c3711f2282d))
+* **web:** use vitest imports instead of bun:test for CI compatibility ([2ef0e12](https://github.com/accolver/redshift/commit/2ef0e12e7ba074569693a80ae33095528672edc5))
+
 ## [0.4.0](https://github.com/accolver/redshift/compare/v0.3.0...v0.4.0) (2025-12-07)
 
 
