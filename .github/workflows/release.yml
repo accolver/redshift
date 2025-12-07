@@ -96,51 +96,31 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload ${{ needs.release-please.outputs.tag_name }} dist/${{ matrix.artifact }}
 
-  # Deploy web to Cloudflare Pages on main (only when web/ changes)
+  # Deploy web to Cloudflare Pages on main
   deploy-web:
     needs: test
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Check for web changes
-        id: changes
-        run: |
-          if git diff --name-only HEAD~1 HEAD | grep -q '^web/'; then
-            echo "web_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "web_changed=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Skip - no web changes
-        if: steps.changes.outputs.web_changed == 'false'
-        run: echo "No changes in web/ directory, skipping deploy"
 
       - uses: actions/setup-node@v4
-        if: steps.changes.outputs.web_changed == 'true'
         with:
           node-version: 22
 
       - uses: oven-sh/setup-bun@v2
-        if: steps.changes.outputs.web_changed == 'true'
         with:
           bun-version: latest
 
       - name: Install dependencies
-        if: steps.changes.outputs.web_changed == 'true'
         run: |
           bun install
           cd web && bun install
 
       - name: Build web
-        if: steps.changes.outputs.web_changed == 'true'
         run: cd web && bun run build
 
       - name: Upload web artifact
-        if: steps.changes.outputs.web_changed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: web-dist
@@ -149,7 +129,6 @@ jobs:
       # If you're using Cloudflare Pages with GitHub integration,
       # the deploy happens automatically. If using wrangler, uncomment:
       # - name: Deploy to Cloudflare Pages
-      #   if: steps.changes.outputs.web_changed == 'true'
       #   uses: cloudflare/wrangler-action@v3
       #   with:
       #     apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
