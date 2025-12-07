@@ -209,19 +209,32 @@ describe('Rate Limiter Module', () => {
 	});
 
 	describe('withRateLimit', () => {
-		it('wraps function with rate limiting', async () => {
-			const limiter = new RateLimiter(100, 1000, 20);
+		it('wraps function with rate limiting and preserves return value', async () => {
+			const limiter = new RateLimiter(100, 1000, 10);
+			const fn = async (x: number) => x * 2;
+			const limited = withRateLimit(fn, limiter);
+
+			// Verify the wrapped function works correctly
+			expect(await limited(5)).toBe(10);
+			expect(await limited(10)).toBe(20);
+			expect(await limited(15)).toBe(30);
+		});
+
+		it('enforces minimum delay between wrapped calls', async () => {
+			// Use a larger delay to make timing more reliable in CI
+			const limiter = new RateLimiter(100, 1000, 100);
 			const fn = async (x: number) => x * 2;
 			const limited = withRateLimit(fn, limiter);
 
 			const start = Date.now();
-			await limited(5);
-			await limited(10);
+			await limited(1);
+			await limited(2);
+			await limited(3);
 			const elapsed = Date.now() - start;
 
-			// Should have min delay between calls
-			expect(elapsed).toBeGreaterThanOrEqual(20);
-			expect(await limited(15)).toBe(30);
+			// 3 calls with 100ms min delay = at least 200ms between them
+			// Allow 20% tolerance for CI timing variance
+			expect(elapsed).toBeGreaterThanOrEqual(160);
 		});
 	});
 
