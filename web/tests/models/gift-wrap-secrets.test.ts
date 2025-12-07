@@ -3,23 +3,18 @@
  *
  * Tests the gift-wrap-secrets model functions for:
  * - Human-friendly project names in d-tags
- * - Proper decryption and filtering
+ * - Proper d-tag creation and parsing
  * - Environment handling
+ *
+ * Note: Cryptographic operations (wrapSecrets, unwrapGiftWrap) are tested
+ * in packages/crypto/tests where they run with Bun's native crypto support.
  */
 
 import { describe, expect, it } from 'vitest';
-import { of } from 'rxjs';
-import { firstValueFrom } from 'rxjs';
-import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
-import { wrapSecrets, createDTag, parseDTag, NostrKinds, REDSHIFT_TYPE_TAG } from '@redshift/crypto';
+import { createDTag, parseDTag } from '@redshift/crypto';
 
-// Test with human-friendly project names
-describe('Gift Wrap Secrets with Human-Friendly Names', () => {
-	// Generate a test key pair
-	const privateKey = generateSecretKey();
-	const publicKey = getPublicKey(privateKey);
-
-	describe('d-tag creation with project names', () => {
+describe('D-Tag Operations', () => {
+	describe('createDTag with project names', () => {
 		it('creates d-tag with human-friendly project name', () => {
 			const dTag = createDTag('keyfate', 'production');
 			expect(dTag).toBe('keyfate|production');
@@ -30,6 +25,23 @@ describe('Gift Wrap Secrets with Human-Friendly Names', () => {
 			expect(dTag).toBe('myapp|prd');
 		});
 
+		it('handles various project name formats', () => {
+			const testCases = [
+				{ project: 'simple', env: 'prod', expected: 'simple|prod' },
+				{ project: 'my-project', env: 'staging', expected: 'my-project|staging' },
+				{ project: 'my_project', env: 'test', expected: 'my_project|test' },
+				{ project: 'Project2024', env: 'v1', expected: 'Project2024|v1' },
+				{ project: 'acme-corp-api', env: 'us-east-1', expected: 'acme-corp-api|us-east-1' },
+			];
+
+			for (const { project, env, expected } of testCases) {
+				const dTag = createDTag(project, env);
+				expect(dTag).toBe(expected);
+			}
+		});
+	});
+
+	describe('parseDTag', () => {
 		it('parses d-tag back to project name and environment', () => {
 			const dTag = createDTag('keyfate', 'dev');
 			const parsed = parseDTag(dTag);
@@ -38,63 +50,29 @@ describe('Gift Wrap Secrets with Human-Friendly Names', () => {
 				environment: 'dev',
 			});
 		});
-	});
 
-	describe('wrapSecrets with project names', () => {
-		it('wraps secrets with human-friendly project name in d-tag', () => {
-			const secrets = { API_KEY: 'secret123', DB_URL: 'postgres://...' };
-			const dTag = createDTag('keyfate', 'production');
-
-			const { event, rumor } = wrapSecrets(secrets, privateKey, dTag);
-
-			// Event should be a valid Gift Wrap
-			expect(event.kind).toBe(NostrKinds.GIFT_WRAP);
-			expect(event.tags).toContainEqual(['p', publicKey]);
-			expect(event.tags).toContainEqual(['t', REDSHIFT_TYPE_TAG]);
-
-			// Rumor should contain the d-tag with project name
-			expect(rumor.tags).toContainEqual(['d', 'keyfate|production']);
-		});
-
-		it('wraps secrets with different environments for same project', () => {
-			const secrets = { ENV: 'development' };
-
-			const devResult = wrapSecrets(secrets, privateKey, createDTag('keyfate', 'dev'));
-			const prdResult = wrapSecrets(secrets, privateKey, createDTag('keyfate', 'prd'));
-
-			// Both should have different d-tags
-			expect(devResult.rumor.tags.find((t) => t[0] === 'd')?.[1]).toBe('keyfate|dev');
-			expect(prdResult.rumor.tags.find((t) => t[0] === 'd')?.[1]).toBe('keyfate|prd');
-		});
-
-		it('handles various project name formats', () => {
+		it('parses d-tag with various formats', () => {
 			const testCases = [
-				{ project: 'simple', env: 'prod' },
-				{ project: 'my-project', env: 'staging' },
-				{ project: 'my_project', env: 'test' },
-				{ project: 'Project2024', env: 'v1' },
-				{ project: 'acme-corp-api', env: 'us-east-1' },
+				{ dTag: 'simple|prod', projectId: 'simple', environment: 'prod' },
+				{ dTag: 'my-project|staging', projectId: 'my-project', environment: 'staging' },
+				{ dTag: 'Project2024|v1', projectId: 'Project2024', environment: 'v1' },
 			];
 
-			for (const { project, env } of testCases) {
-				const dTag = createDTag(project, env);
-				const { rumor } = wrapSecrets({ KEY: 'value' }, privateKey, dTag);
-
-				const rumorDTag = rumor.tags.find((t) => t[0] === 'd')?.[1];
-				expect(rumorDTag).toBe(`${project}|${env}`);
-
-				// Should be parseable back
-				const parsed = parseDTag(rumorDTag!);
-				expect(parsed?.projectId).toBe(project);
-				expect(parsed?.environment).toBe(env);
+			for (const { dTag, projectId, environment } of testCases) {
+				const parsed = parseDTag(dTag);
+				expect(parsed).toEqual({ projectId, environment });
 			}
+		});
+
+		it('returns null for invalid d-tags', () => {
+			expect(parseDTag('invalid')).toBeNull();
+			expect(parseDTag('')).toBeNull();
+			expect(parseDTag('no-separator')).toBeNull();
 		});
 	});
 
 	describe('CLI and Web compatibility', () => {
 		it('creates d-tags that CLI can understand', () => {
-			// CLI uses createDTag('projectName', 'environment')
-			// Web should create the same format
 			const projectName = 'keyfate';
 			const env = 'production';
 
@@ -112,16 +90,10 @@ describe('Gift Wrap Secrets with Human-Friendly Names', () => {
 			const environments = ['dev', 'staging', 'prd', 'production'];
 
 			for (const env of environments) {
-				// Create d-tag
 				const dTag = createDTag(projectName, env);
-
-				// Parse it back
 				const parsed = parseDTag(dTag);
-
-				// Create again from parsed values
 				const recreatedDTag = createDTag(parsed!.projectId, parsed!.environment);
 
-				// Should be identical
 				expect(recreatedDTag).toBe(dTag);
 			}
 		});
@@ -164,10 +136,7 @@ describe('Environment Filtering', () => {
 		const targetEnv = 'production';
 		const targetDTag = `${projectName}|${targetEnv}`;
 
-		// These should match
 		expect(targetDTag).toBe('keyfate|production');
-
-		// These should not match
 		expect(`${projectName}|dev`).not.toBe(targetDTag);
 		expect(`other-project|${targetEnv}`).not.toBe(targetDTag);
 	});
