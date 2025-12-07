@@ -17,11 +17,12 @@ import type { Environment } from '$lib/types/nostr';
 interface Props {
 	open: boolean;
 	projectId: string;
+	projectSlug: string;
 	onOpenChange: (open: boolean) => void;
 	onEnvironmentCreated?: (env: Environment) => void;
 }
 
-let { open = $bindable(), projectId, onOpenChange, onEnvironmentCreated }: Props = $props();
+let { open = $bindable(), projectId, projectSlug, onOpenChange, onEnvironmentCreated }: Props = $props();
 
 let envName = $state('');
 let envSlug = $state('');
@@ -125,7 +126,7 @@ function handleOpenChange(value: boolean) {
 						disabled={isCreating}
 					/>
 					<p class="text-xs text-muted-foreground">
-						Used in CLI commands: <InlineCode>redshift run -e {envSlug || 'slug'}</InlineCode>
+						Used in CLI commands: <InlineCode>redshift run -p {projectSlug} -e {envSlug || 'slug'}</InlineCode>
 					</p>
 				</div>
 

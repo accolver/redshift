@@ -1366,6 +1366,7 @@ async function handleDeleteEnvironment() {
 	<AddEnvironmentModal
 		bind:open={showAddEnvModal}
 		projectId={project.id}
+		projectSlug={project.slug}
 		onOpenChange={(v) => (showAddEnvModal = v)}
 		onEnvironmentCreated={handleEnvironmentCreated}
 	/>
