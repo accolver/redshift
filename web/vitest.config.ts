@@ -15,6 +15,7 @@ export default defineConfig({
 		include: ['src/**/*.{test,spec}.{js,ts}', 'tests/**/*.{test,spec}.{js,ts}'],
 		globals: true,
 		environment: 'jsdom',
+		globalSetup: ['./vitest.global-setup.ts'],
 		setupFiles: ['./vitest.setup.ts'],
 		alias: {
 			$lib: path.resolve('./src/lib'),

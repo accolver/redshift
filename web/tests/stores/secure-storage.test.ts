@@ -1,4 +1,40 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+// Setup fake-indexeddb BEFORE importing secure-storage
+import { indexedDB, IDBKeyRange } from 'fake-indexeddb';
+globalThis.indexedDB = indexedDB;
+globalThis.IDBKeyRange = IDBKeyRange;
+
+// Setup sessionStorage mock (only if not already defined by jsdom)
+const sessionStorageMap = new Map<string, string>();
+const mockSessionStorage = {
+	getItem: vi.fn((key: string) => sessionStorageMap.get(key) ?? null),
+	setItem: vi.fn((key: string, value: string) => sessionStorageMap.set(key, value)),
+	removeItem: vi.fn((key: string) => sessionStorageMap.delete(key)),
+	clear: vi.fn(() => sessionStorageMap.clear()),
+	key: vi.fn((index: number) => Array.from(sessionStorageMap.keys())[index] ?? null),
+	get length() {
+		return sessionStorageMap.size;
+	},
+};
+
+// Try to define sessionStorage, handle cases where it's readonly
+try {
+	if (typeof globalThis.sessionStorage === 'undefined') {
+		globalThis.sessionStorage = mockSessionStorage as unknown as Storage;
+	} else {
+		// jsdom provides sessionStorage, we can use it directly
+		// Clear it before tests
+		globalThis.sessionStorage.clear();
+	}
+} catch {
+	// sessionStorage is readonly, try Object.defineProperty
+	Object.defineProperty(globalThis, 'sessionStorage', {
+		value: mockSessionStorage,
+		writable: true,
+		configurable: true,
+	});
+}
+
 import {
 	secureStore,
 	secureRetrieve,
@@ -125,7 +161,8 @@ describe('Secure Storage', () => {
 		});
 
 		it('does not throw on empty storage', async () => {
-			await expect(secureClearAll()).resolves.not.toThrow();
+			// Simply await - if it throws, the test will fail
+			await secureClearAll();
 		});
 	});
 

@@ -152,13 +152,26 @@ async function decrypt(key: CryptoKey, encryptedData: string): Promise<string> {
 }
 
 /**
+ * Get sessionStorage safely (handles SSR and test environments)
+ */
+function getSessionStorage(): Storage | null {
+	if (typeof sessionStorage !== 'undefined') {
+		return sessionStorage;
+	}
+	return null;
+}
+
+/**
  * Securely store a value
  * The value is encrypted with a non-extractable key before storage
  */
 export async function secureStore(name: string, value: string): Promise<void> {
+	const storage = getSessionStorage();
+	if (!storage) return;
+
 	const key = await getOrCreateKey();
 	const encrypted = await encrypt(key, value);
-	sessionStorage.setItem(STORAGE_PREFIX + name, encrypted);
+	storage.setItem(STORAGE_PREFIX + name, encrypted);
 }
 
 /**
@@ -166,7 +179,10 @@ export async function secureStore(name: string, value: string): Promise<void> {
  * Returns null if the value doesn't exist or decryption fails
  */
 export async function secureRetrieve(name: string): Promise<string | null> {
-	const encrypted = sessionStorage.getItem(STORAGE_PREFIX + name);
+	const storage = getSessionStorage();
+	if (!storage) return null;
+
+	const encrypted = storage.getItem(STORAGE_PREFIX + name);
 	if (!encrypted) {
 		return null;
 	}
@@ -174,7 +190,7 @@ export async function secureRetrieve(name: string): Promise<string | null> {
 	const key = await getKey();
 	if (!key) {
 		// Key was deleted but encrypted data exists - clear it
-		sessionStorage.removeItem(STORAGE_PREFIX + name);
+		storage.removeItem(STORAGE_PREFIX + name);
 		return null;
 	}
 
@@ -182,7 +198,7 @@ export async function secureRetrieve(name: string): Promise<string | null> {
 		return await decrypt(key, encrypted);
 	} catch {
 		// Decryption failed (corrupted data, wrong key, etc.)
-		sessionStorage.removeItem(STORAGE_PREFIX + name);
+		storage.removeItem(STORAGE_PREFIX + name);
 		return null;
 	}
 }
@@ -191,7 +207,9 @@ export async function secureRetrieve(name: string): Promise<string | null> {
  * Remove a securely stored value
  */
 export function secureRemove(name: string): void {
-	sessionStorage.removeItem(STORAGE_PREFIX + name);
+	const storage = getSessionStorage();
+	if (!storage) return;
+	storage.removeItem(STORAGE_PREFIX + name);
 }
 
 /**
@@ -199,15 +217,18 @@ export function secureRemove(name: string): void {
  */
 export async function secureClearAll(): Promise<void> {
 	// Clear sessionStorage items with our prefix
-	const keysToRemove: string[] = [];
-	for (let i = 0; i < sessionStorage.length; i++) {
-		const key = sessionStorage.key(i);
-		if (key?.startsWith(STORAGE_PREFIX)) {
-			keysToRemove.push(key);
+	const storage = getSessionStorage();
+	if (storage) {
+		const keysToRemove: string[] = [];
+		for (let i = 0; i < storage.length; i++) {
+			const key = storage.key(i);
+			if (key?.startsWith(STORAGE_PREFIX)) {
+				keysToRemove.push(key);
+			}
 		}
-	}
-	for (const key of keysToRemove) {
-		sessionStorage.removeItem(key);
+		for (const key of keysToRemove) {
+			storage.removeItem(key);
+		}
 	}
 
 	// Delete the encryption key from IndexedDB
