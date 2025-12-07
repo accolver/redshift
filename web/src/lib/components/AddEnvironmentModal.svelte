@@ -125,7 +125,7 @@ function handleOpenChange(value: boolean) {
 					<p class="text-xs text-muted-foreground">Lowercase letters, numbers, and hyphens only.</p>
 					<p class="text-xs text-muted-foreground">
 						CLI command:<br />
-						<InlineCode>redshift run -p {projectSlug} -e {normalizedSlug || 'slug'}</InlineCode>
+						<InlineCode>redshift run -p {projectSlug} -e {envSlug || 'slug'}</InlineCode>
 					</p>
 				</div>
 
