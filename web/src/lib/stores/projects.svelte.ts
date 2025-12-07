@@ -7,6 +7,8 @@ import {
 	generateProjectId,
 	createEnvironment,
 	removeEnvironmentFromProject,
+	validateSlug,
+	normalizeSlug,
 } from '$lib/models/project';
 import { getAuthState, signEvent } from './auth.svelte';
 
@@ -90,12 +92,22 @@ export function unsubscribeFromProjects(): void {
 /**
  * Create a new project
  * This creates a Nostr event and publishes it to relays
+ *
+ * @param slug - Immutable identifier (lowercase, hyphens only)
+ * @param displayName - Human-readable display name
  */
-export async function createProject(name: string): Promise<Project> {
-	const trimmedName = name.trim();
+export async function createProject(slug: string, displayName: string): Promise<Project> {
+	const normalizedSlug = normalizeSlug(slug);
+	const trimmedDisplayName = displayName.trim();
 
-	if (!trimmedName) {
-		throw new Error('Project name is required');
+	// Validate slug
+	const slugError = validateSlug(normalizedSlug);
+	if (slugError) {
+		throw new Error(slugError);
+	}
+
+	if (!trimmedDisplayName) {
+		throw new Error('Display name is required');
 	}
 
 	const auth = getAuthState();
@@ -103,8 +115,14 @@ export async function createProject(name: string): Promise<Project> {
 		throw new Error('Must be connected to create a project');
 	}
 
+	// Check for duplicate slug
+	const existingProject = projectsState.projects.find((p) => p.slug === normalizedSlug);
+	if (existingProject) {
+		throw new Error(`A project with slug "${normalizedSlug}" already exists`);
+	}
+
 	const projectId = generateProjectId();
-	const content = createProjectContent(trimmedName);
+	const content = createProjectContent(normalizedSlug, trimmedDisplayName);
 
 	// Create the unsigned event
 	const unsignedEvent = {
@@ -123,7 +141,8 @@ export async function createProject(name: string): Promise<Project> {
 	// Return the project object
 	const project: Project = {
 		id: projectId,
-		name: trimmedName,
+		slug: normalizedSlug,
+		displayName: trimmedDisplayName,
 		createdAt: content.createdAt!,
 		environments: [],
 	};
@@ -157,10 +176,11 @@ export async function deleteProject(id: string): Promise<void> {
 
 /**
  * Update a project
+ * Note: Only displayName can be updated. Slug is immutable.
  */
 export async function updateProject(
 	id: string,
-	updates: Partial<Pick<Project, 'name'>>,
+	updates: Partial<Pick<Project, 'displayName'>>,
 ): Promise<Project> {
 	const project = getProjectById(id);
 
@@ -173,10 +193,11 @@ export async function updateProject(
 		throw new Error('Must be connected to update a project');
 	}
 
-	// Create updated content
+	// Create updated content (slug is immutable)
 	const content = {
 		type: 'project' as const,
-		name: updates.name?.trim() ?? project.name,
+		slug: project.slug,
+		displayName: updates.displayName?.trim() ?? project.displayName,
 		environments: project.environments,
 		createdAt: project.createdAt,
 	};
@@ -196,8 +217,7 @@ export async function updateProject(
 	// Return updated project
 	return {
 		...project,
-		...updates,
-		name: content.name,
+		displayName: content.displayName,
 	};
 }
 
@@ -245,7 +265,8 @@ export async function addEnvironment(
 	// Create updated content with new environment
 	const content = {
 		type: 'project' as const,
-		name: project.name,
+		slug: project.slug,
+		displayName: project.displayName,
 		environments: [...project.environments, newEnv],
 		createdAt: project.createdAt,
 	};
@@ -286,7 +307,8 @@ export async function deleteEnvironment(projectId: string, slug: string): Promis
 	// Create updated content
 	const content = {
 		type: 'project' as const,
-		name: updatedProject.name,
+		slug: updatedProject.slug,
+		displayName: updatedProject.displayName,
 		environments: updatedProject.environments,
 		createdAt: updatedProject.createdAt,
 	};

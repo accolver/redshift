@@ -72,16 +72,17 @@ describe('Projects Store (Applesauce)', () => {
 	});
 
 	describe('createProject', () => {
-		it('creates a project with the given name', async () => {
-			const project = await createProject('My First Project');
+		it('creates a project with the given slug and displayName', async () => {
+			const project = await createProject('my-first-project', 'My First Project');
 
 			expect(project).toBeDefined();
-			expect(project.name).toBe('My First Project');
+			expect(project.slug).toBe('my-first-project');
+			expect(project.displayName).toBe('My First Project');
 		});
 
 		it('generates a unique id for each project', async () => {
-			const projectA = await createProject('Project A');
-			const projectB = await createProject('Project B');
+			const projectA = await createProject('project-a', 'Project A');
+			const projectB = await createProject('project-b', 'Project B');
 
 			expect(projectA.id).not.toBe(projectB.id);
 		});
@@ -89,42 +90,47 @@ describe('Projects Store (Applesauce)', () => {
 		it('sets createdAt timestamp', async () => {
 			const before = Date.now();
 
-			const project = await createProject('Timestamped Project');
+			const project = await createProject('timestamped-project', 'Timestamped Project');
 
 			const after = Date.now();
 			expect(project.createdAt).toBeGreaterThanOrEqual(before);
 			expect(project.createdAt).toBeLessThanOrEqual(after);
 		});
 
-		it('trims whitespace from project name', async () => {
-			const project = await createProject('  Trimmed Name  ');
+		it('normalizes slug and trims displayName', async () => {
+			const project = await createProject('My Project', '  Trimmed Name  ');
 
-			expect(project.name).toBe('Trimmed Name');
+			expect(project.slug).toBe('my-project');
+			expect(project.displayName).toBe('Trimmed Name');
 		});
 
-		it('throws error for empty project name', async () => {
-			await expect(createProject('')).rejects.toThrow('Project name is required');
+		it('throws error for invalid slug', async () => {
+			await expect(createProject('a', 'Project')).rejects.toThrow('Slug must be at least 2 characters');
 		});
 
-		it('throws error for whitespace-only project name', async () => {
-			await expect(createProject('   ')).rejects.toThrow('Project name is required');
+		it('throws error for empty displayName', async () => {
+			await expect(createProject('valid-slug', '')).rejects.toThrow('Display name is required');
+		});
+
+		it('throws error for whitespace-only displayName', async () => {
+			await expect(createProject('valid-slug', '   ')).rejects.toThrow('Display name is required');
 		});
 
 		it('initializes project with empty environments array', async () => {
-			const project = await createProject('Project with Environments');
+			const project = await createProject('project-with-envs', 'Project with Environments');
 
 			expect(project.environments).toEqual([]);
 		});
 
 		it('calls publishEvent with signed event', async () => {
-			await createProject('Published Project');
+			await createProject('published-project', 'Published Project');
 
 			expect(publishEvent).toHaveBeenCalledTimes(1);
 			expect(signEvent).toHaveBeenCalledTimes(1);
 		});
 
 		it('creates event with correct kind and d-tag', async () => {
-			await createProject('Tagged Project');
+			await createProject('tagged-project', 'Tagged Project');
 
 			const signedCall = vi.mocked(signEvent).mock.calls[0][0];
 			expect(signedCall.kind).toBe(30078);
@@ -132,13 +138,14 @@ describe('Projects Store (Applesauce)', () => {
 		});
 
 		it('creates event with correct content structure', async () => {
-			await createProject('Content Project');
+			await createProject('content-project', 'Content Project');
 
 			const signedCall = vi.mocked(signEvent).mock.calls[0][0];
 			const content = JSON.parse(signedCall.content);
 
 			expect(content.type).toBe('project');
-			expect(content.name).toBe('Content Project');
+			expect(content.slug).toBe('content-project');
+			expect(content.displayName).toBe('Content Project');
 			// Projects now auto-create a "dev" environment
 			expect(content.environments).toHaveLength(1);
 			expect(content.environments[0].slug).toBe('dev');
@@ -163,7 +170,7 @@ describe('Projects Store (Applesauce)', () => {
 
 	describe('updateProject', () => {
 		it('throws error for non-existent project', async () => {
-			await expect(updateProject('fake-id', { name: 'New Name' })).rejects.toThrow(
+			await expect(updateProject('fake-id', { displayName: 'New Name' })).rejects.toThrow(
 				'Project not found',
 			);
 		});

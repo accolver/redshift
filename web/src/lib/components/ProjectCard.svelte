@@ -55,9 +55,9 @@ const href = $derived(project ? `/admin/projects/${project.id}` : undefined);
 							<Folder class="size-5" />
 						</div>
 						<div>
-							<CardTitle class="text-base">{project.name}</CardTitle>
+							<CardTitle class="text-base">{project.displayName}</CardTitle>
 							<CardDescription class="text-xs">
-								Created {formatDate(project.createdAt)}
+								{project.slug} · Created {formatDate(project.createdAt)}
 							</CardDescription>
 						</div>
 					</div>

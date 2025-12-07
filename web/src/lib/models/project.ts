@@ -10,7 +10,10 @@ import type { Project, Environment } from '$lib/types/nostr';
  */
 interface ProjectEventContent {
 	type: 'project';
-	name: string;
+	/** Immutable slug identifier (lowercase, hyphens only) */
+	slug: string;
+	/** Human-readable display name */
+	displayName: string;
 	environments?: Environment[];
 	createdAt?: number;
 }
@@ -31,9 +34,15 @@ function parseProjectEvent(event: NostrEvent): Project | null {
 		const dTag = event.tags.find((t) => t[0] === 'd')?.[1];
 		if (!dTag) return null;
 
+		// Require slug and displayName
+		if (!content.slug || !content.displayName) {
+			return null;
+		}
+
 		return {
 			id: dTag,
-			name: content.name,
+			slug: content.slug,
+			displayName: content.displayName,
 			createdAt: content.createdAt ?? event.created_at * 1000,
 			environments: content.environments ?? [],
 		};
@@ -97,12 +106,51 @@ export function createDefaultEnvironment(): Environment {
 }
 
 /**
+ * Validate and normalize a project slug
+ * - Lowercase only
+ * - Hyphens allowed (no underscores, spaces, etc.)
+ * - No leading/trailing hyphens
+ * - No consecutive hyphens
+ */
+export function normalizeSlug(input: string): string {
+	return input
+		.toLowerCase()
+		.replace(/[^a-z0-9-]/g, '-')
+		.replace(/-+/g, '-')
+		.replace(/^-|-$/g, '');
+}
+
+/**
+ * Validate a project slug
+ * Returns error message if invalid, null if valid
+ */
+export function validateSlug(slug: string): string | null {
+	if (!slug) {
+		return 'Slug is required';
+	}
+	if (slug.length < 2) {
+		return 'Slug must be at least 2 characters';
+	}
+	if (slug.length > 50) {
+		return 'Slug must be 50 characters or less';
+	}
+	if (!/^[a-z][a-z0-9-]*[a-z0-9]$/.test(slug) && slug.length > 1) {
+		return 'Slug must start with a letter, end with a letter or number, and contain only lowercase letters, numbers, and hyphens';
+	}
+	if (/--/.test(slug)) {
+		return 'Slug cannot contain consecutive hyphens';
+	}
+	return null;
+}
+
+/**
  * Create a project event content object with default "dev" environment
  */
-export function createProjectContent(name: string): ProjectEventContent {
+export function createProjectContent(slug: string, displayName: string): ProjectEventContent {
 	return {
 		type: 'project',
-		name: name.trim(),
+		slug: normalizeSlug(slug),
+		displayName: displayName.trim(),
 		environments: [createDefaultEnvironment()],
 		createdAt: Date.now(),
 	};

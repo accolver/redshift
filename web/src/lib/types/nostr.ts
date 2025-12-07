@@ -54,10 +54,16 @@ export interface Environment {
 
 /**
  * A Redshift project containing secrets organized by environment
+ *
+ * - `slug`: Immutable identifier used in d-tags for secrets (lowercase, hyphens only)
+ * - `displayName`: Human-readable name shown in UI (can be changed)
  */
 export interface Project {
 	id: string;
-	name: string;
+	/** Immutable slug used as the project identifier in d-tags (lowercase, hyphens only) */
+	slug: string;
+	/** Human-readable display name (can be changed) */
+	displayName: string;
 	createdAt: number;
 	environments: Environment[];
 }

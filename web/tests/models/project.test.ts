@@ -5,6 +5,8 @@ import {
 	createProjectContent,
 	generateProjectId,
 	removeEnvironmentFromProject,
+	normalizeSlug,
+	validateSlug,
 } from '$lib/models/project';
 import type { Project } from '$lib/types/nostr';
 
@@ -89,24 +91,81 @@ describe('Project Model', () => {
 		});
 	});
 
+	describe('normalizeSlug', () => {
+		it('converts to lowercase', () => {
+			expect(normalizeSlug('MyProject')).toBe('myproject');
+		});
+
+		it('replaces spaces with hyphens', () => {
+			expect(normalizeSlug('my project')).toBe('my-project');
+		});
+
+		it('replaces underscores with hyphens', () => {
+			expect(normalizeSlug('my_project')).toBe('my-project');
+		});
+
+		it('removes special characters', () => {
+			expect(normalizeSlug('my@project!')).toBe('my-project');
+		});
+
+		it('collapses multiple hyphens', () => {
+			expect(normalizeSlug('my--project')).toBe('my-project');
+		});
+
+		it('removes leading and trailing hyphens', () => {
+			expect(normalizeSlug('-my-project-')).toBe('my-project');
+		});
+	});
+
+	describe('validateSlug', () => {
+		it('returns null for valid slugs', () => {
+			expect(validateSlug('my-project')).toBeNull();
+			expect(validateSlug('project123')).toBeNull();
+			expect(validateSlug('ab')).toBeNull();
+		});
+
+		it('returns error for empty slug', () => {
+			expect(validateSlug('')).toBe('Slug is required');
+		});
+
+		it('returns error for slug too short', () => {
+			expect(validateSlug('a')).toBe('Slug must be at least 2 characters');
+		});
+
+		it('returns error for slug too long', () => {
+			const longSlug = 'a'.repeat(51);
+			expect(validateSlug(longSlug)).toBe('Slug must be 50 characters or less');
+		});
+
+		it('returns error for consecutive hyphens', () => {
+			expect(validateSlug('my--project')).toBe('Slug cannot contain consecutive hyphens');
+		});
+	});
+
 	describe('createProjectContent', () => {
 		it('creates content with type "project"', () => {
-			const content = createProjectContent('My Project');
+			const content = createProjectContent('my-project', 'My Project');
 			expect(content.type).toBe('project');
 		});
 
-		it('creates content with given name', () => {
-			const content = createProjectContent('My Project');
-			expect(content.name).toBe('My Project');
+		it('creates content with given slug and displayName', () => {
+			const content = createProjectContent('my-project', 'My Project');
+			expect(content.slug).toBe('my-project');
+			expect(content.displayName).toBe('My Project');
 		});
 
-		it('trims whitespace from name', () => {
-			const content = createProjectContent('  My Project  ');
-			expect(content.name).toBe('My Project');
+		it('normalizes slug', () => {
+			const content = createProjectContent('My Project', 'My Project');
+			expect(content.slug).toBe('my-project');
+		});
+
+		it('trims whitespace from displayName', () => {
+			const content = createProjectContent('my-project', '  My Project  ');
+			expect(content.displayName).toBe('My Project');
 		});
 
 		it('creates content with default "dev" environment', () => {
-			const content = createProjectContent('My Project');
+			const content = createProjectContent('my-project', 'My Project');
 
 			expect(content.environments).toBeDefined();
 			expect(content.environments).toHaveLength(1);
@@ -116,7 +175,7 @@ describe('Project Model', () => {
 
 		it('creates content with createdAt timestamp', () => {
 			const before = Date.now();
-			const content = createProjectContent('My Project');
+			const content = createProjectContent('my-project', 'My Project');
 			const after = Date.now();
 
 			expect(content.createdAt).toBeGreaterThanOrEqual(before);
@@ -127,7 +186,8 @@ describe('Project Model', () => {
 	describe('removeEnvironmentFromProject', () => {
 		const createTestProject = (): Project => ({
 			id: 'test-project',
-			name: 'Test Project',
+			slug: 'test-project',
+			displayName: 'Test Project',
 			createdAt: Date.now(),
 			environments: [
 				{ id: 'env1', slug: 'dev', name: 'Development', createdAt: Date.now() },
@@ -157,7 +217,8 @@ describe('Project Model', () => {
 			const result = removeEnvironmentFromProject(project, 'staging');
 
 			expect(result.id).toBe(project.id);
-			expect(result.name).toBe(project.name);
+			expect(result.slug).toBe(project.slug);
+			expect(result.displayName).toBe(project.displayName);
 			expect(result.createdAt).toBe(project.createdAt);
 		});
 
@@ -171,7 +232,8 @@ describe('Project Model', () => {
 		it('throws error when trying to remove last environment', () => {
 			const project: Project = {
 				id: 'test',
-				name: 'Test',
+				slug: 'test',
+				displayName: 'Test',
 				createdAt: Date.now(),
 				environments: [{ id: 'env1', slug: 'dev', name: 'Development', createdAt: Date.now() }],
 			};
@@ -184,7 +246,8 @@ describe('Project Model', () => {
 		it('handles empty environments array gracefully', () => {
 			const project: Project = {
 				id: 'test',
-				name: 'Test',
+				slug: 'test',
+				displayName: 'Test',
 				createdAt: Date.now(),
 				environments: [],
 			};

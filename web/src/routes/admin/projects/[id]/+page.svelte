@@ -352,16 +352,16 @@ $effect(() => {
 });
 
 // Subscribe to secrets when environment changes
-// Track project.name and selectedEnv.slug specifically to avoid loops from object reference changes
+// Track project.slug and selectedEnv.slug specifically to avoid loops from object reference changes
 $effect(() => {
-	const currentProjectName = project?.name;
+	const currentProjectSlug = project?.slug;
 	const currentEnvSlug = selectedEnv?.slug;
 
-	if (currentProjectName && currentEnvSlug) {
+	if (currentProjectSlug && currentEnvSlug) {
 		// Use untrack to read environments without creating dependency on array changes
 		const allEnvSlugs = untrack(() => project?.environments.map((e) => e.slug) ?? []);
 		// subscribeToSecrets is async but effect can't await - it handles errors internally
-		subscribeToSecrets(currentProjectName, currentEnvSlug, allEnvSlugs);
+		subscribeToSecrets(currentProjectSlug, currentEnvSlug, allEnvSlugs);
 	}
 });
 
@@ -462,7 +462,7 @@ async function handleMultiEnvSave(envSlugs: string[]) {
 		if (isGlobalSaveMode) {
 			// Global save mode: save all pending secrets to selected environments
 			for (const secret of pendingSecrets) {
-				await setSecretToMultipleEnvs(project.name, secret.key, secret.value, envSlugs);
+				await setSecretToMultipleEnvs(project.slug, secret.key, secret.value, envSlugs);
 			}
 
 			// Clear editing state for saved secrets
@@ -484,7 +484,7 @@ async function handleMultiEnvSave(envSlugs: string[]) {
 			isGlobalSaveMode = false;
 		} else {
 			// Single secret mode (inline save)
-			await setSecretToMultipleEnvs(project.name, pendingSecretKey, pendingSecretValue, envSlugs);
+			await setSecretToMultipleEnvs(project.slug, pendingSecretKey, pendingSecretValue, envSlugs);
 			newSecretKey = '';
 			newSecretValue = '';
 			showAddSecretRow = false;
@@ -662,7 +662,7 @@ async function handleDeleteEnvironment() {
 </script>
 
 <svelte:head>
-	<title>{project?.name ?? 'Project'} - Redshift Admin</title>
+	<title>{project?.displayName ?? 'Project'} - Redshift Admin</title>
 </svelte:head>
 
 <div class="flex min-h-[calc(100vh-3.5rem)] flex-col">
@@ -691,7 +691,8 @@ async function handleDeleteEnvironment() {
 						<DropdownMenuTrigger>
 							{#snippet child({ props })}
 								<button {...props} class="flex min-w-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-base font-semibold transition-colors hover:bg-muted sm:gap-2 sm:px-2 sm:text-lg">
-									<span class="truncate">{project.name}</span>
+									<span class="truncate">{project.displayName}</span>
+									<span class="hidden text-xs font-normal text-muted-foreground sm:inline">({project.slug})</span>
 									<ChevronDown class="size-4 shrink-0 text-muted-foreground" />
 								</button>
 							{/snippet}
@@ -699,7 +700,8 @@ async function handleDeleteEnvironment() {
 						<DropdownMenuContent align="start" class="w-56">
 							{#each projectsState.projects as p (p.id)}
 								<DropdownMenuItem onclick={() => goto(`/admin/projects/${p.id}`)}>
-									{p.name}
+									{p.displayName}
+									<span class="ml-auto text-xs text-muted-foreground">{p.slug}</span>
 								</DropdownMenuItem>
 							{/each}
 							<DropdownMenuSeparator />
@@ -1350,7 +1352,7 @@ async function handleDeleteEnvironment() {
 	<ExportSecretsModal
 		bind:open={showExportModal}
 		secrets={secretsState.secrets}
-		projectName={project.name}
+		projectName={project.displayName}
 		environmentName={selectedEnv.name}
 		onOpenChange={(v) => (showExportModal = v)}
 	/>
@@ -1403,7 +1405,7 @@ async function handleDeleteEnvironment() {
 				Delete Project
 			</DialogTitle>
 			<DialogDescription>
-				Are you sure you want to delete <strong>{project?.name}</strong>? This will permanently delete all environments and secrets in this project. This action cannot be undone.
+				Are you sure you want to delete <strong>{project?.displayName}</strong>? This will permanently delete all environments and secrets in this project. This action cannot be undone.
 			</DialogDescription>
 		</DialogHeader>
 		<DialogFooter class="gap-2 sm:gap-0">
