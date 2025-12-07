@@ -7,7 +7,7 @@
  * - Environment handling
  */
 
-import { describe, expect, it, beforeEach, mock } from 'bun:test';
+import { describe, expect, it } from 'vitest';
 import { of } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
