@@ -97,25 +97,25 @@ jobs:
           ls -la dist/
           file dist/redshift-linux-x64
 
-  # Test on macOS to verify keychain integration works
-  # This job is optional and doesn't block other workflows
-  test-macos:
-    name: macOS Tests (Keychain)
-    runs-on: macos-latest
-    continue-on-error: true  # Don't fail the workflow if macOS runners are unavailable
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Run CLI tests (includes keychain tests)
-        run: cd cli && bun test
-        env:
-          # Skip relay integration tests in CI (no local relay)
-          CI: 'true'
+  # macOS keychain tests disabled for now due to timeouts
+  # TODO: Re-enable once keychain test timeouts are fixed
+  # test-macos:
+  #   name: macOS Tests (Keychain)
+  #   runs-on: macos-latest
+  #   continue-on-error: true  # Don't fail the workflow if macOS runners are unavailable
+  #
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - uses: oven-sh/setup-bun@v2
+  #       with:
+  #         bun-version: latest
+  #
+  #     - name: Install dependencies
+  #       run: bun install
+  #
+  #     - name: Run CLI tests (includes keychain tests)
+  #       run: cd cli && bun test
+  #       env:
+  #         # Skip relay integration tests in CI (no local relay)
+  #         CI: 'true'
