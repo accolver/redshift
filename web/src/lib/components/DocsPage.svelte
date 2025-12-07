@@ -12,13 +12,13 @@ let { title, description, children }: Props = $props();
 
 <div class="docs-container mx-auto w-full max-w-4xl">
 	<!-- Sticky header - top-14 accounts for mobile nav header on small screens, top-0 on lg -->
-	<header class="sticky top-14 z-30 border-b border-border/50 bg-background/95 px-4 py-4 backdrop-blur-sm sm:px-6 lg:top-0">
-		<h1 class="text-2xl font-bold sm:text-4xl">{title}</h1>
-		<p class="mt-1 text-sm text-muted-foreground sm:text-lg">{description}</p>
+	<header class="sticky top-14 z-30 bg-background/95 px-4 pb-4 pt-6 backdrop-blur-sm sm:px-6 sm:pt-8 lg:top-0">
+		<h1 class="text-3xl font-bold sm:text-4xl">{title}</h1>
+		<p class="mt-2 text-muted-foreground sm:text-lg">{description}</p>
 	</header>
 
 	<!-- Content -->
-	<div class="px-4 py-6 sm:px-6 sm:py-8">
+	<div class="px-4 pb-8 pt-4 sm:px-6">
 		<section class="prose prose-invert max-w-none">
 			{@render children()}
 		</section>
