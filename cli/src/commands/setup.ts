@@ -97,12 +97,12 @@ export async function setupCommand(options: SetupOptions): Promise<void> {
 		} else if (existingEnvironments.length > 0 || existingProjects.includes(projectId)) {
 			environment = await selectEnvironment(
 				existingEnvironments,
-				existingConfig?.environment || 'development',
+				existingConfig?.environment || 'dev',
 			);
 		} else {
 			environment = await promptForInput(
-				'Enter environment (e.g., development, staging, production): ',
-				existingConfig?.environment || 'development',
+				'Enter environment (e.g., dev, staging, prod): ',
+				existingConfig?.environment || 'dev',
 			);
 		}
 
@@ -198,7 +198,7 @@ export async function selectEnvironment(
 	existingEnvironments: string[],
 	defaultEnv?: string,
 ): Promise<string> {
-	const defaultEnvs = ['development', 'staging', 'production'];
+	const defaultEnvs = ['dev', 'staging', 'prod'];
 	const allEnvs = [...new Set([...existingEnvironments, ...defaultEnvs])];
 
 	const rl = createInterface({
@@ -221,7 +221,7 @@ export async function selectEnvironment(
 			if (!Number.isNaN(num) && num >= 1 && num <= allEnvs.length) {
 				resolve(allEnvs[num - 1] as string);
 			} else {
-				resolve(answer.trim() || defaultEnv || 'development');
+				resolve(answer.trim() || defaultEnv || 'dev');
 			}
 		});
 	});
