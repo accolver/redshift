@@ -41,7 +41,7 @@ redshift login                              # Interactive (choose method)
 redshift login --nsec nsec1...              # Direct private key
 redshift login --bunker <bunker-url>        # NIP-46 remote signer
 redshift login --connect                    # Generate NostrConnect QR
-redshift login --force                      # Re-authenticate
+redshift login --overwrite                  # Re-authenticate
 ```
 
 **CI/CD**: Set `REDSHIFT_NSEC` or `REDSHIFT_BUNKER` environment variable.
@@ -60,8 +60,8 @@ Configure project and environment for the current directory.
 
 ```bash
 redshift setup                              # Interactive
-redshift setup --project myapp --environment production
-redshift setup --force                      # Reconfigure
+redshift setup -p myapp -c production       # Non-interactive
+redshift setup --project myapp --config dev # Full flags
 ```
 
 Creates `redshift.yaml`:
@@ -81,10 +81,14 @@ Run a command with secrets injected into the environment.
 ```bash
 redshift run -- npm start
 redshift run -- python app.py
-redshift run -- docker-compose up
+redshift run --command "npm start && npm test"  # Alternative syntax
+redshift run -p myapp -c prod -- docker-compose up
 ```
 
 Complex values (objects/arrays) are automatically JSON-stringified.
+
+Use `redshift run --help` to see all available options including `--mount`,
+`--fallback`, and `--preserve-env`.
 
 ### `redshift secrets`
 
@@ -92,10 +96,10 @@ Manage secrets for the current project/environment.
 
 ```bash
 # List all secrets
-redshift secrets list
-redshift secrets list --raw          # Show values (not redacted)
-redshift secrets list --format json  # Output as JSON
-redshift secrets list --format env   # Output as .env format
+redshift secrets                     # Default: list all secrets
+redshift secrets --raw               # Show values (not redacted)
+redshift secrets --json              # Output as JSON
+redshift secrets -p myapp -c prod    # Override project/config
 
 # Get a specific secret
 redshift secrets get API_KEY
@@ -123,6 +127,52 @@ redshift serve --port 8080
 redshift serve --host 0.0.0.0     # Allow network access
 redshift serve --open             # Open browser automatically
 ```
+
+### `redshift configure`
+
+View and modify CLI configuration.
+
+```bash
+redshift configure                # Show current configuration
+redshift configure --all          # Show all saved options
+redshift configure get project    # Get specific option
+redshift configure set project=myapp
+redshift configure unset project
+redshift configure reset --yes    # Reset to initial state
+```
+
+### `redshift me` / `redshift whoami`
+
+Get info about the currently authenticated entity.
+
+```bash
+redshift me                       # Show auth info
+redshift whoami                   # Alias
+redshift me --json                # JSON output
+```
+
+### `redshift upgrade`
+
+Update the Redshift CLI to the latest version.
+
+```bash
+redshift upgrade                  # Upgrade to latest
+redshift upgrade --force          # Force reinstall
+redshift upgrade --tag v0.3.0     # Install specific version
+```
+
+## Global Flags
+
+These flags work with any command:
+
+| Flag           | Short | Description               |
+| -------------- | ----- | ------------------------- |
+| `--help`       | `-h`  | Show help for command     |
+| `--version`    | `-v`  | Show CLI version          |
+| `--json`       |       | Output JSON format        |
+| `--silent`     |       | Disable info messages     |
+| `--debug`      |       | Show debug output         |
+| `--config-dir` |       | Override config directory |
 
 ## NIP-46 Bunker Authentication
 
