@@ -67,16 +67,16 @@ import MultiEnvSaveModal from '$lib/components/MultiEnvSaveModal.svelte';
 import { goto } from '$app/navigation';
 import { fuzzyMatch } from '$lib/utils/search';
 
-// Get project ID from route
-const projectId = $derived(page.params.id);
+// Get project slug from route
+const projectSlug = $derived(page.params.slug);
 
 // Reactive state
 const projectsState = $derived(getProjectsState());
 const secretsState = $derived(getSecretsState());
 const missingSecretsState = $derived(getMissingSecretsState());
 
-// Find the current project
-const project = $derived(projectsState.projects.find((p) => p.id === projectId));
+// Find the current project by slug
+const project = $derived(projectsState.projects.find((p) => p.slug === projectSlug));
 
 // Selected environment - check URL query param first
 let selectedEnvSlug = $state<string | null>(null);
@@ -721,7 +721,7 @@ async function handleDeleteEnvironment() {
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="start" class="w-56">
 							{#each projectsState.projects as p (p.id)}
-								<DropdownMenuItem onclick={() => goto(`/admin/projects/${p.id}`)}>
+								<DropdownMenuItem onclick={() => goto(`/admin/projects/${p.slug}`)}>
 									{p.displayName}
 									<span class="ml-auto text-xs text-muted-foreground">{p.slug}</span>
 								</DropdownMenuItem>
@@ -1381,7 +1381,7 @@ async function handleDeleteEnvironment() {
 		// Navigate to the new project after creation
 		const newProject = projectsState.projects[projectsState.projects.length - 1];
 		if (newProject) {
-			goto(`/admin/projects/${newProject.id}`);
+			goto(`/admin/projects/${newProject.slug}`);
 		}
 	}}
 />

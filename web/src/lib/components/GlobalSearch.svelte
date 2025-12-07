@@ -51,8 +51,8 @@ async function loadAllSecrets() {
 
 	for (const project of projectsState.projects) {
 		for (const env of project.environments) {
-			const dTag = getSecretsDTag(project.id, env.slug);
-			const cacheKey = `${project.id}/${env.slug}`;
+			const dTag = getSecretsDTag(project.slug, env.slug);
+			const cacheKey = `${project.slug}/${env.slug}`;
 
 			// Get event from EventStore
 			const event = eventStore.getReplaceable(REDSHIFT_KIND, auth.pubkey, dTag);
@@ -82,13 +82,13 @@ const searchResults = $derived(() => {
 
 	// Search projects
 	for (const project of projectsState.projects) {
-		if (fuzzyMatch(project.name, query)) {
+		if (fuzzyMatch(project.displayName, query) || fuzzyMatch(project.slug, query)) {
 			results.push({
 				type: 'project',
 				project,
-				matchedText: project.name,
+				matchedText: project.displayName,
 				subtitle: 'Project',
-				score: matchScore(project.name, query),
+				score: Math.max(matchScore(project.displayName, query), matchScore(project.slug, query)),
 			});
 		}
 
@@ -100,13 +100,13 @@ const searchResults = $derived(() => {
 					project,
 					environment: env,
 					matchedText: env.name,
-					subtitle: project.name,
+					subtitle: project.displayName,
 					score: Math.max(matchScore(env.name, query), matchScore(env.slug, query)),
 				});
 			}
 
 			// Search secret keys in this environment
-			const cacheKey = `${project.id}/${env.slug}`;
+			const cacheKey = `${project.slug}/${env.slug}`;
 			const secrets = secretsCache.get(cacheKey) ?? [];
 
 			for (const secret of secrets) {
@@ -117,7 +117,7 @@ const searchResults = $derived(() => {
 						environment: env,
 						secret,
 						matchedText: secret.key,
-						subtitle: `${project.name} / ${env.name}`,
+						subtitle: `${project.displayName} / ${env.name}`,
 						score: matchScore(secret.key, query),
 					});
 				}
@@ -149,12 +149,12 @@ function handleSelect(result: SearchResult) {
 		if (result.type === 'secret' && result.environment) {
 			// Navigate to project with environment and highlight the secret
 			goto(
-				`/admin/projects/${result.project.id}?env=${result.environment.slug}&highlight=${encodeURIComponent(result.secret!.key)}`,
+				`/admin/projects/${result.project.slug}?env=${result.environment.slug}&highlight=${encodeURIComponent(result.secret!.key)}`,
 			);
 		} else if (result.type === 'environment' && result.environment) {
-			goto(`/admin/projects/${result.project.id}?env=${result.environment.slug}`);
+			goto(`/admin/projects/${result.project.slug}?env=${result.environment.slug}`);
 		} else {
-			goto(`/admin/projects/${result.project.id}`);
+			goto(`/admin/projects/${result.project.slug}`);
 		}
 	}, 0);
 }
@@ -224,16 +224,16 @@ function handleKeydown(e: KeyboardEvent) {
 					{#if projectsState.projects.length === 0}
 						<p class="text-sm text-muted-foreground">No projects yet</p>
 					{:else}
-						{#each projectsState.projects.slice(0, 5) as project}
-							<button
-								type="button"
-								class="flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-muted"
-								onclick={() => handleSelect({ type: 'project', project, matchedText: project.name, subtitle: 'Project' })}
-							>
-								<Folder class="size-4 text-muted-foreground" />
-								<span class="text-sm">{project.name}</span>
-							</button>
-						{/each}
+					{#each projectsState.projects.slice(0, 5) as project}
+						<button
+							type="button"
+							class="flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-muted"
+							onclick={() => handleSelect({ type: 'project', project, matchedText: project.displayName, subtitle: 'Project' })}
+						>
+							<Folder class="size-4 text-muted-foreground" />
+							<span class="text-sm">{project.displayName}</span>
+						</button>
+					{/each}
 					{/if}
 				</div>
 			{/if}

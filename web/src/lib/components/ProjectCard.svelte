@@ -19,7 +19,7 @@ function formatDate(timestamp: number): string {
 }
 
 const isPlaceholder = $derived(placeholder || !project);
-const href = $derived(project ? `/admin/projects/${project.id}` : undefined);
+const href = $derived(project ? `/admin/projects/${project.slug}` : undefined);
 </script>
 
 {#if isPlaceholder}
