@@ -1,4 +1,4 @@
-name: Build & Release
+name: Release
 
 on:
   push:
@@ -10,32 +10,8 @@ permissions:
   pull-requests: write
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: |
-          bun install
-          cd web && bun install
-
-      - name: Run CLI tests
-        run: bun test cli/
-
-      - name: Run web tests
-        run: cd web && bun run test
-
   release-please:
-    needs: test
+    name: Release Please
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
@@ -46,32 +22,16 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  build:
+  build-release:
+    name: Build Release Binaries
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created }}
-    strategy:
-      matrix:
-        include:
-          - target: bun-linux-x64
-            artifact: redshift-linux-x64
-          - target: bun-linux-arm64
-            artifact: redshift-linux-arm64
-          # Cross-compile macOS binaries from Linux for faster, more reliable builds
-          - target: bun-darwin-x64
-            artifact: redshift-darwin-x64
-          - target: bun-darwin-arm64
-            artifact: redshift-darwin-arm64
-
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -88,49 +48,19 @@ jobs:
       - name: Generate embeds
         run: bun run build:embeds
 
-      - name: Build binary with embedded UI
-        run: bun build cli/src/main.ts --compile --target=${{ matrix.target }} --outfile dist/${{ matrix.artifact }}
+      - name: Build all platform binaries
+        run: |
+          bun build cli/src/main.ts --compile --target=bun-linux-x64 --outfile dist/redshift-linux-x64
+          bun build cli/src/main.ts --compile --target=bun-linux-arm64 --outfile dist/redshift-linux-arm64
+          bun build cli/src/main.ts --compile --target=bun-darwin-x64 --outfile dist/redshift-darwin-x64
+          bun build cli/src/main.ts --compile --target=bun-darwin-arm64 --outfile dist/redshift-darwin-arm64
 
-      - name: Upload artifact to release
+      - name: Upload artifacts to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ needs.release-please.outputs.tag_name }} dist/${{ matrix.artifact }}
-
-  # Deploy web to Cloudflare Pages on main
-  deploy-web:
-    needs: test
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
         run: |
-          bun install
-          cd web && bun install
-
-      - name: Build web
-        run: cd web && bun run build
-
-      - name: Upload web artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-dist
-          path: web/dist
-
-      # If you're using Cloudflare Pages with GitHub integration,
-      # the deploy happens automatically. If using wrangler, uncomment:
-      # - name: Deploy to Cloudflare Pages
-      #   uses: cloudflare/wrangler-action@v3
-      #   with:
-      #     apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      #     accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      #     command: pages deploy web/dist --project-name=redshift
+          gh release upload ${{ needs.release-please.outputs.tag_name }} \
+            dist/redshift-linux-x64 \
+            dist/redshift-linux-arm64 \
+            dist/redshift-darwin-x64 \
+            dist/redshift-darwin-arm64
