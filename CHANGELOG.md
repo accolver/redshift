@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/accolver/redshift/compare/v0.6.2...v0.7.0) (2025-12-07)
+
+
+### Features
+
+* **cli:** add Doppler-compatible CLI framework with declarative command structure ([f2a58b5](https://github.com/accolver/redshift/commit/f2a58b5c3704c09a9ce0c8045cd3885a1fcac660))
+
 ## [0.6.2](https://github.com/accolver/redshift/compare/v0.6.1...v0.6.2) (2025-12-07)
 
 
