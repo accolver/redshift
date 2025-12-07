@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.0](https://github.com/accolver/redshift/compare/v0.7.0...v0.8.0) (2025-12-07)
+
+
+### Features
+
+* **cli:** use shorter environment slugs as defaults ([17cc359](https://github.com/accolver/redshift/commit/17cc3596dfe79df1e9635d5003102c3107233402))
+* **web:** add environment slug to URL path for bookmarkable links ([8a41887](https://github.com/accolver/redshift/commit/8a41887e470d976a2a49604f38dd235df428ef0d))
+
+
+### Bug Fixes
+
+* **cli:** make rate limiter tests more reliable in CI ([faa07ba](https://github.com/accolver/redshift/commit/faa07ba6eacc340eb1e377d47faa0b7a4f94f185))
+
 ## [0.7.0](https://github.com/accolver/redshift/compare/v0.6.2...v0.7.0) (2025-12-07)
 
 
