@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.0](https://github.com/accolver/redshift/compare/v0.4.1...v0.5.0) (2025-12-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **web:** Project schema changed from 'name' to 'slug' + 'displayName'. Old projects will not be visible in the UI.
+
+### Features
+
+* **web:** add immutable project slug for CLI compatibility ([dff71ad](https://github.com/accolver/redshift/commit/dff71ade438f996c709b46690796e06def837994))
+
+
+### Bug Fixes
+
+* **cli:** add timing tolerance to flaky rate limiter test ([fa5e685](https://github.com/accolver/redshift/commit/fa5e685f1d8f1eab6a71213c5b8204da0f35b273))
+* **web:** hide add secret row immediately when saving ([09bb1ea](https://github.com/accolver/redshift/commit/09bb1ea02acf755b5befa1cb7a2d7a5eac653c09))
+* **web:** remove relay.primal.net and add publish timeout ([bfbd219](https://github.com/accolver/redshift/commit/bfbd21992a64840f3410eb5da82fa53b52649dd6))
+* **web:** restore relay.primal.net, keep 10s timeout ([de44285](https://github.com/accolver/redshift/commit/de4428564933f27f71c4340554324eb2a6cff9b3))
+
 ## [0.4.1](https://github.com/accolver/redshift/compare/v0.4.0...v0.4.1) (2025-12-07)
 
 
