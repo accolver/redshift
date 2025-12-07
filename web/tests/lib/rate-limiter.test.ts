@@ -221,8 +221,8 @@ describe('Rate Limiter Module', () => {
 			await limited(10);
 			const elapsed = Date.now() - start;
 
-			// Should have min delay between calls
-			expect(elapsed).toBeGreaterThanOrEqual(20);
+			// Should have min delay between calls (allow 2ms tolerance for timer precision)
+			expect(elapsed).toBeGreaterThanOrEqual(18);
 			expect(await limited(15)).toBe(30);
 		});
 
