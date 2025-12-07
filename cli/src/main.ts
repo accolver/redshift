@@ -15,6 +15,7 @@ import { runCommand } from './commands/run';
 import { type SecretsSubcommand, secretsCommand } from './commands/secrets';
 import { serveCommand } from './commands/serve';
 import { setupCommand } from './commands/setup';
+import { upgradeCommand } from './commands/upgrade';
 
 const VERSION = '0.1.0';
 
@@ -30,6 +31,7 @@ Commands:
   run -- <command>   Run a command with secrets injected
   secrets            Manage secrets (list, set, get, delete)
   serve              Start the web administration UI
+  upgrade            Update CLI to the latest version
 
 Options:
   -h, --help         Show this help message
@@ -48,6 +50,16 @@ Secrets Subcommands:
   secrets delete <KEY>             Delete a secret
   secrets download                 Download secrets as .env format
   secrets upload [file]            Upload secrets from .env file (default: .env)
+
+Secrets Options:
+  -p, --project <name>             Override project (from redshift.yaml)
+  -e, --environment <env>          Override environment (from redshift.yaml)
+  -f, --format <format>            Output format: table, json, env
+  -r, --raw                        Show unredacted secret values
+
+Upgrade Options:
+  -f, --force                      Force upgrade even if on latest version
+  -v, --version <tag>              Install a specific version (e.g., v0.2.0)
 
 Examples:
   redshift login
@@ -157,6 +169,15 @@ async function main(): Promise<void> {
 				host: typeof flags.host === 'string' ? flags.host : '127.0.0.1',
 				open: flags.open === true,
 			});
+			break;
+		}
+
+		case 'upgrade': {
+			const upgradeOpts: import('./commands/upgrade').UpgradeOptions = {
+				force: flags.force === true,
+			};
+			if (typeof flags.version === 'string') upgradeOpts.version = flags.version;
+			await upgradeCommand(upgradeOpts);
 			break;
 		}
 

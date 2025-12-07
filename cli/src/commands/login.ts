@@ -208,6 +208,58 @@ async function loginWithNostrConnect(): Promise<void> {
 }
 
 /**
+ * Prompt for hidden input (for sensitive data like nsec).
+ * Characters are not echoed to the terminal.
+ */
+async function promptHidden(prompt: string): Promise<string> {
+	return new Promise((resolve) => {
+		process.stdout.write(prompt);
+
+		// Enable raw mode to capture input without echoing
+		if (process.stdin.isTTY) {
+			process.stdin.setRawMode(true);
+		}
+		process.stdin.resume();
+		process.stdin.setEncoding('utf8');
+
+		let input = '';
+
+		const onData = (char: string) => {
+			// Handle Ctrl+C
+			if (char === '\u0003') {
+				process.stdout.write('\n');
+				process.exit(0);
+			}
+
+			// Handle Enter
+			if (char === '\r' || char === '\n') {
+				if (process.stdin.isTTY) {
+					process.stdin.setRawMode(false);
+				}
+				process.stdin.pause();
+				process.stdin.removeListener('data', onData);
+				process.stdout.write('\n');
+				resolve(input.trim());
+				return;
+			}
+
+			// Handle Backspace
+			if (char === '\u007F' || char === '\b') {
+				if (input.length > 0) {
+					input = input.slice(0, -1);
+				}
+				return;
+			}
+
+			// Accumulate character (don't echo)
+			input += char;
+		};
+
+		process.stdin.on('data', onData);
+	});
+}
+
+/**
  * Interactive login flow
  */
 async function interactiveLogin(): Promise<void> {
@@ -232,12 +284,8 @@ async function interactiveLogin(): Promise<void> {
 
 	switch (choice) {
 		case '1': {
-			const nsec = await new Promise<string>((resolve) => {
-				rl.question('\nEnter your nsec: ', (answer) => {
-					rl.close();
-					resolve(answer.trim());
-				});
-			});
+			rl.close();
+			const nsec = await promptHidden('\nEnter your nsec: ');
 			if (nsec) {
 				await loginWithNsec(nsec);
 			} else {

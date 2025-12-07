@@ -80,8 +80,7 @@ export function parseCommand(argv: string[]): ParsedCommand {
 		const { values, positionals } = parseArgs({
 			args: restArgs.slice(1),
 			options: {
-				env: { type: 'string', short: 'e' },
-				environment: { type: 'string' },
+				environment: { type: 'string', short: 'e' },
 				project: { type: 'string', short: 'p' },
 				format: { type: 'string', short: 'f' },
 				raw: { type: 'boolean', short: 'r' },
@@ -158,6 +157,24 @@ export function parseCommand(argv: string[]): ParsedCommand {
 
 		return {
 			command: 'setup',
+			args: [],
+			flags: values as Record<string, string | boolean>,
+		};
+	}
+
+	// Handle 'upgrade' command
+	if (command === 'upgrade') {
+		const { values } = parseArgs({
+			args: restArgs,
+			options: {
+				force: { type: 'boolean', short: 'f' },
+				version: { type: 'string', short: 'v' },
+			},
+			allowPositionals: false,
+		});
+
+		return {
+			command: 'upgrade',
 			args: [],
 			flags: values as Record<string, string | boolean>,
 		};

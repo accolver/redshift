@@ -59,6 +59,7 @@ export type CommandName =
 	| 'run'
 	| 'secrets'
 	| 'serve'
+	| 'upgrade'
 	| 'help'
 	| 'version';
 
