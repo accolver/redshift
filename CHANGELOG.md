@@ -1,5 +1,67 @@
 # Changelog
 
+## [0.4.0](https://github.com/accolver/redshift/compare/v0.3.0...v0.4.0) (2025-12-07)
+
+
+### Features
+
+* add cross-platform build scripts and release automation ([7adb58a](https://github.com/accolver/redshift/commit/7adb58acf03452db76f998e4c9cee65f8ec0c606))
+* add fuzzy search for secrets with space-to-underscore matching ([d86013b](https://github.com/accolver/redshift/commit/d86013b35b361674dcfc09cb43aa4e06561880ca))
+* add InlineCode component for consistent inline code styling ([fd7f127](https://github.com/accolver/redshift/commit/fd7f1271e542f007d9a992b3d9776465ff99dc60))
+* add NIP-07/NIP-46 signer support for Gift Wrap encryption ([92e727c](https://github.com/accolver/redshift/commit/92e727c69c7dbf35619cb94e73836d721090983e))
+* add rate limiting with exponential backoff for relay connections ([df0d891](https://github.com/accolver/redshift/commit/df0d8910f53afc0e06d3acb3e24e8e8767d03169))
+* **admin:** add missing secrets, multi-env save, and search highlight ([8590465](https://github.com/accolver/redshift/commit/8590465c64c9cc57de0dffcd383b34fda7fef725))
+* **auth:** add local nsec signing and NIP-46 bunker support ([134a690](https://github.com/accolver/redshift/commit/134a69044b37708692d8228438213deb092e7fcd))
+* **branding:** replace Svelte logo with custom Redshift chevron icon ([44dbfa4](https://github.com/accolver/redshift/commit/44dbfa468d1ddebd613c6a31b368a14001468e8a))
+* **cli:** add binary integration tests and interactive project fetching ([8216903](https://github.com/accolver/redshift/commit/82169037184f267d78c87881165c1650406f2de1))
+* **cli:** add secrets upload command for .env file import ([b08525e](https://github.com/accolver/redshift/commit/b08525e322cd7dd1d7c122d549e67cd32b14735f))
+* **cli:** add typed errors, keychain storage, and input validation ([05338b7](https://github.com/accolver/redshift/commit/05338b76da9f9a38ce028dde37ab7e11256ab747))
+* **cli:** add upgrade command, hidden nsec input, and secrets options ([b4a13ad](https://github.com/accolver/redshift/commit/b4a13ad4df9d13f5a40533c99c33aa58cf9137bc))
+* **cli:** embed SvelteKit admin UI into binary ([82f7139](https://github.com/accolver/redshift/commit/82f71394612c3746dc6e3633dab25c0dd8974737))
+* **cli:** implement Nostr-based secret management CLI ([b068348](https://github.com/accolver/redshift/commit/b068348c07c0ee8dd314ce39c5cd6f40549accd1))
+* **crypto:** add shared NIP-59 Gift Wrap crypto package ([c3566eb](https://github.com/accolver/redshift/commit/c3566ebc543c67ef1014a451af88703acc4662c5))
+* **docs:** add home link to sidebar navigation ([1a53769](https://github.com/accolver/redshift/commit/1a5376917405c0e903b067c86be65d5e02469efe))
+* **docs:** add linkable headers and Prism.js code highlighting ([90996d8](https://github.com/accolver/redshift/commit/90996d86c254d950ce1868c4279326154b54950a))
+* **docs:** add mobile navigation with shadcn Sheet component ([c06b971](https://github.com/accolver/redshift/commit/c06b9713044ecfe3c033e20a41120251e102465a))
+* **security:** encrypt nsec with non-extractable AES-GCM key before storage ([aabc8b9](https://github.com/accolver/redshift/commit/aabc8b9821997dbddef564de83153393a1bfb9b7))
+* **seo:** add comprehensive SEO meta tags, sitemap, and structured data ([4fe72ff](https://github.com/accolver/redshift/commit/4fe72ff2ccbc506f61359bb4c4b7d30d3aade44d))
+* **seo:** add llms.txt for LLM-friendly documentation ([06ae297](https://github.com/accolver/redshift/commit/06ae297d97a82e0f36de9f0caaa75df58a0642d9))
+* support batch secrets in multi-env save modal ([bd64e7c](https://github.com/accolver/redshift/commit/bd64e7c119ab0c48f63a71eab184eede7ef64f07))
+* **web:** add dashboard enhancements, delete functionality, and global search ([9818ae9](https://github.com/accolver/redshift/commit/9818ae90bcb665f729bd401a14e11cb7dcc146d9))
+* **web:** add inline editing and status tracking for secrets ([58dac2e](https://github.com/accolver/redshift/commit/58dac2eed1091fdf49ed7dcab27a26b5c3da3e3c))
+* **web:** add login dialog with NIP-07, nsec, and bunker auth options ([2007407](https://github.com/accolver/redshift/commit/200740798a223a9fccbfe616dbd0a188d1df14af))
+* **web:** add mobile responsive layout, export/import modals, and copy feedback ([507f23d](https://github.com/accolver/redshift/commit/507f23d614387c6c1eaac995e8b2573ab794016e))
+* **web:** add reusable CodeBlock component with copy button ([7f3288a](https://github.com/accolver/redshift/commit/7f3288acc3635e41d8638ebd8335a69dbefeafcb))
+* **web:** add scroll animations and fix secrets sorting ([c1417f5](https://github.com/accolver/redshift/commit/c1417f5cb9a78decd8210f061c5064039fe6cd6c))
+* **web:** add svelte-motion animations to admin dashboard ([dce37c5](https://github.com/accolver/redshift/commit/dce37c57bd2d90d60cdf2065afa17160e6e9c100))
+* **web:** implement NIP-59 Gift Wrap encryption for secrets ([ab12567](https://github.com/accolver/redshift/commit/ab12567a1fd45512370cc3aeb0321c4c04e3598a))
+* **web:** implement SvelteKit admin dashboard with Nostr auth ([43502b2](https://github.com/accolver/redshift/commit/43502b29e8a2ca6533bb1183fd372a178fbce082))
+* **web:** improve secrets UX with global save, unsaved warning, and animations ([11cb87c](https://github.com/accolver/redshift/commit/11cb87c3bcaedda8bca1a5f7394692ed8109d948))
+* **web:** integrate shared crypto package for NIP-59 encryption ([963dce6](https://github.com/accolver/redshift/commit/963dce67afaa276c99d0b7fe49e0f2ef970a8503))
+* **web:** redesign project page with Doppler-style secrets UI ([86fc97a](https://github.com/accolver/redshift/commit/86fc97a960432e67e087c03206d1bb535db72a79))
+
+
+### Bug Fixes
+
+* **a11y:** remove autofocus attributes to fix accessibility warnings ([16c5f3d](https://github.com/accolver/redshift/commit/16c5f3d6e82fa917ac1d59439dd6f8678b65c713))
+* add cursor-pointer to dialog close button ([a29b1df](https://github.com/accolver/redshift/commit/a29b1df59aabde79e5dec887413e4bcec317ff81))
+* **build:** add favicon.svg to static and remove missing apple-touch-icon ref ([7486aef](https://github.com/accolver/redshift/commit/7486aef183451a891a3a228464f718214e6e456f))
+* **ci:** skip relay integration tests and fix workspace protocol ([dd18363](https://github.com/accolver/redshift/commit/dd18363d44218f73ac657ee5ed08d219335ca390))
+* **cli:** handle component-prefixed version tags in upgrade command ([42009a2](https://github.com/accolver/redshift/commit/42009a22afdfdbf49a0fb4fd83d23f7cb8dba6ca))
+* **cli:** read version from package.json and set up Release Please ([258c931](https://github.com/accolver/redshift/commit/258c93191e241acc7b419fb83c02d3ed743ac8bb))
+* prevent infinite effect loops in admin layout and secrets store ([25af225](https://github.com/accolver/redshift/commit/25af22523321f0486374afe1cacc2151949a9ab3))
+* resolve TypeScript exactOptionalPropertyTypes errors ([01fdade](https://github.com/accolver/redshift/commit/01fdadec84ab64aa2d20e23b425b4c32b76fc0ad))
+* **test:** add afterEach cleanup and fix timing tolerances ([2d1c841](https://github.com/accolver/redshift/commit/2d1c8411b42a1b7cfe1ce784fc5677fd33bb72f8))
+* **test:** add tolerance for timing-sensitive rate limiter test ([df71adb](https://github.com/accolver/redshift/commit/df71adb0a63a25940505617837b930f8471d0abe))
+* **ui:** add spacing between navbar and hero section ([6153b39](https://github.com/accolver/redshift/commit/6153b39ed64353a3a055564846edebddf490d7b7))
+* **ui:** improve mobile layout and inline editing for missing secrets ([37a44ca](https://github.com/accolver/redshift/commit/37a44ca9edb59909dde7eb022d73a2663473acfa))
+* **ui:** mobile navbar overflow, scroll bug, and add secret search ([e32de0f](https://github.com/accolver/redshift/commit/e32de0f84252ff11cf9f803e052c1c315bb456cb))
+* update GitHub repo URLs to accolver/redshift ([9a67d71](https://github.com/accolver/redshift/commit/9a67d7158aad38a7bc4cf9cd9eedb1bd47b43014))
+* **web:** adjust DocsPage header styling ([50ca213](https://github.com/accolver/redshift/commit/50ca213e3c9af36d10726098164d8da8b077b074))
+* **web:** eliminate horizontal scrolling on docs pages ([d002a26](https://github.com/accolver/redshift/commit/d002a26297b622aeb9880725d43610585a1bf93f))
+* **web:** improve install command contrast in CLI Quick Reference ([b9724a4](https://github.com/accolver/redshift/commit/b9724a4ec48f0e7ff9af1ee4f6757321b1d807f1))
+* **web:** improve terminal preview text contrast on homepage ([2713f99](https://github.com/accolver/redshift/commit/2713f9998ba879ba70badf587e5296d6ccd1bf53))
+
 ## [0.3.0](https://github.com/accolver/redshift/compare/redshift-v0.2.1...redshift-v0.3.0) (2025-12-07)
 
 
