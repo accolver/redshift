@@ -130,6 +130,19 @@ function getCurrentVersion(): string {
 }
 
 /**
+ * Extract version number from a tag name.
+ * Handles formats like: "v0.3.0", "redshift-v0.3.0", "vredshift-v0.3.0"
+ */
+function extractVersion(tagName: string): string {
+	// Match version pattern: digits.digits.digits (with optional v prefix anywhere)
+	const match = tagName.match(/v?(\d+\.\d+\.\d+)/);
+	if (match && match[1]) {
+		return match[1];
+	}
+	return tagName.replace(/^v/, '');
+}
+
+/**
  * Execute the upgrade command.
  */
 export async function upgradeCommand(options: UpgradeOptions): Promise<void> {
@@ -146,7 +159,7 @@ export async function upgradeCommand(options: UpgradeOptions): Promise<void> {
 			? await fetchReleaseByTag(options.version)
 			: await fetchLatestRelease();
 
-		const latestVersion = release.tag_name.replace(/^v/, '');
+		const latestVersion = extractVersion(release.tag_name);
 
 		if (latestVersion === currentVersion && !options.force) {
 			console.log(`\n✓ Already on the latest version (v${currentVersion})`);
