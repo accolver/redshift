@@ -148,6 +148,9 @@ let copiedKey = $state<string | null>(null);
 // Track highlighted secret from search navigation
 let highlightedKey = $state<string | null>(null);
 
+// Reference to the new secret key input for autofocus
+let newSecretKeyInput = $state<HTMLInputElement | null>(null);
+
 // Read highlight from URL query param and clear after a delay
 $effect(() => {
 	const highlight = page.url.searchParams.get('highlight');
@@ -164,6 +167,13 @@ $effect(() => {
 		setTimeout(() => {
 			highlightedKey = null;
 		}, 3000);
+	}
+});
+
+// Autofocus the new secret key input when the add row appears
+$effect(() => {
+	if (showAddSecretRow && newSecretKeyInput) {
+		newSecretKeyInput.focus();
 	}
 });
 
@@ -1049,14 +1059,15 @@ async function handleDeleteEnvironment() {
 									
 									<!-- Key Pill -->
 									<div class="flex h-10 items-center rounded-lg border border-border bg-card px-3 sm:w-72">
-										<input
-											type="text"
-											placeholder="SECRET_NAME"
-											class="w-full bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground"
-											bind:value={newSecretKey}
-											oninput={handleKeyInput}
-											onkeydown={handleKeydown}
-										/>
+								<input
+									bind:this={newSecretKeyInput}
+									type="text"
+									placeholder="SECRET_NAME"
+									class="w-full bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground"
+									bind:value={newSecretKey}
+									oninput={handleKeyInput}
+									onkeydown={handleKeydown}
+								/>
 									</div>
 									
 									<!-- Value Pill -->
