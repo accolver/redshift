@@ -23,7 +23,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
   build-release:
-    name: Build Release Binaries
+    name: Build Release
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created }}
     runs-on: ubuntu-latest
@@ -42,20 +42,23 @@ jobs:
           bun install
           cd web && bun install
 
+      # Build web once
       - name: Build web
         run: cd web && bun run build
 
+      # Generate embeds once (embeds web build into CLI)
       - name: Generate embeds
         run: bun run build:embeds
 
-      - name: Build all platform binaries
+      # Build all platform binaries (web already embedded, this is fast)
+      - name: Build binaries
         run: |
           bun build cli/src/main.ts --compile --target=bun-linux-x64 --outfile dist/redshift-linux-x64
           bun build cli/src/main.ts --compile --target=bun-linux-arm64 --outfile dist/redshift-linux-arm64
           bun build cli/src/main.ts --compile --target=bun-darwin-x64 --outfile dist/redshift-darwin-x64
           bun build cli/src/main.ts --compile --target=bun-darwin-arm64 --outfile dist/redshift-darwin-arm64
 
-      - name: Upload artifacts to release
+      - name: Upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
