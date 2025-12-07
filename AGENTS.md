@@ -239,3 +239,45 @@ For more information, see
      // Complex implementation where explicit type adds clarity
    }
    ```
+
+### Shared Code & Monorepo
+
+9. **Use Shared Packages** - Code used by both CLI and Web MUST live in
+   `/packages/`:
+   - `@redshift/crypto` - NIP-59 Gift Wrap, encryption, types
+   - If duplicating code between `cli/` and `web/`, STOP and extract to a shared
+     package
+
+10. **Prefer Existing Nostr Libraries** - Before implementing Nostr primitives:
+    - Check `nostr-tools` first (signing, encryption, relay protocol)
+    - Use `applesauce-core` for Web EventStore patterns
+    - Use `@redshift/crypto` for Gift Wrap operations
+    - Never reimplement what already exists in the ecosystem
+
+### Error Handling
+
+11. **Use Typed Errors** - All relay and crypto operations use custom error
+    types from `cli/src/lib/errors.ts`:
+    - `RelayError` - connection/query/publish failures
+    - `DecryptionError` - NIP-59 unwrap failures
+    - `AuthError` - authentication issues
+    - `ConfigError` - missing/invalid configuration
+    - `NotConnectedError` - operation requires relay connection
+
+12. **Never Swallow Errors Silently** - Exceptions:
+    - Empty catch blocks OK when decrypting Gift Wraps in loops (events may
+      belong to other users)
+    - Use `isRetryableError()` for retry decisions
+    - Use `formatError()` for user-facing messages
+
+### Nostr Protocol
+
+13. **Gift Wrap with Type Tag** - All secret events use NIP-59 with custom tag:
+    ```typescript
+    ["t", "redshift-secrets"]; // Required on outer Gift Wrap
+    ```
+
+14. **d-tag Format** - Secret bundles use: `{projectId}|{environment}`
+
+15. **Rate Limiting Required** - All relay operations use rate limiting and
+    exponential backoff by default (see `RateLimiter` class)

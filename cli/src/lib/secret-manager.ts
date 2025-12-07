@@ -16,6 +16,7 @@ import {
 	wrapSecrets as wrapSecretsToEvent,
 } from './crypto';
 import type { UnwrapResult } from './crypto';
+import { NotConnectedError } from './errors';
 import type { RelayPool } from './relay';
 import { createRelayPool, filterGiftWraps } from './relay';
 import type { GiftWrapResult, NostrEvent, SecretBundle } from './types';
@@ -105,7 +106,7 @@ export class SecretManager {
 	 */
 	async fetchAllSecrets(): Promise<Map<string, SecretBundle>> {
 		if (!this.pool) {
-			throw new Error('Not connected to relays. Call connect() first.');
+			throw new NotConnectedError();
 		}
 
 		const filter = filterGiftWraps(this.publicKey);
@@ -184,7 +185,7 @@ export class SecretManager {
 	 */
 	async fetchSecrets(projectId: string, environment: string): Promise<SecretBundle | null> {
 		if (!this.pool) {
-			throw new Error('Not connected to relays. Call connect() first.');
+			throw new NotConnectedError();
 		}
 
 		const targetDTag = createDTag(projectId, environment);
@@ -225,7 +226,7 @@ export class SecretManager {
 		secrets: SecretBundle,
 	): Promise<NostrEvent> {
 		if (!this.pool) {
-			throw new Error('Not connected to relays. Call connect() first.');
+			throw new NotConnectedError();
 		}
 
 		const dTag = createDTag(projectId, environment);
@@ -241,7 +242,7 @@ export class SecretManager {
 	 */
 	async deleteSecrets(projectId: string, environment: string): Promise<NostrEvent> {
 		if (!this.pool) {
-			throw new Error('Not connected to relays. Call connect() first.');
+			throw new NotConnectedError();
 		}
 
 		const dTag = createDTag(projectId, environment);
@@ -257,7 +258,7 @@ export class SecretManager {
 	 */
 	async requestDeletion(eventIds: string[], reason?: string): Promise<NostrEvent> {
 		if (!this.pool) {
-			throw new Error('Not connected to relays. Call connect() first.');
+			throw new NotConnectedError();
 		}
 
 		const deletion = createDeletionEvent(eventIds, this.privateKey, reason);

@@ -28,6 +28,7 @@ import {
 	saveConfig,
 } from '../lib/config';
 import { decodeNsec, validateNsec } from '../lib/crypto';
+import { getKeychainServiceName, storeNsecInKeychain } from '../lib/keychain';
 import type { BunkerAuth } from '../lib/types';
 
 export interface LoginOptions {
@@ -94,15 +95,37 @@ async function loginWithNsec(nsec: string): Promise<void> {
 	const pubkey = getPublicKey(privateKeyBytes);
 	const npub = npubEncode(pubkey);
 
-	const config = await loadConfig();
-	config.authMethod = 'nsec';
-	config.nsec = nsec;
-	delete config.bunker;
-	await saveConfig(config);
+	// Try to store in system keychain first (most secure)
+	const storedInKeychain = await storeNsecInKeychain(nsec);
 
-	console.log('\n✓ Logged in successfully!');
-	console.log(`  Public key: ${npub}`);
-	console.log('\nYour private key has been stored in ~/.redshift/config.json');
+	if (storedInKeychain) {
+		// Update config to indicate keychain auth, but don't store nsec in file
+		const config = await loadConfig();
+		config.authMethod = 'nsec';
+		delete config.nsec; // Don't store in file when using keychain
+		delete config.bunker;
+		await saveConfig(config);
+
+		console.log('\n✓ Logged in successfully!');
+		console.log(`  Public key: ${npub}`);
+		console.log(`\nYour private key has been stored securely in the system keychain.`);
+		console.log(`  Service: ${getKeychainServiceName()}`);
+	} else {
+		// Fall back to file-based storage with warning
+		console.log('\n⚠️  System keychain unavailable. Using file-based storage.');
+		console.log('   This is less secure than keychain storage.');
+
+		const config = await loadConfig();
+		config.authMethod = 'nsec';
+		config.nsec = nsec;
+		delete config.bunker;
+		await saveConfig(config);
+
+		console.log('\n✓ Logged in successfully!');
+		console.log(`  Public key: ${npub}`);
+		console.log('\nYour private key has been stored in ~/.redshift/config.json');
+	}
+
 	console.log('\nTip: For CI/CD, set REDSHIFT_NSEC environment variable instead.');
 }
 
@@ -253,6 +276,7 @@ async function interactiveLogin(): Promise<void> {
  * Logout - clear stored credentials
  */
 export async function logoutCommand(): Promise<void> {
+	// clearAuth handles both keychain and config file
 	await clearAuth();
 	console.log('✓ Logged out successfully.');
 }

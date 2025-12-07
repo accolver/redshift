@@ -217,7 +217,153 @@ All Nostr data in the web application MUST follow this reactive pattern:
 
 ### ---
 
-**4\. Test-Driven Development (TDD) Plan**
+**4\. Architectural Constraints & Design Decisions**
+
+These are hard requirements that MUST be followed. Violating these constraints
+requires explicit user approval.
+
+#### **4.1. Shared Packages (Monorepo Structure)**
+
+Code that is used by both CLI and Web MUST live in shared packages under
+`/packages/`:
+
+```
+packages/
+├── crypto/          # @redshift/crypto - NIP-59 Gift Wrap, encryption
+│   ├── src/
+│   │   ├── gift-wrap.ts    # wrapSecrets, unwrapGiftWrap
+│   │   ├── types.ts        # NostrEvent, SecretBundle, etc.
+│   │   └── utils.ts        # createDTag, parseDTag
+│   └── tests/
+```
+
+**Why:** Ensures identical behavior between CLI and Web. A bug fix in one place
+fixes both. Types are always in sync.
+
+**Rule:** If you find yourself duplicating crypto, relay, or type code between
+`cli/` and `web/`, STOP and extract to a shared package.
+
+#### **4.2. NIP-59 Gift Wrap with Custom Type Tag**
+
+All secret events MUST use NIP-59 Gift Wrap with a custom type tag for relay
+filtering:
+
+```typescript
+// Outer Gift Wrap event (kind 1059) MUST include:
+["t", "redshift-secrets"] // Type tag for relay filtering
+  ["p", recipientPubkey]; // Standard NIP-59 recipient tag
+```
+
+**Why:**
+
+- Allows relays to filter Redshift events separately from DMs
+- Enables future relay optimizations (dedicated Redshift relay tier)
+- Prevents mixing with other Gift Wrap use cases
+
+**Implementation:** See `@redshift/crypto` package - `wrapSecrets()` adds this
+tag automatically.
+
+#### **4.3. Error Handling Strategy**
+
+All relay and crypto operations MUST use typed errors, never swallow failures:
+
+```typescript
+// cli/src/lib/errors.ts
+export class RelayError extends RedshiftError { ... }
+export class DecryptionError extends RedshiftError { ... }
+export class AuthError extends RedshiftError { ... }
+export class ConfigError extends RedshiftError { ... }
+export class NotConnectedError extends RedshiftError { ... }
+```
+
+**Rules:**
+
+1. **Never return empty array on query failure** - throw `RelayError`
+2. **Log decryption failures only when debugging** - events we can't decrypt
+   aren't ours (expected behavior)
+3. **Use `isRetryableError()` for retry logic** - network errors are retryable,
+   auth errors are not
+4. **Format errors for users with `formatError()`** - includes error code
+
+**Exception:** Empty catch blocks are acceptable ONLY when decrypting Gift Wraps
+in a loop where some events may belong to other users.
+
+#### **4.4. Library Preferences**
+
+When implementing Nostr functionality, prefer existing libraries over custom
+implementations:
+
+| Functionality     | Preferred Library                                  | Fallback |
+| ----------------- | -------------------------------------------------- | -------- |
+| Event signing     | `nostr-tools`                                      | None     |
+| NIP-04 encryption | `nostr-tools`                                      | None     |
+| NIP-44 encryption | `nostr-tools`                                      | None     |
+| Relay connections | `nostr-tools/pool` (CLI), `applesauce-relay` (Web) | None     |
+| Gift Wrap         | `@redshift/crypto` (wraps nostr-tools)             | None     |
+| Event storage     | `applesauce-core` EventStore (Web only)            | None     |
+
+**Why:** Battle-tested implementations, consistent with Nostr ecosystem, reduces
+maintenance burden.
+
+**Rule:** Before implementing any Nostr primitive (encryption, signing, relay
+protocol), check if `nostr-tools` or `applesauce-*` already provides it.
+
+#### **4.5. Rate Limiting & Resilience**
+
+All relay operations MUST use rate limiting and exponential backoff:
+
+```typescript
+// Default configuration
+const rateLimiter = new RateLimiter(10, 1000, 100);
+// 10 requests per 1000ms window, minimum 100ms between requests
+
+// Backoff for transient failures
+withQueryBackoff(operation); // For queries
+withPublishBackoff(operation); // For publishes
+```
+
+**Rules:**
+
+1. Rate limiter is enabled by default in `createRelayPool()`
+2. Retry with backoff is enabled by default
+3. Both can be disabled for testing via options
+4. Rate limiter instances are shared across operations
+
+#### **4.6. Authentication Methods**
+
+Redshift supports three authentication methods, in order of preference:
+
+1. **NIP-07 Browser Extension** (Web) - Most secure, keys never leave extension
+2. **NIP-46 Bunker** (CLI/Web) - Remote signer, good for CI/CD
+3. **Local NSEC** (CLI) - Stored in `~/.redshift/config`, least preferred
+
+**Rule:** The Web app MUST prefer NIP-07 and show warnings for local key usage.
+The CLI MUST check `REDSHIFT_NSEC` environment variable before reading config.
+
+#### **4.7. Event Structure**
+
+Secret bundles use Kind 30078 (Arbitrary Custom App Data) as the inner rumor:
+
+```typescript
+// Inner Rumor (unsigned, inside Gift Wrap)
+{
+  kind: 30078,
+  pubkey: userPubkey,
+  created_at: timestamp,
+  tags: [
+    ["d", "projectId|environment"],  // Replaceable event identifier
+  ],
+  content: JSON.stringify({ KEY: "value", ... })
+}
+```
+
+**d-tag format:** `{projectId}|{environment}` (pipe-separated)
+
+**Tombstone:** Empty content `{}` indicates deletion (logical delete).
+
+### ---
+
+**5\. Test-Driven Development (TDD) Plan**
 
 The AI should follow these phases, writing the test _before_ the implementation.
 
@@ -229,8 +375,8 @@ The AI should follow these phases, writing the test _before_ the implementation.
 2. **Test:** Define a test for SecretManager.ts. Mock a Nostr pool. Publish two
    Gift Wraps with the same d tag but different timestamps. Assert
    getLatestSecrets() returns the newer one.
-3. **Implement:** src/lib/crypto.ts using nostr-tools and
-   src/lib/SecretManager.ts.
+3. **Implement:** `@redshift/crypto` package using nostr-tools and
+   `cli/src/lib/secret-manager.ts`.
 
 #### **Phase 2: The CLI Engine (parseArgs)**
 
@@ -262,7 +408,7 @@ The AI should follow these phases, writing the test _before_ the implementation.
 
 ### ---
 
-**5\. Monetization Roadmap**
+**6\. Monetization Roadmap**
 
 While Redshift is open-source (sovereign), sustainable revenue can be generated
 through "Convenience & Enterprise" layers.

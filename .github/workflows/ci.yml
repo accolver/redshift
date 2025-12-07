@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test-cli:
+    name: CLI Tests
+    runs-on: ubuntu-latest
+
+    services:
+      # Local Nostr relay for integration tests
+      nostr-relay:
+        image: scsibug/nostr-rs-relay
+        ports:
+          - 10547:8080
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run CLI tests
+        run: cd cli && bun test
+        env:
+          TEST_RELAY_URL: ws://localhost:10547
+
+  test-web:
+    name: Web Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install web dependencies
+        run: cd web && bun install
+
+      - name: Run web tests (vitest)
+        run: cd web && bun run test
+
+  test-crypto:
+    name: Crypto Package Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run crypto tests
+        run: cd packages/crypto && bun test
+
+  build:
+    name: Build Check
+    needs: [test-cli, test-web, test-crypto]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: |
+          bun install
+          cd web && bun install
+
+      - name: Build web
+        run: cd web && bun run build
+
+      - name: Generate embeds
+        run: bun run build:embeds
+
+      - name: Build CLI binary (Linux x64)
+        run: bun build cli/src/main.ts --compile --target=bun-linux-x64 --outfile dist/redshift-linux-x64
+
+      - name: Verify binary
+        run: |
+          ls -la dist/
+          file dist/redshift-linux-x64
+
+  # Test on macOS to verify keychain integration works
+  test-macos:
+    name: macOS Tests (Keychain)
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run CLI tests (includes keychain tests)
+        run: cd cli && bun test

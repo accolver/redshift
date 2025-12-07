@@ -8,6 +8,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { deleteNsecFromKeychain, getNsecFromKeychain } from './keychain';
 import type { AuthMethod, BunkerAuth, RedshiftConfig } from './types';
 
 /**
@@ -43,7 +44,7 @@ export interface AuthResult {
 	nsec?: string;
 	/** Present for bunker auth */
 	bunker?: BunkerAuth;
-	source: 'env' | 'config';
+	source: 'env' | 'config' | 'keychain';
 }
 
 const CONFIG_FILE = 'config.json';
@@ -98,7 +99,7 @@ export async function loadConfig(): Promise<Config> {
 
 /**
  * Get the private key (nsec) from available sources.
- * Priority: ENV > Config file > Keychain (future)
+ * Priority: ENV > Keychain > Config file
  *
  * @returns The nsec and its source, or null if not found
  */
@@ -109,14 +110,17 @@ export async function getPrivateKey(): Promise<PrivateKeyResult | null> {
 		return { nsec: envNsec, source: 'env' };
 	}
 
-	// 2. Check config file
+	// 2. Check system keychain (most secure)
+	const keychainNsec = await getNsecFromKeychain();
+	if (keychainNsec) {
+		return { nsec: keychainNsec, source: 'keychain' };
+	}
+
+	// 3. Fall back to config file
 	const config = await loadConfig();
 	if (config.nsec) {
 		return { nsec: config.nsec, source: 'config' };
 	}
-
-	// 3. Future: Check system keychain
-	// TODO: Implement keychain integration for macOS/Linux/Windows
 
 	return null;
 }
@@ -163,7 +167,7 @@ export async function getRelays(): Promise<string[]> {
 
 /**
  * Get auth credentials from available sources.
- * Priority: ENV (nsec) > Config (nsec or bunker)
+ * Priority: ENV (nsec) > Keychain > Config (nsec or bunker)
  *
  * @returns Auth result or null if not authenticated
  */
@@ -200,7 +204,13 @@ export async function getAuth(): Promise<AuthResult | null> {
 		};
 	}
 
-	// 3. Check config file
+	// 3. Check system keychain (most secure for nsec)
+	const keychainNsec = await getNsecFromKeychain();
+	if (keychainNsec) {
+		return { method: 'nsec', nsec: keychainNsec, source: 'keychain' };
+	}
+
+	// 4. Check config file
 	const config = await loadConfig();
 
 	// Prefer bunker if configured
@@ -208,7 +218,7 @@ export async function getAuth(): Promise<AuthResult | null> {
 		return { method: 'bunker', bunker: config.bunker, source: 'config' };
 	}
 
-	// Fall back to nsec
+	// Fall back to nsec in config file
 	if (config.nsec) {
 		return { method: 'nsec', nsec: config.nsec, source: 'config' };
 	}
@@ -229,9 +239,13 @@ export async function saveBunkerAuth(bunker: BunkerAuth): Promise<void> {
 }
 
 /**
- * Clear all auth from config
+ * Clear all auth from config and keychain
  */
 export async function clearAuth(): Promise<void> {
+	// Clear from keychain (ignore errors - may not be available)
+	await deleteNsecFromKeychain();
+
+	// Clear from config file
 	const config = await loadConfig();
 	delete config.authMethod;
 	delete config.nsec;

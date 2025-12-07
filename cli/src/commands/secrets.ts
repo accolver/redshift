@@ -6,6 +6,13 @@
 
 import { getRelays, loadProjectConfig } from '../lib/config';
 import { SecretManager, mergeSecrets } from '../lib/secret-manager';
+import {
+	formatValidationError,
+	validateEnvironment,
+	validateProjectId,
+	validateSecretKey,
+	validateSecretValue,
+} from '../lib/validation';
 import { requireAuth } from './login';
 
 export type SecretsSubcommand = 'list' | 'get' | 'set' | 'delete' | 'download' | 'upload';
@@ -43,6 +50,19 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 		process.exit(1);
 	}
 
+	// Validate project ID and environment
+	const projectValidation = validateProjectId(projectId);
+	if (!projectValidation.valid) {
+		console.error(formatValidationError('project ID', projectValidation));
+		process.exit(1);
+	}
+
+	const envValidation = validateEnvironment(environment);
+	if (!envValidation.valid) {
+		console.error(formatValidationError('environment', envValidation));
+		process.exit(1);
+	}
+
 	// Require authentication
 	const auth = await requireAuth();
 
@@ -57,15 +77,22 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 				await listSecrets(manager, projectId, environment, options);
 				break;
 
-			case 'get':
+			case 'get': {
 				if (!options.key) {
 					console.error('Error: Key is required for `secrets get`');
 					process.exit(1);
 				}
+				// Validate key format
+				const getKeyValidation = validateSecretKey(options.key);
+				if (!getKeyValidation.valid) {
+					console.error(formatValidationError('secret key', getKeyValidation));
+					process.exit(1);
+				}
 				await getSecret(manager, projectId, environment, options.key, options);
 				break;
+			}
 
-			case 'set':
+			case 'set': {
 				if (!options.key) {
 					console.error('Error: Key is required for `secrets set`');
 					process.exit(1);
@@ -74,16 +101,36 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 					console.error('Error: Value is required for `secrets set`');
 					process.exit(1);
 				}
+				// Validate key
+				const setKeyValidation = validateSecretKey(options.key);
+				if (!setKeyValidation.valid) {
+					console.error(formatValidationError('secret key', setKeyValidation));
+					process.exit(1);
+				}
+				// Validate value
+				const setValueValidation = validateSecretValue(options.value);
+				if (!setValueValidation.valid) {
+					console.error(formatValidationError('secret value', setValueValidation));
+					process.exit(1);
+				}
 				await setSecret(manager, projectId, environment, options.key, options.value);
 				break;
+			}
 
-			case 'delete':
+			case 'delete': {
 				if (!options.key) {
 					console.error('Error: Key is required for `secrets delete`');
 					process.exit(1);
 				}
+				// Validate key format
+				const deleteKeyValidation = validateSecretKey(options.key);
+				if (!deleteKeyValidation.valid) {
+					console.error(formatValidationError('secret key', deleteKeyValidation));
+					process.exit(1);
+				}
 				await deleteSecret(manager, projectId, environment, options.key);
 				break;
+			}
 
 			case 'download':
 				await downloadSecrets(manager, projectId, environment, options);
@@ -194,16 +241,8 @@ async function setSecret(
 	// Fetch existing secrets
 	const existingSecrets = (await manager.fetchSecrets(projectId, environment)) || {};
 
-	// Parse value - try JSON first, fall back to string
-	let parsedValue: string | number | boolean | object = value;
-	try {
-		parsedValue = JSON.parse(value);
-	} catch {
-		// Keep as string
-	}
-
-	// Merge with new secret
-	const updatedSecrets = mergeSecrets(existingSecrets, { [key]: parsedValue });
+	// Store value as string (environment variables are always strings)
+	const updatedSecrets = mergeSecrets(existingSecrets, { [key]: value });
 
 	// Publish updated secrets
 	await manager.publishSecrets(projectId, environment, updatedSecrets);
@@ -330,9 +369,11 @@ async function uploadSecrets(
  * - # comments
  * - Empty lines
  * - Escaped characters in quoted strings
+ *
+ * Note: All values are stored as strings since environment variables are always strings.
  */
-function parseEnvFile(content: string): Record<string, string | number | boolean> {
-	const secrets: Record<string, string | number | boolean> = {};
+function parseEnvFile(content: string): Record<string, string> {
+	const secrets: Record<string, string> = {};
 	const lines = content.split('\n');
 
 	for (const line of lines) {
@@ -356,20 +397,10 @@ function parseEnvFile(content: string): Record<string, string | number | boolean
 			continue;
 		}
 
-		// Parse the value
+		// Parse the value (handle quotes and escapes)
 		value = parseEnvValue(value);
 
-		// Try to parse as JSON (for numbers, booleans, objects)
-		try {
-			const parsed = JSON.parse(value);
-			if (typeof parsed === 'number' || typeof parsed === 'boolean') {
-				secrets[key] = parsed;
-				continue;
-			}
-		} catch {
-			// Not JSON, keep as string
-		}
-
+		// Store as string (environment variables are always strings)
 		secrets[key] = value;
 	}
 
@@ -379,34 +410,33 @@ function parseEnvFile(content: string): Record<string, string | number | boolean
 /**
  * Parse a .env value, handling quotes and escapes.
  */
-function parseEnvValue(value: string): string {
-	value = value.trim();
+function parseEnvValue(input: string): string {
+	let result = input.trim();
 
 	// Handle double-quoted strings
-	if (value.startsWith('"') && value.endsWith('"')) {
-		value = value.slice(1, -1);
+	if (result.startsWith('"') && result.endsWith('"')) {
 		// Unescape special characters
-		value = value
+		return result
+			.slice(1, -1)
 			.replace(/\\n/g, '\n')
 			.replace(/\\r/g, '\r')
 			.replace(/\\t/g, '\t')
 			.replace(/\\"/g, '"')
 			.replace(/\\\\/g, '\\');
-		return value;
 	}
 
 	// Handle single-quoted strings (no escaping)
-	if (value.startsWith("'") && value.endsWith("'")) {
-		return value.slice(1, -1);
+	if (result.startsWith("'") && result.endsWith("'")) {
+		return result.slice(1, -1);
 	}
 
 	// Handle inline comments (only if not quoted)
-	const commentIndex = value.indexOf(' #');
+	const commentIndex = result.indexOf(' #');
 	if (commentIndex !== -1) {
-		value = value.slice(0, commentIndex).trim();
+		result = result.slice(0, commentIndex).trim();
 	}
 
-	return value;
+	return result;
 }
 
 /**

@@ -34,11 +34,28 @@ validation requirements.
 
 See `AGENTS.md` for the complete coding standards. Key points:
 
+### UI & Styling
+
 1. **Use shadcn/ui** - Prefer shadcn components for Svelte
 2. **Transitions** - Add `transition` class to elements with hover/animation
 3. **Code Display** - Use `InlineCode` for inline, `CodeBlock` for blocks
 4. **Tokyo Night Storm** - Use theme color tokens (`tokyo-blue`, etc.)
+
+### Code Organization
+
 5. **DRY** - Extract repeated code into libs/components
 6. **TDD** - Write tests first, run with `bun test`
 7. **No `any`** - Always use proper TypeScript types
 8. **Implicit Returns** - Prefer implicit TypeScript return types
+
+### Architecture (CRITICAL)
+
+9. **Shared Packages** - Code for both CLI/Web MUST go in `/packages/`
+10. **Prefer Nostr Libs** - Use `nostr-tools`, `applesauce-*`,
+    `@redshift/crypto`
+11. **Typed Errors** - Use `RelayError`, `DecryptionError`, etc. from
+    `errors.ts`
+12. **Gift Wrap Type Tag** - All secrets use `["t", "redshift-secrets"]` tag
+13. **Rate Limiting** - All relay operations use `RateLimiter` by default
+
+See `spec.md` Section 4 for full architectural constraints.

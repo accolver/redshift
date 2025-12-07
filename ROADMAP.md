@@ -19,7 +19,7 @@ functional, with comprehensive test coverage.
 | **Protocol**  | NIP-59 Gift Wrap encryption, Kind 30078 events, NIP-09 deletion                    |
 | **Web Admin** | Project list, secret editor, import/export, global search                          |
 | **Pages**     | Landing page (`/`), docs (`/docs/*`), tutorial (`/tutorial`), admin (`/admin/*`)   |
-| **Tests**     | 185 web tests, 178 CLI tests, crypto tests, relay integration tests (363 total)    |
+| **Tests**     | 273 web tests, 311 CLI tests, crypto tests, relay integration tests (580+ total)   |
 | **CI/CD**     | GitHub Actions: test, build, multi-platform release (Linux/macOS x64/arm64)        |
 
 ---
@@ -35,13 +35,13 @@ functional, with comprehensive test coverage.
 
 ### Medium Priority
 
-| Feature                          | Description                                                                        | Status                       |
-| -------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------- |
-| **Interactive project fetching** | `setup` command should fetch existing projects from relays instead of manual input | Partial (manual input works) |
-| **Keychain storage**             | Store nsec in system keychain (macOS Keychain, Linux Secret Service)               | Not started                  |
-| **Rate limiting for relays**     | Add rate limiting to relay queries to prevent abuse                                | Complete                     |
-| **Input validation**             | Validate secret keys before use in `secrets.ts` commands                           | Not started                  |
-| **Improved error handling**      | Better error handling in relay operations (avoid swallowing errors)                | Not started                  |
+| Feature                          | Description                                                                                 | Status                       |
+| -------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------- |
+| **Interactive project fetching** | `setup` command should fetch existing projects from relays instead of manual input          | Partial (manual input works) |
+| **Keychain storage**             | Store nsec in system keychain (macOS Keychain, Windows Credential Manager, Linux libsecret) | Complete                     |
+| **Rate limiting for relays**     | Add rate limiting to relay queries to prevent abuse                                         | Complete                     |
+| **Input validation**             | Validate secret keys, project IDs, environments, values, and relay URLs                     | Complete                     |
+| **Improved error handling**      | Better error handling in relay operations (avoid swallowing errors)                         | Complete                     |
 
 ### Low Priority
 
@@ -55,6 +55,45 @@ functional, with comprehensive test coverage.
 | **CLI command tests: serve**  | Add unit tests for `serve` command                                   | Complete                    |
 | **CLI command tests: setup**  | Add unit tests for `setup` command                                   | Complete                    |
 | **TypeScript strict types**   | Fix exactOptionalPropertyTypes errors in types.ts and related files  | Complete                    |
+
+---
+
+## Implementation Plans
+
+### Keychain Storage (Complete)
+
+**Goal:** Store nsec securely in OS keychain instead of plaintext config file.
+
+**Technology Choice:** `Bun.secrets` (native Bun API)
+
+- Zero dependencies, works with `bun build --compile`
+- Cross-platform: macOS Keychain, Windows Credential Manager, Linux libsecret
+- Memory-safe: zeros out password memory after use
+- Actively maintained by Bun team
+
+**Service Configuration:**
+
+- Service: `com.redshiftapp.cli`
+- Name: `nsec`
+
+**Behavior:**
+
+1. `login` command stores nsec to keychain when available
+2. `logout` command clears nsec from keychain
+3. On keychain failure, falls back to file-based config (`~/.redshift/config`)
+4. Warning shown when using file fallback (less secure)
+
+**Platform Support:**
+
+- macOS: Keychain Services
+- Windows: Windows Credential Manager
+- Linux: libsecret (GNOME Keyring, KWallet, etc.)
+
+**Implementation:**
+
+- `cli/src/lib/keychain.ts` - Abstraction over `Bun.secrets`
+- `cli/tests/lib/keychain.test.ts` - 8 tests for keychain operations
+- Updated `login.ts`, `config.ts` for keychain-first credential storage
 
 ---
 

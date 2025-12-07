@@ -9,6 +9,7 @@
 
 import type { Filter } from 'nostr-tools/filter';
 import { SimplePool } from 'nostr-tools/pool';
+import { RelayError } from './errors';
 import type { NostrEvent, UnsignedEvent } from './types';
 import { NostrKinds, REDSHIFT_TYPE_TAG } from './types';
 import { RateLimiter, withPublishBackoff, withQueryBackoff } from './rate-limiter';
@@ -124,8 +125,12 @@ export function createRelayPool(relayUrls: string[], options: RelayPoolOptions =
 				}
 				return await queryOperation();
 			} catch (err) {
-				console.error('Query error after retries:', err);
-				return [];
+				const originalError = err instanceof Error ? err : new Error(String(err));
+				throw new RelayError(
+					`Query failed after retries: ${originalError.message}`,
+					'query',
+					originalError,
+				);
 			}
 		},
 
