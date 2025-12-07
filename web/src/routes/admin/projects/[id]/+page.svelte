@@ -1,8 +1,9 @@
 <script lang="ts">
 import { page } from '$app/state';
 import { onMount, untrack } from 'svelte';
-import { slide } from 'svelte/transition';
+import { slide, fade } from 'svelte/transition';
 import { flip } from 'svelte/animate';
+import { Motion } from 'svelte-motion';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import {
@@ -199,7 +200,7 @@ function updateSecretValue(originalKey: string, newValue: string) {
 }
 
 // Check if there are any unsaved changes (including pending new secret)
-const hasUnsavedChanges = $derived(() => {
+const hasUnsavedChanges = $derived.by(() => {
 	// Check if there's a pending new secret
 	if (showAddSecretRow && newSecretKey.trim()) return true;
 	// Check edited secrets
@@ -368,7 +369,7 @@ function getSecretStatus(originalKey: string): 'default' | 'dirty' | 'saving' | 
 }
 
 // Filtered and sorted secrets
-const filteredSecrets = $derived(() => {
+const filteredSecrets = $derived.by(() => {
 	let secrets = secretsState.secrets.filter((s) => fuzzyMatch(s.key, searchQuery));
 
 	// Sort secrets
@@ -416,7 +417,7 @@ $effect(() => {
 
 // Warn before leaving with unsaved changes
 function handleBeforeUnload(e: BeforeUnloadEvent) {
-	if (hasUnsavedChanges()) {
+	if (hasUnsavedChanges) {
 		e.preventDefault();
 		// Modern browsers ignore custom messages, but we need to return something
 		return 'You have unsaved changes. Are you sure you want to leave?';
@@ -744,7 +745,13 @@ async function handleDeleteEnvironment() {
 		</div>
 	{:else}
 		<!-- Breadcrumb Header -->
-		<div class="border-b border-border bg-card/50">
+		<Motion
+			initial={{ opacity: 0, y: -10 }}
+			animate={{ opacity: 1, y: 0 }}
+			transition={{ duration: 0.25 }}
+			let:motion
+		>
+		<div use:motion class="border-b border-border bg-card/50">
 			<div class="mx-auto flex h-14 max-w-6xl items-center justify-between px-3 sm:px-6">
 				<div class="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
 					<!-- Project Dropdown -->
@@ -803,9 +810,9 @@ async function handleDeleteEnvironment() {
 
 				<div class="flex shrink-0 items-center gap-2">
 					<Button 
-						variant={hasUnsavedChanges() ? "default" : "outline"} 
+						variant={hasUnsavedChanges ? "default" : "outline"} 
 						size="sm"
-						disabled={!hasUnsavedChanges()}
+						disabled={!hasUnsavedChanges}
 						onclick={saveAllChanges}
 					>
 						Save
@@ -848,15 +855,22 @@ async function handleDeleteEnvironment() {
 				</div>
 			</div>
 		</div>
+		</Motion>
 
 		<!-- Content -->
 		<div class="flex-1">
 			<div class="mx-auto max-w-6xl px-3 py-3 sm:px-6 sm:py-4">
 					<!-- Toolbar -->
-					<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<Motion
+						initial={{ opacity: 0, y: 10 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.25, delay: 0.1 }}
+						let:motion
+					>
+					<div use:motion class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<div class="flex items-center gap-2">
 							<span class="text-sm font-medium">
-								Active ({filteredSecrets().length})
+								Active ({filteredSecrets.length})
 							</span>
 							
 							<!-- Sort Dropdown -->
@@ -937,6 +951,7 @@ async function handleDeleteEnvironment() {
 							</Button>
 						</div>
 					</div>
+					</Motion>
 
 					<!-- Action Required: Missing Secrets -->
 					{#if missingSecretsState.missing.length > 0 && !searchQuery}
@@ -1022,12 +1037,18 @@ async function handleDeleteEnvironment() {
 					{/if}
 
 					<!-- Secrets List -->
-					<div class="space-y-2">
+					<Motion
+						initial={{ opacity: 0 }}
+						animate={{ opacity: 1 }}
+						transition={{ duration: 0.25, delay: 0.15 }}
+						let:motion
+					>
+					<div use:motion class="space-y-2">
 						{#if secretsState.isLoading}
 							<div class="flex items-center justify-center py-12">
 								<LoaderCircle class="size-6 animate-spin text-muted-foreground" />
 							</div>
-						{:else if filteredSecrets().length === 0 && !showAddSecretRow && missingSecretsState.missing.length === 0}
+						{:else if filteredSecrets.length === 0 && !showAddSecretRow && missingSecretsState.missing.length === 0}
 							<div class="py-12 text-center text-muted-foreground">
 								{#if searchQuery}
 									<p>No secrets match "{searchQuery}"</p>
@@ -1098,7 +1119,7 @@ async function handleDeleteEnvironment() {
 							{/if}
 
 							<!-- Secret Rows -->
-							{#each filteredSecrets() as secret (secret.key)}
+							{#each filteredSecrets as secret (secret.key)}
 								{@const edited = getEditedSecret(secret.key)}
 								{@const status = getSecretStatus(secret.key)}
 								{@const isHighlighted = highlightedKey === secret.key}
@@ -1106,8 +1127,8 @@ async function handleDeleteEnvironment() {
 									data-secret-key={secret.key}
 									class="group flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-2 transition-all duration-300 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0 {isHighlighted ? 'ring-2 ring-primary ring-offset-2 ring-offset-background sm:rounded-lg sm:p-2 sm:bg-primary/5' : ''}"
 									class:border-primary={status === 'dirty'}
-									transition:slide={{ duration: 200 }}
-									animate:flip={{ duration: 200 }}
+									in:fade={{ duration: 200, delay: 50 }}
+									animate:flip={{ duration: 300 }}
 								>
 									<!-- Mobile Header: Key + Status -->
 									<div class="flex items-center justify-between sm:hidden">
@@ -1331,6 +1352,7 @@ async function handleDeleteEnvironment() {
 							{/each}
 						{/if}
 					</div>
+					</Motion>
 			</div>
 		</div>
 

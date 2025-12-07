@@ -27,6 +27,11 @@ async function copyInstallCommand() {
 const gridOffset = $derived(scrollY * 0.05);
 const orbOffset1 = $derived(scrollY * 0.1);
 const orbOffset2 = $derived(scrollY * 0.08);
+
+// Animation helper for staggered items
+function getStaggerDelay(index: number, baseDelay = 0.1) {
+	return baseDelay + index * 0.08;
+}
 </script>
 
 <svelte:window onscroll={handleScroll} />
@@ -245,7 +250,14 @@ const orbOffset2 = $derived(scrollY * 0.08);
 		></div>
 		<div class="absolute inset-x-0 top-32 bottom-0 bg-background"></div>
 		<div class="relative mx-auto max-w-6xl">
-			<div class="mb-16 text-center">
+			<Motion
+				initial={{ opacity: 0, y: 20 }}
+				whileInView={{ opacity: 1, y: 0 }}
+				viewport={{ once: true, amount: 0.3 }}
+				transition={{ duration: 0.5 }}
+				let:motion
+			>
+			<div use:motion class="mb-16 text-center">
 				<h2 class="mb-4 text-3xl font-bold sm:text-4xl">
 					Built for developers who
 					<span class="gradient-text">value sovereignty</span>
@@ -255,10 +267,19 @@ const orbOffset2 = $derived(scrollY * 0.08);
 					decentralized infrastructure.
 				</p>
 			</div>
+			</Motion>
 
 			<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
 				<!-- Feature 1 -->
+				<Motion
+					initial={{ opacity: 0, y: 20 }}
+					whileInView={{ opacity: 1, y: 0 }}
+					viewport={{ once: true, amount: 0.3 }}
+					transition={{ duration: 0.4, delay: getStaggerDelay(0) }}
+					let:motion
+				>
 				<div
+					use:motion
 					class="group relative rounded-xl border border-border/50 bg-card/80 p-6 transition-all duration-300 hover:border-tokyo-blue/50 hover:bg-card"
 				>
 					<div
@@ -272,9 +293,18 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						state-of-the-art encryption.
 					</p>
 				</div>
+				</Motion>
 
 				<!-- Feature 2 -->
+				<Motion
+					initial={{ opacity: 0, y: 20 }}
+					whileInView={{ opacity: 1, y: 0 }}
+					viewport={{ once: true, amount: 0.3 }}
+					transition={{ duration: 0.4, delay: getStaggerDelay(1) }}
+					let:motion
+				>
 				<div
+					use:motion
 					class="group relative rounded-xl border border-border/50 bg-card/80 p-6 transition-all duration-300 hover:border-tokyo-purple/50 hover:bg-card"
 				>
 					<div
@@ -288,9 +318,18 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						Drop-in replacement for your existing workflow.
 					</p>
 				</div>
+				</Motion>
 
 				<!-- Feature 3 -->
+				<Motion
+					initial={{ opacity: 0, y: 20 }}
+					whileInView={{ opacity: 1, y: 0 }}
+					viewport={{ once: true, amount: 0.3 }}
+					transition={{ duration: 0.4, delay: getStaggerDelay(2) }}
+					let:motion
+				>
 				<div
+					use:motion
 					class="group relative rounded-xl border border-border/50 bg-card/80 p-6 transition-all duration-300 hover:border-tokyo-cyan/50 hover:bg-card"
 				>
 					<div
@@ -304,9 +343,18 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						failure.
 					</p>
 				</div>
+				</Motion>
 
 				<!-- Feature 4 -->
+				<Motion
+					initial={{ opacity: 0, y: 20 }}
+					whileInView={{ opacity: 1, y: 0 }}
+					viewport={{ once: true, amount: 0.3 }}
+					transition={{ duration: 0.4, delay: getStaggerDelay(3) }}
+					let:motion
+				>
 				<div
+					use:motion
 					class="group relative rounded-xl border border-border/50 bg-card/80 p-6 transition-all duration-300 hover:border-tokyo-green/50 hover:bg-card"
 				>
 					<div
@@ -320,9 +368,18 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						required.
 					</p>
 				</div>
+				</Motion>
 
 				<!-- Feature 5 -->
+				<Motion
+					initial={{ opacity: 0, y: 20 }}
+					whileInView={{ opacity: 1, y: 0 }}
+					viewport={{ once: true, amount: 0.3 }}
+					transition={{ duration: 0.4, delay: getStaggerDelay(4) }}
+					let:motion
+				>
 				<div
+					use:motion
 					class="group relative rounded-xl border border-border/50 bg-card/80 p-6 transition-all duration-300 hover:border-tokyo-orange/50 hover:bg-card"
 				>
 					<div
@@ -336,9 +393,18 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						seconds.
 					</p>
 				</div>
+				</Motion>
 
 				<!-- Feature 6 -->
+				<Motion
+					initial={{ opacity: 0, y: 20 }}
+					whileInView={{ opacity: 1, y: 0 }}
+					viewport={{ once: true, amount: 0.3 }}
+					transition={{ duration: 0.4, delay: getStaggerDelay(5) }}
+					let:motion
+				>
 				<div
+					use:motion
 					class="group relative rounded-xl border border-border/50 bg-card/80 p-6 transition-all duration-300 hover:border-tokyo-red/50 hover:bg-card"
 				>
 					<div
@@ -352,6 +418,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						secrets.
 					</p>
 				</div>
+				</Motion>
 			</div>
 		</div>
 	</section>
@@ -360,7 +427,14 @@ const orbOffset2 = $derived(scrollY * 0.08);
 	<section class="relative z-20 bg-background px-6 py-32">
 		<div class="relative mx-auto max-w-6xl">
 			<div class="grid items-center gap-12 lg:grid-cols-2">
-				<div>
+				<Motion
+					initial={{ opacity: 0, x: -20 }}
+					whileInView={{ opacity: 1, x: 0 }}
+					viewport={{ once: true, amount: 0.3 }}
+					transition={{ duration: 0.5 }}
+					let:motion
+				>
+				<div use:motion>
 					<h2 class="mb-4 text-3xl font-bold sm:text-4xl">
 						Get started in
 						<span class="gradient-text">seconds</span>
@@ -410,9 +484,17 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						</div>
 					</div>
 				</div>
+				</Motion>
 
 				<!-- Install command card -->
-				<div>
+				<Motion
+					initial={{ opacity: 0, x: 20 }}
+					whileInView={{ opacity: 1, x: 0 }}
+					viewport={{ once: true, amount: 0.3 }}
+					transition={{ duration: 0.5, delay: 0.2 }}
+					let:motion
+				>
+				<div use:motion>
 					<div class="rounded-xl border border-border/50 bg-card/80 shadow-xl backdrop-blur-sm">
 						<div class="flex items-center justify-between border-b border-border/50 px-4 py-3">
 							<span class="text-sm text-muted-foreground">Quick install</span>
@@ -443,13 +525,21 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						<span>Windows (WSL)</span>
 					</div>
 				</div>
+				</Motion>
 			</div>
 		</div>
 	</section>
 
 	<!-- CTA Section -->
 	<section class="relative z-20 bg-background px-6 py-32">
-		<div class="relative mx-auto max-w-4xl text-center">
+		<Motion
+			initial={{ opacity: 0, y: 20 }}
+			whileInView={{ opacity: 1, y: 0 }}
+			viewport={{ once: true, amount: 0.3 }}
+			transition={{ duration: 0.5 }}
+			let:motion
+		>
+		<div use:motion class="relative mx-auto max-w-4xl text-center">
 			<h2 class="mb-4 text-3xl font-bold sm:text-4xl lg:text-5xl">
 				Ready to own your secrets?
 			</h2>
@@ -476,6 +566,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 				</Button>
 			</div>
 		</div>
+		</Motion>
 	</section>
 
 	<!-- Footer -->
