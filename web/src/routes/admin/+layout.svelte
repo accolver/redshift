@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onMount, untrack } from 'svelte';
 import { Button } from '$lib/components/ui/button';
-import { ChevronDown, LogOut, Radio, Search } from '@lucide/svelte';
+import { ChevronDown, LogOut, Radio, Search, LoaderCircle } from '@lucide/svelte';
 import {
 	getAuthState,
 	connectWithNip07,
@@ -9,7 +9,7 @@ import {
 	hasNip07Extension,
 	restoreAuth,
 } from '$lib/stores/auth.svelte';
-import { subscribeToProjects, unsubscribeFromProjects } from '$lib/stores/projects.svelte';
+import { getProjectsState, subscribeToProjects, unsubscribeFromProjects } from '$lib/stores/projects.svelte';
 import {
 	connectAndSync,
 	disconnect as nostrDisconnect,
@@ -27,6 +27,9 @@ let loginDialogOpen = $state(false);
 
 let { children } = $props();
 let hasExtension = $state(false);
+
+// Track if we're still trying to restore auth (initial page load)
+let isRestoringAuth = $state(true);
 
 const auth = $derived(getAuthState());
 const relayState = $derived(getRelayState());
@@ -106,6 +109,8 @@ onMount(() => {
 		if (!restored && hasExtension) {
 			await connectWithNip07();
 		}
+		// Mark auth restoration as complete
+		isRestoringAuth = false;
 	});
 
 	// Add global keyboard shortcut listener

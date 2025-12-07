@@ -26,7 +26,7 @@ import {
 	deleteSecret,
 	clearSaveError,
 } from '$lib/stores/secrets.svelte';
-import { getAuthState, supportsEncryption } from '$lib/stores/auth.svelte';
+import { getAuthState, supportsEncryption, isAuthRestorationAttempted } from '$lib/stores/auth.svelte';
 import {
 	ChevronDown,
 	Plus,
@@ -691,7 +691,8 @@ async function handleDeleteEnvironment() {
 	{#if !project}
 		<!-- Loading or not found -->
 		<div class="flex flex-1 items-center justify-center">
-			{#if projectsState.isLoading}
+			{#if !isAuthRestorationAttempted() || projectsState.isLoading}
+				<!-- Still restoring auth or loading projects -->
 				<LoaderCircle class="size-8 animate-spin text-muted-foreground" />
 			{:else}
 				<p class="text-muted-foreground">Project not found</p>

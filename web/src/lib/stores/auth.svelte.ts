@@ -43,6 +43,9 @@ let authState = $state<AuthState>({
 	profile: null,
 });
 
+// Track if auth restoration has been attempted (for initial page load)
+let authRestorationAttempted = $state(false);
+
 /**
  * Fetch user profile metadata (kind 0) from relays
  */
@@ -271,24 +274,36 @@ export function clearError(): void {
  * Try to restore auth from secure storage (nsec or bunker)
  */
 export async function restoreAuth(): Promise<boolean> {
-	if (!isSecureStorageAvailable()) {
+	try {
+		if (!isSecureStorageAvailable()) {
+			return false;
+		}
+
+		// First check for securely stored nsec
+		const storedNsec = await secureRetrieve(NSEC_STORAGE_KEY);
+		if (storedNsec) {
+			return connectWithNsec(storedNsec);
+		}
+
+		// Check for stored bunker URI
+		const storedBunkerUri = await secureRetrieve(BUNKER_URI_KEY);
+		if (storedBunkerUri) {
+			return connectWithBunker(storedBunkerUri);
+		}
+
+		// If nothing stored, don't auto-connect (require explicit action)
 		return false;
+	} finally {
+		authRestorationAttempted = true;
 	}
+}
 
-	// First check for securely stored nsec
-	const storedNsec = await secureRetrieve(NSEC_STORAGE_KEY);
-	if (storedNsec) {
-		return connectWithNsec(storedNsec);
-	}
-
-	// Check for stored bunker URI
-	const storedBunkerUri = await secureRetrieve(BUNKER_URI_KEY);
-	if (storedBunkerUri) {
-		return connectWithBunker(storedBunkerUri);
-	}
-
-	// If nothing stored, don't auto-connect (require explicit action)
-	return false;
+/**
+ * Check if auth restoration has been attempted
+ * Used to differentiate between "not connected yet" and "definitely not logged in"
+ */
+export function isAuthRestorationAttempted(): boolean {
+	return authRestorationAttempted;
 }
 
 /**
