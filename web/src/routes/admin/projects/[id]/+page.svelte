@@ -24,6 +24,7 @@ import {
 	setSecret,
 	setSecretToMultipleEnvs,
 	deleteSecret,
+	clearSaveError,
 } from '$lib/stores/secrets.svelte';
 import { getAuthState, supportsEncryption } from '$lib/stores/auth.svelte';
 import {
@@ -988,6 +989,19 @@ async function handleDeleteEnvironment() {
 									</div>
 								{/each}
 							</div>
+						</div>
+					{/if}
+
+					<!-- Save Error Alert -->
+					{#if secretsState.saveError}
+						<div class="mb-4 flex items-center justify-between rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3" transition:slide={{ duration: 200 }}>
+							<div class="flex items-center gap-3">
+								<TriangleAlert class="size-5 text-destructive" />
+								<p class="text-sm text-destructive">{secretsState.saveError}</p>
+							</div>
+							<Button variant="ghost" size="sm" onclick={() => clearSaveError()}>
+								Dismiss
+							</Button>
 						</div>
 					{/if}
 

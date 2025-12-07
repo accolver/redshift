@@ -150,10 +150,10 @@ export async function publishEvent(
 
 	// Publish with a timeout to avoid hanging on slow/failing relays
 	const publishWithTimeout = async () => {
-		const timeoutMs = 10000; // 10 second timeout
+		const timeoutMs = 5000; // 5 second timeout per attempt
 		const publishPromise = relayPool.publish(relays, event);
 		const timeoutPromise = new Promise<void>((_, reject) =>
-			setTimeout(() => reject(new Error('Publish timeout')), timeoutMs),
+			setTimeout(() => reject(new Error('Publish timeout - relays may be slow')), timeoutMs),
 		);
 
 		await Promise.race([publishPromise, timeoutPromise]);

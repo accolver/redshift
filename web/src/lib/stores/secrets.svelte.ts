@@ -35,6 +35,7 @@ let secretsState = $state<SecretsState>({
 	isLoading: false,
 	isSaving: false,
 	error: null,
+	saveError: null,
 });
 
 /**
@@ -332,7 +333,7 @@ export async function setSecret(key: string, value: string): Promise<void> {
 	}
 
 	secretsState.isSaving = true;
-	secretsState.error = null;
+	secretsState.saveError = null;
 
 	try {
 		// Update secrets array
@@ -349,7 +350,7 @@ export async function setSecret(key: string, value: string): Promise<void> {
 		// Optimistically update local state
 		secretsState.secrets = updatedSecrets;
 	} catch (err) {
-		secretsState.error = err instanceof Error ? err.message : 'Failed to save secret';
+		secretsState.saveError = err instanceof Error ? err.message : 'Failed to save secret';
 		throw err;
 	} finally {
 		secretsState.isSaving = false;
@@ -375,7 +376,7 @@ export async function setSecretToMultipleEnvs(
 	}
 
 	secretsState.isSaving = true;
-	secretsState.error = null;
+	secretsState.saveError = null;
 
 	try {
 		// Process each environment
@@ -395,7 +396,7 @@ export async function setSecretToMultipleEnvs(
 			await publishEvent(event);
 		}
 	} catch (err) {
-		secretsState.error = err instanceof Error ? err.message : 'Failed to save secret';
+		secretsState.saveError = err instanceof Error ? err.message : 'Failed to save secret';
 		throw err;
 	} finally {
 		secretsState.isSaving = false;
@@ -415,7 +416,7 @@ export async function deleteSecret(key: string): Promise<void> {
 	}
 
 	secretsState.isSaving = true;
-	secretsState.error = null;
+	secretsState.saveError = null;
 
 	try {
 		// Remove secret from array
@@ -432,11 +433,18 @@ export async function deleteSecret(key: string): Promise<void> {
 		// Optimistically update local state
 		secretsState.secrets = updatedSecrets;
 	} catch (err) {
-		secretsState.error = err instanceof Error ? err.message : 'Failed to delete secret';
+		secretsState.saveError = err instanceof Error ? err.message : 'Failed to delete secret';
 		throw err;
 	} finally {
 		secretsState.isSaving = false;
 	}
+}
+
+/**
+ * Clear save error (for dismissing error messages)
+ */
+export function clearSaveError(): void {
+	secretsState.saveError = null;
 }
 
 /**
@@ -449,6 +457,7 @@ export function resetSecretsStore(): void {
 		isLoading: false,
 		isSaving: false,
 		error: null,
+		saveError: null,
 	};
 	missingSecretsState = {
 		missing: [],

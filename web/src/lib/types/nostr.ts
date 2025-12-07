@@ -102,7 +102,10 @@ export interface SecretsState {
 	secrets: Secret[];
 	isLoading: boolean;
 	isSaving: boolean;
+	/** Error loading secrets (shows big warning) */
 	error: string | null;
+	/** Error saving a secret (shows inline/toast) */
+	saveError: string | null;
 }
 
 /**
