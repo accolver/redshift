@@ -187,6 +187,52 @@ export async function subscribeToSecrets(
 		return;
 	}
 
+	// Check if we're just switching environments within the same project
+	// and we already have cached data for all environments
+	const isSameProject = currentProjectSlug === projectSlug;
+	const hasCachedEnvData = isSameProject && allEnvSecretsState.size > 0;
+
+	// If switching environments within the same project and we have cached data,
+	// immediately update from cache (no loading state needed)
+	if (hasCachedEnvData && allEnvSecretsState.has(environmentSlug)) {
+		const cachedSecrets = allEnvSecretsState.get(environmentSlug) ?? [];
+		secretsState.secrets = cachedSecrets;
+		secretsState.isLoading = false;
+		secretsState.error = null;
+		missingSecretsState.missing = calculateMissingSecrets(allEnvSecretsState, environmentSlug);
+
+		// Update current environment context
+		currentEnvironmentSlug = environmentSlug;
+
+		// Still need to update the single-env subscription for reactivity to new events
+		if (subscription) {
+			subscription.unsubscribe();
+		}
+		subscription = GiftWrapSecretsModel(
+			eventStore,
+			decryptor,
+			projectSlug,
+			environmentSlug,
+		).subscribe({
+			next: (secrets) => {
+				secretsState.secrets = secrets;
+				secretsState.isLoading = false;
+				secretsState.error = null;
+
+				// Recalculate missing secrets when current env secrets change
+				if (allEnvSecretsState.size > 0) {
+					missingSecretsState.missing = calculateMissingSecrets(allEnvSecretsState, environmentSlug);
+				}
+			},
+			error: (err) => {
+				secretsState.error = err instanceof Error ? err.message : 'Failed to load secrets';
+				secretsState.isLoading = false;
+			},
+		});
+
+		return;
+	}
+
 	// Clean up existing subscriptions
 	if (subscription) {
 		subscription.unsubscribe();
@@ -202,8 +248,14 @@ export async function subscribeToSecrets(
 	currentEnvironmentSlug = environmentSlug;
 	currentEnvironmentSlugs = allEnvironmentSlugs ?? [environmentSlug];
 
-	secretsState.isLoading = true;
+	// Only show loading if we don't have cached data
+	secretsState.isLoading = !hasCachedEnvData;
 	secretsState.error = null;
+
+	// If we have cached data for this env (but switching projects), use it immediately
+	if (hasCachedEnvData && allEnvSecretsState.has(environmentSlug)) {
+		secretsState.secrets = allEnvSecretsState.get(environmentSlug) ?? [];
+	}
 
 	// Subscribe to GiftWrapSecretsModel (decrypts Gift Wrap events)
 	subscription = GiftWrapSecretsModel(
@@ -230,7 +282,7 @@ export async function subscribeToSecrets(
 
 	// Subscribe to all environments for missing secrets calculation
 	if (currentEnvironmentSlugs.length > 1) {
-		missingSecretsState.isLoading = true;
+		missingSecretsState.isLoading = !hasCachedEnvData;
 		allEnvSubscription = AllGiftWrapSecretsModel(
 			eventStore,
 			decryptor,
