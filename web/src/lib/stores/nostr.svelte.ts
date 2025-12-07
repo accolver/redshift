@@ -21,9 +21,9 @@ const rateLimiter = new RateLimiter(10, 1000, 100);
  */
 
 // Default relays for Redshift
-// Note: relay.primal.net removed - doesn't support browser WebSocket connections (CORS)
 export const DEFAULT_RELAYS = [
 	'wss://relay.damus.io',
+	'wss://relay.primal.net',
 	'wss://nos.lol',
 	'wss://relay.nostr.band',
 ];
