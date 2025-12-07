@@ -45,16 +45,15 @@ functional, with comprehensive test coverage.
 
 ### Low Priority
 
-| Feature                       | Description                                                          | Status                      |
-| ----------------------------- | -------------------------------------------------------------------- | --------------------------- |
-| **Drag-and-drop secrets**     | Reorder/group secrets in the web UI                                  | Not started                 |
-| **svelte-motion animations**  | Enhanced animations beyond basic Svelte transitions                  | Package installed, not used |
-| **Binary integration test**   | TDD Phase 4: spawn binary and test HTTP response                     | Not started                 |
-| **Remove duplicate code**     | Remove duplicate `injectSecrets` from parser.ts (use secret-manager) | Complete                    |
-| **CLI command tests: run.ts** | Add unit tests for `run` command                                     | Complete                    |
-| **CLI command tests: serve**  | Add unit tests for `serve` command                                   | Complete                    |
-| **CLI command tests: setup**  | Add unit tests for `setup` command                                   | Complete                    |
-| **TypeScript strict types**   | Fix exactOptionalPropertyTypes errors in types.ts and related files  | Complete                    |
+| Feature                       | Description                                                          | Status                        |
+| ----------------------------- | -------------------------------------------------------------------- | ----------------------------- |
+| **svelte-motion animations**  | Enhanced animations for page transitions, lists, and UI feedback     | Partial (dashboard, projects) |
+| **Binary integration test**   | TDD Phase 4: spawn binary and test HTTP response                     | Not started                   |
+| **Remove duplicate code**     | Remove duplicate `injectSecrets` from parser.ts (use secret-manager) | Complete                      |
+| **CLI command tests: run.ts** | Add unit tests for `run` command                                     | Complete                      |
+| **CLI command tests: serve**  | Add unit tests for `serve` command                                   | Complete                      |
+| **CLI command tests: setup**  | Add unit tests for `setup` command                                   | Complete                      |
+| **TypeScript strict types**   | Fix exactOptionalPropertyTypes errors in types.ts and related files  | Complete                      |
 
 ---
 

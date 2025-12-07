@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onMount } from 'svelte';
+import { Motion } from 'svelte-motion';
 import { Button } from '$lib/components/ui/button';
 import InlineCode from '$lib/components/InlineCode.svelte';
 import { Shield, Terminal, Globe, Key, Zap, Lock, ArrowRight, Copy, Check } from '@lucide/svelte';
