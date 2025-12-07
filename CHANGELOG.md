@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.1](https://github.com/accolver/redshift/compare/v0.5.0...v0.5.1) (2025-12-07)
+
+
+### Bug Fixes
+
+* **web:** change save error banner from error to warning style ([a62bfa4](https://github.com/accolver/redshift/commit/a62bfa4a2464eebd0a55e9181acd5f07a567d24c))
+* **web:** include project slug in CLI hint for add environment modal ([356f3ae](https://github.com/accolver/redshift/commit/356f3ae72536cf7a8df55ff03b2ba8a5ca5898bf))
+* **web:** normalize environment slug input and improve CLI preview ([cdc43cb](https://github.com/accolver/redshift/commit/cdc43cbf13be05b383ffff10944207a0331af75f))
+* **web:** separate save errors from load errors, reduce timeout ([7e175a0](https://github.com/accolver/redshift/commit/7e175a02c1baa787dd9ed979fcc7b94f2b9a01c3))
+* **web:** use envSlug instead of removed normalizedSlug variable ([dd4d0bd](https://github.com/accolver/redshift/commit/dd4d0bd3922d7808581b6cf12a79dbbd8134664d))
+
 ## [0.5.0](https://github.com/accolver/redshift/compare/v0.4.1...v0.5.0) (2025-12-07)
 
 
