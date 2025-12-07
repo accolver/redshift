@@ -11,7 +11,7 @@ web/.svelte-kit
 web/build
 
 # Redshift config (contains project refs, not secrets)
-# redshift.yaml
+redshift.yaml
 
 # code coverage
 coverage
