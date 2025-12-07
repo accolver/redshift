@@ -21,9 +21,9 @@ const rateLimiter = new RateLimiter(10, 1000, 100);
  */
 
 // Default relays for Redshift
+// Note: relay.primal.net removed - doesn't support browser WebSocket connections (CORS)
 export const DEFAULT_RELAYS = [
 	'wss://relay.damus.io',
-	'wss://relay.primal.net',
 	'wss://nos.lol',
 	'wss://relay.nostr.band',
 ];
@@ -147,7 +147,17 @@ export async function publishEvent(
 
 	// Publish to relays with rate limiting and retry
 	await rateLimiter.waitForSlot();
-	await withPublishBackoff(async () => {
-		await relayPool.publish(relays, event);
-	});
+
+	// Publish with a timeout to avoid hanging on slow/failing relays
+	const publishWithTimeout = async () => {
+		const timeoutMs = 10000; // 10 second timeout
+		const publishPromise = relayPool.publish(relays, event);
+		const timeoutPromise = new Promise<void>((_, reject) =>
+			setTimeout(() => reject(new Error('Publish timeout')), timeoutMs),
+		);
+
+		await Promise.race([publishPromise, timeoutPromise]);
+	};
+
+	await withPublishBackoff(publishWithTimeout);
 }
