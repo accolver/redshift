@@ -16,8 +16,7 @@ import { type SecretsSubcommand, secretsCommand } from './commands/secrets';
 import { serveCommand } from './commands/serve';
 import { setupCommand } from './commands/setup';
 import { upgradeCommand } from './commands/upgrade';
-
-const VERSION = '0.1.0';
+import { VERSION } from './version';
 
 const HELP_TEXT = `
 Redshift - Decentralized Secret Management

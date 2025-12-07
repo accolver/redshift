@@ -4,11 +4,10 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   test:
@@ -35,8 +34,21 @@ jobs:
       - name: Run web tests
         run: cd web && bun run test
 
-  build:
+  release-please:
     needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
     strategy:
       matrix:
         include:
@@ -57,6 +69,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
 
       - uses: actions/setup-node@v4
         with:
@@ -80,43 +94,12 @@ jobs:
       - name: Build binary with embedded UI
         run: bun build cli/src/main.ts --compile --target=${{ matrix.target }} --outfile dist/${{ matrix.artifact }}
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: dist/${{ matrix.artifact }}
-
-  # Only create GitHub release on tags
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: List artifacts
-        run: ls -la dist/
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/redshift-linux-x64
-            dist/redshift-linux-arm64
-            dist/redshift-darwin-x64
-            dist/redshift-darwin-arm64
-          generate_release_notes: true
+      - name: Upload artifact to release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ needs.release-please.outputs.tag_name }} dist/${{ matrix.artifact }}
 
-  # Deploy web to Cloudflare Pages on main and tags
+  # Deploy web to Cloudflare Pages on main
   deploy-web:
     needs: test
     runs-on: ubuntu-latest

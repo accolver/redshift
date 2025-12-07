@@ -10,6 +10,7 @@ import { execSync } from 'node:child_process';
 import { chmodSync, copyFileSync, renameSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { VERSION } from '../version';
 
 const REPO = 'accolver/redshift';
 const BINARY_NAME = 'redshift';
@@ -122,12 +123,10 @@ async function downloadFile(url: string, destPath: string): Promise<void> {
 }
 
 /**
- * Get current installed version.
+ * Get current installed version from package.json.
  */
 function getCurrentVersion(): string {
-	// This should match the VERSION constant in main.ts
-	// In a real build, this would be injected at compile time
-	return '0.1.0';
+	return VERSION;
 }
 
 /**
