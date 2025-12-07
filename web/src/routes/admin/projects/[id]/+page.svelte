@@ -980,6 +980,15 @@ async function handleDeleteEnvironment() {
 							<div class="flex items-center justify-center py-12">
 								<LoaderCircle class="size-6 animate-spin text-muted-foreground" />
 							</div>
+						{:else if secretsState.error}
+							<div class="rounded-lg border border-amber-500/50 bg-amber-500/10 p-6 text-center">
+								<TriangleAlert class="mx-auto mb-3 size-8 text-amber-500" />
+								<p class="font-medium text-amber-500">Cannot Load Secrets</p>
+								<p class="mt-2 text-sm text-muted-foreground">{secretsState.error}</p>
+								<p class="mt-4 text-sm text-muted-foreground">
+									To manage secrets, log out and log back in using your nsec (private key) directly.
+								</p>
+							</div>
 						{:else if filteredSecrets.length === 0 && !showAddSecretRow && missingSecretsState.missing.length === 0}
 							<div class="py-12 text-center text-muted-foreground">
 								{#if searchQuery}

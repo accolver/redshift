@@ -39,7 +39,13 @@ export {
 	createTombstone,
 	isRedshiftSecretsEvent,
 	getRedshiftSecretsFilter,
+	// Signer-based functions (for NIP-07/NIP-46)
+	wrapSecretsWithSigner,
+	unwrapGiftWrapWithSigner,
 } from './gift-wrap.js';
+
+// Signer-based types
+export type { EncryptFn, DecryptFn, AsyncGiftWrapResult } from './gift-wrap.js';
 
 // Utility functions
 export {

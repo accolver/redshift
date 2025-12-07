@@ -163,6 +163,162 @@ export function createTombstone(privateKey: Uint8Array, dTag: string): GiftWrapR
 }
 
 /**
+ * Encryption function type for signer-based Gift Wrap.
+ * This matches the signature of NIP-07 and NIP-46 encrypt functions.
+ */
+export type EncryptFn = (pubkey: string, plaintext: string) => Promise<string>;
+
+/**
+ * Async result type for signer-based Gift Wrap
+ */
+export interface AsyncGiftWrapResult {
+	event: NostrEvent;
+	rumor: {
+		pubkey: string;
+		created_at: number;
+		kind: number;
+		tags: string[][];
+		content: string;
+	};
+}
+
+/**
+ * Wrap secrets using NIP-07/NIP-46 signer for encryption.
+ *
+ * This function works with browser extensions (NIP-07) and remote signers (NIP-46)
+ * by delegating the Seal encryption to the provided encrypt function, while using
+ * a locally-generated ephemeral key for the outer Gift Wrap layer.
+ *
+ * Flow:
+ * 1. Create Rumor (unsigned event with secrets)
+ * 2. Create Seal by encrypting Rumor to self using signer's nip44.encrypt
+ * 3. Create Gift Wrap by encrypting Seal with local ephemeral key
+ *
+ * @param secrets - The secret bundle to wrap
+ * @param pubkey - The user's public key (hex)
+ * @param dTag - The d-tag identifier (format: "projectId|environment")
+ * @param encryptFn - NIP-44 encrypt function from signer (pubkey, plaintext) => ciphertext
+ * @returns The wrapped event and original rumor
+ */
+export async function wrapSecretsWithSigner(
+	secrets: SecretBundle,
+	pubkey: string,
+	dTag: string,
+	encryptFn: EncryptFn,
+): Promise<AsyncGiftWrapResult> {
+	// Create the rumor (unsigned event) with kind 30078 (parameterized replaceable)
+	// Note: We manually construct this since we don't have a private key for createRumor
+	const rumor = {
+		pubkey: pubkey,
+		created_at: Math.floor(Date.now() / 1000),
+		kind: NostrKinds.SECRET_BUNDLE,
+		tags: [['d', dTag]],
+		content: JSON.stringify(secrets),
+	};
+
+	// Create the seal (kind 13) - encrypts the rumor to ourselves
+	// The seal content is the rumor encrypted with NIP-44 to our own pubkey
+	const sealContent = await encryptFn(pubkey, JSON.stringify(rumor));
+
+	const seal = {
+		pubkey: pubkey,
+		created_at: randomNow(), // Randomized for privacy
+		kind: 13, // Seal kind
+		tags: [],
+		content: sealContent,
+	};
+
+	// Create the gift wrap (kind 1059) - encrypts the seal with ephemeral key
+	// This layer uses a locally-generated key (doesn't need signer)
+	const ephemeralKey = generateSecretKey();
+	const conversationKey = nip44.v2.utils.getConversationKey(ephemeralKey, pubkey);
+	const encryptedSeal = nip44.v2.encrypt(JSON.stringify(seal), conversationKey);
+
+	const giftWrap = finalizeEvent(
+		{
+			kind: NostrKinds.GIFT_WRAP,
+			content: encryptedSeal,
+			created_at: randomNow(),
+			tags: [
+				['p', pubkey],
+				['t', REDSHIFT_TYPE_TAG],
+			],
+		},
+		ephemeralKey,
+	);
+
+	return {
+		event: toNostrEvent(giftWrap),
+		rumor: {
+			pubkey: rumor.pubkey,
+			created_at: rumor.created_at,
+			kind: rumor.kind,
+			tags: rumor.tags,
+			content: rumor.content,
+		},
+	};
+}
+
+/**
+ * Decryption function type for signer-based Gift Wrap unwrapping.
+ */
+export type DecryptFn = (pubkey: string, ciphertext: string) => Promise<string>;
+
+/**
+ * Unwrap a Gift Wrap event using NIP-07/NIP-46 signer for decryption.
+ *
+ * @param giftWrap - The Gift Wrap event to unwrap
+ * @param decryptFn - NIP-44 decrypt function from signer
+ * @returns The decrypted secrets with metadata
+ */
+export async function unwrapGiftWrapWithSigner(
+	giftWrap: NostrEvent,
+	decryptFn: DecryptFn,
+): Promise<UnwrapResult> {
+	// Get the ephemeral pubkey from the gift wrap event
+	const ephemeralPubkey = giftWrap.pubkey;
+
+	// Decrypt the outer layer (Gift Wrap -> Seal)
+	// This uses the signer because we need our private key to decrypt from ephemeral
+	const sealJson = await decryptFn(ephemeralPubkey, giftWrap.content);
+	const seal = JSON.parse(sealJson) as { pubkey: string; content: string };
+
+	// Decrypt the inner layer (Seal -> Rumor)
+	// The seal was encrypted to ourselves, so decrypt from seal's pubkey
+	const rumorJson = await decryptFn(seal.pubkey, seal.content);
+	const rumor = JSON.parse(rumorJson) as {
+		pubkey: string;
+		created_at: number;
+		kind: number;
+		tags: string[][];
+		content: string;
+	};
+
+	// Parse the rumor content as secrets
+	let secrets: unknown;
+	try {
+		secrets = JSON.parse(rumor.content);
+	} catch {
+		throw new Error('Failed to parse secret bundle: invalid JSON content');
+	}
+
+	if (secrets === null || typeof secrets !== 'object' || Array.isArray(secrets)) {
+		throw new Error('Invalid secret bundle: expected an object');
+	}
+
+	// Extract d-tag from rumor
+	const dTagEntry = rumor.tags.find((t: string[]) => t[0] === 'd');
+	const dTag = dTagEntry ? (dTagEntry[1] ?? null) : null;
+
+	return {
+		secrets: secrets as SecretBundle,
+		dTag,
+		createdAt: rumor.created_at,
+		pubkey: rumor.pubkey,
+	};
+}
+
+/**
  * Check if an event is a Redshift secrets event by looking for the type tag.
  *
  * @param event - The event to check

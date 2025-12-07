@@ -311,24 +311,69 @@ export async function getPrivateKey(): Promise<Uint8Array | null> {
 }
 
 /**
- * Check if the current auth method supports NIP-44 encryption.
- * Required for NIP-59 Gift Wrap.
+ * Check if the current auth method supports NIP-59 Gift Wrap encryption.
  *
- * @returns true if encryption is supported
+ * Supports:
+ * - nsec: Direct private key access
+ * - NIP-07: Browser extension with nip44 support
+ * - bunker: Remote signer with nip44 support
+ *
+ * @returns true if Gift Wrap encryption is supported
  */
 export function supportsEncryption(): boolean {
 	if (authState.method === 'nsec') {
-		// nsec always supports encryption (we have the private key)
 		return true;
 	}
 
 	if (authState.method === 'nip07' && window.nostr?.nip44) {
-		// NIP-07 extension with NIP-44 support
 		return true;
 	}
 
-	// Bunker and basic NIP-07 don't support client-side encryption
+	if (authState.method === 'bunker' && activeBunkerSigner) {
+		return true;
+	}
+
 	return false;
+}
+
+/**
+ * Get NIP-44 encrypt function for the current auth method.
+ * Used for signer-based Gift Wrap encryption.
+ *
+ * @returns Encrypt function or null if not supported
+ */
+export function getEncryptFn(): ((pubkey: string, plaintext: string) => Promise<string>) | null {
+	if (authState.method === 'nip07' && window.nostr?.nip44) {
+		return (pubkey: string, plaintext: string) => window.nostr!.nip44!.encrypt(pubkey, plaintext);
+	}
+
+	if (authState.method === 'bunker' && activeBunkerSigner) {
+		return (pubkey: string, plaintext: string) =>
+			activeBunkerSigner!.nip44Encrypt(pubkey, plaintext);
+	}
+
+	// nsec doesn't need this - it uses the direct wrapSecrets function
+	return null;
+}
+
+/**
+ * Get NIP-44 decrypt function for the current auth method.
+ * Used for signer-based Gift Wrap decryption.
+ *
+ * @returns Decrypt function or null if not supported
+ */
+export function getDecryptFn(): ((pubkey: string, ciphertext: string) => Promise<string>) | null {
+	if (authState.method === 'nip07' && window.nostr?.nip44) {
+		return (pubkey: string, ciphertext: string) => window.nostr!.nip44!.decrypt(pubkey, ciphertext);
+	}
+
+	if (authState.method === 'bunker' && activeBunkerSigner) {
+		return (pubkey: string, ciphertext: string) =>
+			activeBunkerSigner!.nip44Decrypt(pubkey, ciphertext);
+	}
+
+	// nsec doesn't need this - it uses the direct unwrapGiftWrap function
+	return null;
 }
 
 /**

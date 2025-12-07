@@ -24,6 +24,9 @@ export {
 	parseDTag,
 	NostrKinds,
 	REDSHIFT_TYPE_TAG,
+	// Signer-based functions (for NIP-07/NIP-46)
+	wrapSecretsWithSigner,
+	unwrapGiftWrapWithSigner,
 } from '@redshift/crypto';
 
 export type {
@@ -32,4 +35,8 @@ export type {
 	SecretBundle,
 	GiftWrapResult,
 	UnwrapResult,
+	// Signer-based types
+	EncryptFn,
+	DecryptFn,
+	AsyncGiftWrapResult,
 } from '@redshift/crypto';

@@ -12,10 +12,20 @@
 import type { SecretsState, Secret } from '$lib/types/nostr';
 import type { Subscription } from 'rxjs';
 import { eventStore, publishEvent } from './nostr.svelte';
-import { GiftWrapSecretsModel, AllGiftWrapSecretsModel } from '$lib/models/gift-wrap-secrets';
+import {
+	GiftWrapSecretsModel,
+	AllGiftWrapSecretsModel,
+	type Decryptor,
+} from '$lib/models/gift-wrap-secrets';
 import { calculateMissingSecrets, type MissingSecret } from '$lib/models/secrets';
-import { getAuthState, getPrivateKey, supportsEncryption } from './auth.svelte';
-import { wrapSecrets, createDTag } from '$lib/crypto';
+import {
+	getAuthState,
+	getPrivateKey,
+	supportsEncryption,
+	getEncryptFn,
+	getDecryptFn,
+} from './auth.svelte';
+import { wrapSecrets, wrapSecretsWithSigner, createDTag, type NostrEvent } from '$lib/crypto';
 
 /**
  * Secrets state using $state rune
@@ -51,7 +61,17 @@ let currentEnvironmentSlug: string | null = null;
 let currentEnvironmentSlugs: string[] = [];
 
 /**
- * Cached private key for the current session
+ * Cached decryptor for the current session
+ */
+let cachedDecryptor: Decryptor | null = null;
+
+/**
+ * Cached encrypt function for publishing (NIP-07/bunker)
+ */
+let cachedEncryptFn: ((pubkey: string, plaintext: string) => Promise<string>) | null = null;
+
+/**
+ * Cached private key for publishing (nsec only)
  */
 let cachedPrivateKey: Uint8Array | null = null;
 
@@ -125,20 +145,33 @@ export async function subscribeToSecrets(
 	if (!supportsEncryption()) {
 		secretsState.secrets = [];
 		secretsState.error =
-			'NIP-59 encryption requires nsec authentication or a NIP-07 extension with NIP-44 support';
+			'Secrets management requires NIP-44 encryption support. Please use nsec login, a NIP-07 extension with NIP-44 support (like Alby), or a NIP-46 bunker.';
 		return;
 	}
 
-	// Get the private key for decryption
+	// Get encryption capabilities based on auth method
 	const privateKey = await getPrivateKey();
-	if (!privateKey) {
+	const encryptFn = getEncryptFn();
+	const decryptFn = getDecryptFn();
+
+	// Build the decryptor
+	let decryptor: Decryptor | null = null;
+	if (privateKey) {
+		decryptor = { type: 'privateKey', key: privateKey };
+	} else if (decryptFn) {
+		decryptor = { type: 'decryptFn', fn: decryptFn };
+	}
+
+	if (!decryptor) {
 		secretsState.secrets = [];
-		secretsState.error = 'Could not retrieve private key for decryption';
+		secretsState.error = 'Could not initialize encryption. Please re-authenticate.';
 		return;
 	}
 
-	// Cache the private key for publishing
+	// Cache credentials for publishing and decryption
+	cachedDecryptor = decryptor;
 	cachedPrivateKey = privateKey;
+	cachedEncryptFn = encryptFn;
 
 	// Skip if already subscribed to the same project/environment
 	if (
@@ -168,34 +201,29 @@ export async function subscribeToSecrets(
 	secretsState.error = null;
 
 	// Subscribe to GiftWrapSecretsModel (decrypts Gift Wrap events)
-	subscription = GiftWrapSecretsModel(eventStore, privateKey, projectId, environmentSlug).subscribe(
-		{
-			next: (secrets) => {
-				secretsState.secrets = secrets;
-				secretsState.isLoading = false;
-				secretsState.error = null;
+	subscription = GiftWrapSecretsModel(eventStore, decryptor, projectId, environmentSlug).subscribe({
+		next: (secrets) => {
+			secretsState.secrets = secrets;
+			secretsState.isLoading = false;
+			secretsState.error = null;
 
-				// Recalculate missing secrets when current env secrets change
-				if (allEnvSecretsState.size > 0) {
-					missingSecretsState.missing = calculateMissingSecrets(
-						allEnvSecretsState,
-						environmentSlug,
-					);
-				}
-			},
-			error: (err) => {
-				secretsState.error = err instanceof Error ? err.message : 'Failed to load secrets';
-				secretsState.isLoading = false;
-			},
+			// Recalculate missing secrets when current env secrets change
+			if (allEnvSecretsState.size > 0) {
+				missingSecretsState.missing = calculateMissingSecrets(allEnvSecretsState, environmentSlug);
+			}
 		},
-	);
+		error: (err) => {
+			secretsState.error = err instanceof Error ? err.message : 'Failed to load secrets';
+			secretsState.isLoading = false;
+		},
+	});
 
 	// Subscribe to all environments for missing secrets calculation
 	if (currentEnvironmentSlugs.length > 1) {
 		missingSecretsState.isLoading = true;
 		allEnvSubscription = AllGiftWrapSecretsModel(
 			eventStore,
-			privateKey,
+			decryptor,
 			projectId,
 			currentEnvironmentSlugs,
 		).subscribe({
@@ -230,6 +258,8 @@ export function unsubscribeFromSecrets(): void {
 	currentProjectId = null;
 	currentEnvironmentSlug = null;
 	currentEnvironmentSlugs = [];
+	cachedDecryptor = null;
+	cachedEncryptFn = null;
 	cachedPrivateKey = null;
 }
 
@@ -252,6 +282,30 @@ function removeSecretFromArray(secrets: Secret[], key: string): Secret[] {
 }
 
 /**
+ * Wrap secrets using the appropriate method based on cached credentials
+ */
+async function wrapSecretsForPublish(
+	bundle: Record<string, string>,
+	dTag: string,
+): Promise<NostrEvent> {
+	const auth = getAuthState();
+
+	if (cachedPrivateKey) {
+		// Use direct private key wrapping (nsec)
+		const { event } = wrapSecrets(bundle, cachedPrivateKey, dTag);
+		return event;
+	}
+
+	if (cachedEncryptFn && auth.pubkey) {
+		// Use signer-based wrapping (NIP-07/bunker)
+		const { event } = await wrapSecretsWithSigner(bundle, auth.pubkey, dTag, cachedEncryptFn);
+		return event;
+	}
+
+	throw new Error('No encryption method available. Please re-authenticate.');
+}
+
+/**
  * Set a secret (add or update) using NIP-59 Gift Wrap
  */
 export async function setSecret(key: string, value: string): Promise<void> {
@@ -259,8 +313,8 @@ export async function setSecret(key: string, value: string): Promise<void> {
 		throw new Error('No project/environment selected');
 	}
 
-	if (!cachedPrivateKey) {
-		throw new Error('Private key not available. Please re-authenticate.');
+	if (!cachedPrivateKey && !cachedEncryptFn) {
+		throw new Error('Encryption not available. Please re-authenticate.');
 	}
 
 	const trimmedKey = key.trim().toUpperCase();
@@ -278,7 +332,7 @@ export async function setSecret(key: string, value: string): Promise<void> {
 		// Convert to bundle format and wrap with NIP-59
 		const bundle = secretsToBundle(updatedSecrets);
 		const dTag = createDTag(currentProjectId, currentEnvironmentSlug);
-		const { event } = wrapSecrets(bundle, cachedPrivateKey, dTag);
+		const event = await wrapSecretsForPublish(bundle, dTag);
 
 		// Publish the Gift Wrap event
 		await publishEvent(event);
@@ -302,8 +356,8 @@ export async function setSecretToMultipleEnvs(
 	value: string,
 	environmentSlugs: string[],
 ): Promise<void> {
-	if (!cachedPrivateKey) {
-		throw new Error('Private key not available. Please re-authenticate.');
+	if (!cachedPrivateKey && !cachedEncryptFn) {
+		throw new Error('Encryption not available. Please re-authenticate.');
 	}
 
 	const trimmedKey = key.trim().toUpperCase();
@@ -326,7 +380,7 @@ export async function setSecretToMultipleEnvs(
 			// Convert to bundle format and wrap with NIP-59
 			const bundle = secretsToBundle(updatedSecrets);
 			const dTag = createDTag(projectId, envSlug);
-			const { event } = wrapSecrets(bundle, cachedPrivateKey, dTag);
+			const event = await wrapSecretsForPublish(bundle, dTag);
 
 			// Publish the Gift Wrap event
 			await publishEvent(event);
@@ -347,8 +401,8 @@ export async function deleteSecret(key: string): Promise<void> {
 		throw new Error('No project/environment selected');
 	}
 
-	if (!cachedPrivateKey) {
-		throw new Error('Private key not available. Please re-authenticate.');
+	if (!cachedPrivateKey && !cachedEncryptFn) {
+		throw new Error('Encryption not available. Please re-authenticate.');
 	}
 
 	secretsState.isSaving = true;
@@ -361,7 +415,7 @@ export async function deleteSecret(key: string): Promise<void> {
 		// Convert to bundle format and wrap with NIP-59
 		const bundle = secretsToBundle(updatedSecrets);
 		const dTag = createDTag(currentProjectId, currentEnvironmentSlug);
-		const { event } = wrapSecrets(bundle, cachedPrivateKey, dTag);
+		const event = await wrapSecretsForPublish(bundle, dTag);
 
 		// Publish the Gift Wrap event
 		await publishEvent(event);
