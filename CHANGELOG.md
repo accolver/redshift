@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0](https://github.com/accolver/redshift/compare/v0.5.1...v0.6.0) (2025-12-07)
+
+
+### Features
+
+* **web:** auto-connect on page refresh for project routes ([3526f81](https://github.com/accolver/redshift/commit/3526f81ca239954dd818c8c4e9b54a5a6d9ef56c))
+* **web:** use project slug instead of id in URLs ([6ab7d9b](https://github.com/accolver/redshift/commit/6ab7d9b3efa87346c798f562a5fb7fbaecb8ce4c))
+
+
+### Bug Fixes
+
+* **web:** improve test infrastructure for browser globals ([74b2b38](https://github.com/accolver/redshift/commit/74b2b3886ace72ed962d58c0666177f82139a223))
+
 ## [0.5.1](https://github.com/accolver/redshift/compare/v0.5.0...v0.5.1) (2025-12-07)
 
 
