@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/accolver/redshift/compare/v0.6.1...v0.6.2) (2025-12-07)
+
+
+### Bug Fixes
+
+* **ci:** cross-compile macOS binaries from Linux for faster releases ([c9c48bc](https://github.com/accolver/redshift/commit/c9c48bcb3f06bf5555cd1e7e63444c1dcd4954b7))
+
 ## [0.6.1](https://github.com/accolver/redshift/compare/v0.6.0...v0.6.1) (2025-12-07)
 
 
