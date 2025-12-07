@@ -55,8 +55,9 @@ let allEnvSecretsState = $state<Map<string, Secret[]>>(new Map());
 
 /**
  * Current context
+ * Note: projectName is the human-friendly name (e.g., "keyfate"), not the internal ID
  */
-let currentProjectId: string | null = null;
+let currentProjectName: string | null = null;
 let currentEnvironmentSlug: string | null = null;
 let currentEnvironmentSlugs: string[] = [];
 
@@ -91,8 +92,11 @@ export function getSecretsState(): SecretsState {
 /**
  * Get current context
  */
-export function getSecretsContext(): { projectId: string | null; environmentSlug: string | null } {
-	return { projectId: currentProjectId, environmentSlug: currentEnvironmentSlug };
+export function getSecretsContext(): {
+	projectName: string | null;
+	environmentSlug: string | null;
+} {
+	return { projectName: currentProjectName, environmentSlug: currentEnvironmentSlug };
 }
 
 /**
@@ -124,12 +128,12 @@ function secretsToBundle(secrets: Secret[]): Record<string, string> {
  * Subscribe to secrets for a specific project/environment.
  * Uses NIP-59 Gift Wrap for encrypted storage.
  *
- * @param projectId - The project ID
+ * @param projectName - The human-friendly project name (e.g., "keyfate")
  * @param environmentSlug - The environment slug
  * @param allEnvironmentSlugs - All environment slugs in the project (for missing secrets calculation)
  */
 export async function subscribeToSecrets(
-	projectId: string,
+	projectName: string,
 	environmentSlug: string,
 	allEnvironmentSlugs?: string[],
 ): Promise<void> {
@@ -175,7 +179,7 @@ export async function subscribeToSecrets(
 
 	// Skip if already subscribed to the same project/environment
 	if (
-		currentProjectId === projectId &&
+		currentProjectName === projectName &&
 		currentEnvironmentSlug === environmentSlug &&
 		subscription !== null
 	) {
@@ -193,7 +197,7 @@ export async function subscribeToSecrets(
 	}
 
 	// Update context
-	currentProjectId = projectId;
+	currentProjectName = projectName;
 	currentEnvironmentSlug = environmentSlug;
 	currentEnvironmentSlugs = allEnvironmentSlugs ?? [environmentSlug];
 
@@ -201,7 +205,12 @@ export async function subscribeToSecrets(
 	secretsState.error = null;
 
 	// Subscribe to GiftWrapSecretsModel (decrypts Gift Wrap events)
-	subscription = GiftWrapSecretsModel(eventStore, decryptor, projectId, environmentSlug).subscribe({
+	subscription = GiftWrapSecretsModel(
+		eventStore,
+		decryptor,
+		projectName,
+		environmentSlug,
+	).subscribe({
 		next: (secrets) => {
 			secretsState.secrets = secrets;
 			secretsState.isLoading = false;
@@ -224,7 +233,7 @@ export async function subscribeToSecrets(
 		allEnvSubscription = AllGiftWrapSecretsModel(
 			eventStore,
 			decryptor,
-			projectId,
+			projectName,
 			currentEnvironmentSlugs,
 		).subscribe({
 			next: (envMap) => {
@@ -255,7 +264,7 @@ export function unsubscribeFromSecrets(): void {
 		allEnvSubscription.unsubscribe();
 		allEnvSubscription = null;
 	}
-	currentProjectId = null;
+	currentProjectName = null;
 	currentEnvironmentSlug = null;
 	currentEnvironmentSlugs = [];
 	cachedDecryptor = null;
@@ -309,7 +318,7 @@ async function wrapSecretsForPublish(
  * Set a secret (add or update) using NIP-59 Gift Wrap
  */
 export async function setSecret(key: string, value: string): Promise<void> {
-	if (!currentProjectId || !currentEnvironmentSlug) {
+	if (!currentProjectName || !currentEnvironmentSlug) {
 		throw new Error('No project/environment selected');
 	}
 
@@ -331,7 +340,7 @@ export async function setSecret(key: string, value: string): Promise<void> {
 
 		// Convert to bundle format and wrap with NIP-59
 		const bundle = secretsToBundle(updatedSecrets);
-		const dTag = createDTag(currentProjectId, currentEnvironmentSlug);
+		const dTag = createDTag(currentProjectName, currentEnvironmentSlug);
 		const event = await wrapSecretsForPublish(bundle, dTag);
 
 		// Publish the Gift Wrap event
@@ -351,7 +360,7 @@ export async function setSecret(key: string, value: string): Promise<void> {
  * Set a secret to multiple environments using NIP-59 Gift Wrap
  */
 export async function setSecretToMultipleEnvs(
-	projectId: string,
+	projectName: string,
 	key: string,
 	value: string,
 	environmentSlugs: string[],
@@ -379,7 +388,7 @@ export async function setSecretToMultipleEnvs(
 
 			// Convert to bundle format and wrap with NIP-59
 			const bundle = secretsToBundle(updatedSecrets);
-			const dTag = createDTag(projectId, envSlug);
+			const dTag = createDTag(projectName, envSlug);
 			const event = await wrapSecretsForPublish(bundle, dTag);
 
 			// Publish the Gift Wrap event
@@ -397,7 +406,7 @@ export async function setSecretToMultipleEnvs(
  * Delete a secret using NIP-59 Gift Wrap
  */
 export async function deleteSecret(key: string): Promise<void> {
-	if (!currentProjectId || !currentEnvironmentSlug) {
+	if (!currentProjectName || !currentEnvironmentSlug) {
 		throw new Error('No project/environment selected');
 	}
 
@@ -414,7 +423,7 @@ export async function deleteSecret(key: string): Promise<void> {
 
 		// Convert to bundle format and wrap with NIP-59
 		const bundle = secretsToBundle(updatedSecrets);
-		const dTag = createDTag(currentProjectId, currentEnvironmentSlug);
+		const dTag = createDTag(currentProjectName, currentEnvironmentSlug);
 		const event = await wrapSecretsForPublish(bundle, dTag);
 
 		// Publish the Gift Wrap event

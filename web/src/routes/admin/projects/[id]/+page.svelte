@@ -352,16 +352,16 @@ $effect(() => {
 });
 
 // Subscribe to secrets when environment changes
-// Track project.id and selectedEnv.slug specifically to avoid loops from object reference changes
+// Track project.name and selectedEnv.slug specifically to avoid loops from object reference changes
 $effect(() => {
-	const currentProjectId = project?.id;
+	const currentProjectName = project?.name;
 	const currentEnvSlug = selectedEnv?.slug;
 
-	if (currentProjectId && currentEnvSlug) {
+	if (currentProjectName && currentEnvSlug) {
 		// Use untrack to read environments without creating dependency on array changes
 		const allEnvSlugs = untrack(() => project?.environments.map((e) => e.slug) ?? []);
 		// subscribeToSecrets is async but effect can't await - it handles errors internally
-		subscribeToSecrets(currentProjectId, currentEnvSlug, allEnvSlugs);
+		subscribeToSecrets(currentProjectName, currentEnvSlug, allEnvSlugs);
 	}
 });
 
@@ -462,7 +462,7 @@ async function handleMultiEnvSave(envSlugs: string[]) {
 		if (isGlobalSaveMode) {
 			// Global save mode: save all pending secrets to selected environments
 			for (const secret of pendingSecrets) {
-				await setSecretToMultipleEnvs(project.id, secret.key, secret.value, envSlugs);
+				await setSecretToMultipleEnvs(project.name, secret.key, secret.value, envSlugs);
 			}
 
 			// Clear editing state for saved secrets
@@ -484,7 +484,7 @@ async function handleMultiEnvSave(envSlugs: string[]) {
 			isGlobalSaveMode = false;
 		} else {
 			// Single secret mode (inline save)
-			await setSecretToMultipleEnvs(project.id, pendingSecretKey, pendingSecretValue, envSlugs);
+			await setSecretToMultipleEnvs(project.name, pendingSecretKey, pendingSecretValue, envSlugs);
 			newSecretKey = '';
 			newSecretValue = '';
 			showAddSecretRow = false;

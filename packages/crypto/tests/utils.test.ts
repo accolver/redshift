@@ -119,6 +119,30 @@ describe('D-Tag Utilities', () => {
 		it('handles underscores in names', () => {
 			expect(createDTag('my_project', 'staging_1')).toBe('my_project|staging_1');
 		});
+
+		// Human-friendly project name tests
+		it('creates d-tag with human-friendly project name', () => {
+			expect(createDTag('keyfate', 'production')).toBe('keyfate|production');
+		});
+
+		it('handles mixed case project names (preserves case)', () => {
+			expect(createDTag('MyProject', 'Dev')).toBe('MyProject|Dev');
+		});
+
+		it('handles project names with numbers', () => {
+			expect(createDTag('project2024', 'v1')).toBe('project2024|v1');
+		});
+
+		it('handles short environment slugs', () => {
+			expect(createDTag('acme-corp', 'prd')).toBe('acme-corp|prd');
+			expect(createDTag('acme-corp', 'dev')).toBe('acme-corp|dev');
+			expect(createDTag('acme-corp', 'stg')).toBe('acme-corp|stg');
+		});
+
+		it('handles long project names', () => {
+			const longName = 'my-super-long-project-name-for-testing';
+			expect(createDTag(longName, 'prod')).toBe(`${longName}|prod`);
+		});
 	});
 
 	describe('parseDTag', () => {
@@ -155,6 +179,88 @@ describe('D-Tag Utilities', () => {
 			expect(result).toEqual({
 				projectId: 'my-project',
 				environment: 'dev-env',
+			});
+		});
+
+		// Human-friendly project name tests
+		it('parses human-friendly project name', () => {
+			const result = parseDTag('keyfate|production');
+			expect(result).toEqual({
+				projectId: 'keyfate',
+				environment: 'production',
+			});
+		});
+
+		it('parses short environment slugs', () => {
+			expect(parseDTag('myapp|prd')).toEqual({
+				projectId: 'myapp',
+				environment: 'prd',
+			});
+			expect(parseDTag('myapp|dev')).toEqual({
+				projectId: 'myapp',
+				environment: 'dev',
+			});
+		});
+
+		it('preserves case in parsed values', () => {
+			const result = parseDTag('MyProject|Production');
+			expect(result).toEqual({
+				projectId: 'MyProject',
+				environment: 'Production',
+			});
+		});
+
+		it('handles project names with numbers', () => {
+			const result = parseDTag('project2024|v1-release');
+			expect(result).toEqual({
+				projectId: 'project2024',
+				environment: 'v1-release',
+			});
+		});
+	});
+
+	describe('createDTag and parseDTag roundtrip', () => {
+		it('roundtrips simple names', () => {
+			const projectName = 'myproject';
+			const env = 'production';
+			const dTag = createDTag(projectName, env);
+			const parsed = parseDTag(dTag);
+			expect(parsed).toEqual({
+				projectId: projectName,
+				environment: env,
+			});
+		});
+
+		it('roundtrips human-friendly names', () => {
+			const projectName = 'keyfate';
+			const env = 'prd';
+			const dTag = createDTag(projectName, env);
+			const parsed = parseDTag(dTag);
+			expect(parsed).toEqual({
+				projectId: projectName,
+				environment: env,
+			});
+		});
+
+		it('roundtrips names with special characters', () => {
+			const projectName = 'my-awesome-project_v2';
+			const env = 'staging-us-east-1';
+			const dTag = createDTag(projectName, env);
+			const parsed = parseDTag(dTag);
+			expect(parsed).toEqual({
+				projectId: projectName,
+				environment: env,
+			});
+		});
+
+		it('roundtrips mixed case names', () => {
+			const projectName = 'AcmeCorp';
+			const env = 'QA';
+			const dTag = createDTag(projectName, env);
+			const parsed = parseDTag(dTag);
+			expect(parsed).toEqual({
+				projectId: projectName,
+				environment: env,
 			});
 		});
 	});

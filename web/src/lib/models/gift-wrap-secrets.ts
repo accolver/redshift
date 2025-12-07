@@ -73,16 +73,16 @@ async function unwrapEvents(
  *
  * @param eventStore - The EventStore containing Gift Wrap events
  * @param decryptor - Either a private key or decrypt function
- * @param projectId - The project ID to filter by
+ * @param projectName - The human-friendly project name (used in d-tag)
  * @param environmentSlug - The environment slug to filter by
  */
 export function GiftWrapSecretsModel(
 	eventStore: EventStore,
 	decryptor: Decryptor,
-	projectId: string,
+	projectName: string,
 	environmentSlug: string,
 ): Observable<Secret[]> {
-	const targetDTag = `${projectId}|${environmentSlug}`;
+	const targetDTag = `${projectName}|${environmentSlug}`;
 
 	// Query the timeline for Gift Wrap events
 	return eventStore
@@ -127,13 +127,13 @@ export function GiftWrapSecretsModel(
  *
  * @param eventStore - The EventStore containing Gift Wrap events
  * @param decryptor - Either a private key or decrypt function
- * @param projectId - The project ID to filter by
+ * @param projectName - The human-friendly project name (used in d-tag)
  * @param environmentSlugs - List of environment slugs to fetch
  */
 export function AllGiftWrapSecretsModel(
 	eventStore: EventStore,
 	decryptor: Decryptor,
-	projectId: string,
+	projectName: string,
 	environmentSlugs: string[],
 ): Observable<Map<string, Secret[]>> {
 	if (environmentSlugs.length === 0) {
@@ -141,7 +141,7 @@ export function AllGiftWrapSecretsModel(
 	}
 
 	// Create target d-tags for all environments
-	const targetDTags = new Set(environmentSlugs.map((slug) => `${projectId}|${slug}`));
+	const targetDTags = new Set(environmentSlugs.map((slug) => `${projectName}|${slug}`));
 
 	return eventStore
 		.timeline({
@@ -246,12 +246,12 @@ export function ListGiftWrapProjectsModel(
  *
  * @param eventStore - The EventStore containing Gift Wrap events
  * @param decryptor - Either a private key or decrypt function
- * @param projectId - The project ID to filter by
+ * @param projectName - The human-friendly project name (used in d-tag)
  */
 export function ListGiftWrapEnvironmentsModel(
 	eventStore: EventStore,
 	decryptor: Decryptor,
-	projectId: string,
+	projectName: string,
 ): Observable<string[]> {
 	return eventStore
 		.timeline({
@@ -271,7 +271,7 @@ export function ListGiftWrapEnvironmentsModel(
 				for (const { result } of unwrappedEvents) {
 					if (result.dTag) {
 						const parsed = parseDTag(result.dTag);
-						if (parsed && parsed.projectId === projectId && parsed.environment) {
+						if (parsed && parsed.projectId === projectName && parsed.environment) {
 							environments.add(parsed.environment);
 						}
 					}
