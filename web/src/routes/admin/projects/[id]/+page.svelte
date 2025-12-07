@@ -441,16 +441,37 @@ async function handleAddSecret() {
 	}
 
 	// Single environment, save directly
-	isAddingSecret = true;
+	const keyToSave = newSecretKey.trim().toUpperCase();
+	const valueToSave = newSecretValue;
+	
+	// Hide the add row immediately and mark the key as saving
+	showAddSecretRow = false;
+	newSecretKey = '';
+	newSecretValue = '';
+	savingSecrets.add(keyToSave);
+	savingSecrets = new Set(savingSecrets);
+	
 	try {
-		await setSecret(newSecretKey, newSecretValue);
-		newSecretKey = '';
-		newSecretValue = '';
-		showAddSecretRow = false;
+		await setSecret(keyToSave, valueToSave);
+		// Mark as saved for visual feedback
+		savingSecrets.delete(keyToSave);
+		savedSecrets.add(keyToSave);
+		savingSecrets = new Set(savingSecrets);
+		savedSecrets = new Set(savedSecrets);
+		
+		// Clear saved status after 2 seconds
+		setTimeout(() => {
+			savedSecrets.delete(keyToSave);
+			savedSecrets = new Set(savedSecrets);
+		}, 2000);
 	} catch (err) {
 		console.error('Failed to add secret:', err);
-	} finally {
-		isAddingSecret = false;
+		savingSecrets.delete(keyToSave);
+		savingSecrets = new Set(savingSecrets);
+		// Re-show the add row with the values on error
+		showAddSecretRow = true;
+		newSecretKey = keyToSave;
+		newSecretValue = valueToSave;
 	}
 }
 
