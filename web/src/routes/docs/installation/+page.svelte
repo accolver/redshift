@@ -2,6 +2,7 @@
 import CodeBlock from '$lib/components/CodeBlock.svelte';
 import InlineCode from '$lib/components/InlineCode.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
+import DocsPage from '$lib/components/DocsPage.svelte';
 import { CircleCheck } from '@lucide/svelte';
 </script>
 
@@ -10,13 +11,7 @@ import { CircleCheck } from '@lucide/svelte';
 	<meta name="description" content="Install Redshift CLI on macOS, Linux, or Windows." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
-	<h1 class="mb-4 text-4xl font-bold">Installation</h1>
-	<p class="mb-8 text-lg text-muted-foreground">
-		Get Redshift running on your machine in under a minute.
-	</p>
-
-	<section class="prose prose-invert max-w-none">
+<DocsPage title="Installation" description="Get Redshift running on your machine in under a minute.">
 		<ProseHeading level={2} id="quick-install">Quick Install (Recommended)</ProseHeading>
 		<p>
 			The fastest way to install Redshift is using the install script. This works on macOS, Linux, and Windows (WSL):
@@ -88,5 +83,4 @@ sudo mv redshift-* /usr/local/bin/redshift`} language="bash" />
 		<p>
 			Now that Redshift is installed, continue to the <a href="/docs/quickstart">Quick Start guide</a> to create your first project and store some secrets.
 		</p>
-	</section>
-</div>
+</DocsPage>

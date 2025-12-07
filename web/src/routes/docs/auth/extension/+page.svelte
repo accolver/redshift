@@ -2,6 +2,7 @@
 import CodeBlock from '$lib/components/CodeBlock.svelte';
 import InlineCode from '$lib/components/InlineCode.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
+import DocsPage from '$lib/components/DocsPage.svelte';
 import { CircleCheck } from '@lucide/svelte';
 </script>
 
@@ -10,13 +11,7 @@ import { CircleCheck } from '@lucide/svelte';
 	<meta name="description" content="Authenticate with Redshift using a NIP-07 browser extension like Alby or nos2x." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
-	<h1 class="mb-4 text-4xl font-bold">Browser Extension (NIP-07)</h1>
-	<p class="mb-8 text-lg text-muted-foreground">
-		The most secure way to authenticate with Redshift for everyday use.
-	</p>
-
-	<section class="prose prose-invert max-w-none">
+<DocsPage title="Browser Extension (NIP-07)" description="The most secure way to authenticate with Redshift for everyday use.">
 		<ProseHeading level={2} id="what-is-nip-07">What is NIP-07?</ProseHeading>
 		<p>
 			NIP-07 is a Nostr standard that allows websites to request signatures from a browser extension without ever accessing your private key. The extension holds your key securely and signs requests on your behalf.
@@ -196,5 +191,4 @@ import { CircleCheck } from '@lucide/svelte';
 			<li>The popup might be blocked - check browser popup settings</li>
 			<li>Try a different browser or extension</li>
 		</ul>
-	</section>
-</div>
+</DocsPage>

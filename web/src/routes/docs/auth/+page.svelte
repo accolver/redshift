@@ -1,6 +1,7 @@
 <script lang="ts">
 import InlineCode from '$lib/components/InlineCode.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
+import DocsPage from '$lib/components/DocsPage.svelte';
 import { Globe, Key, Shield } from '@lucide/svelte';
 </script>
 
@@ -9,13 +10,7 @@ import { Globe, Key, Shield } from '@lucide/svelte';
 	<meta name="description" content="Learn about the different ways to authenticate with Redshift using your Nostr identity." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
-	<h1 class="mb-4 text-4xl font-bold">Authentication</h1>
-	<p class="mb-8 text-lg text-muted-foreground">
-		Redshift uses your Nostr identity for authentication. Choose the method that best fits your security needs.
-	</p>
-
-	<section class="prose prose-invert max-w-none">
+<DocsPage title="Authentication" description="Redshift uses your Nostr identity for authentication. Choose the method that best fits your security needs.">
 		<ProseHeading level={2} id="overview">Overview</ProseHeading>
 		<p>
 			Unlike traditional secret managers that use email/password or OAuth, Redshift authenticates using cryptographic keys. Your Nostr identity (a public/private key pair) is used to:
@@ -147,5 +142,4 @@ import { Globe, Key, Shield } from '@lucide/svelte';
 				<strong class="text-tokyo-red">Important:</strong> Back up your private key (nsec) immediately after creation. If you lose it, you lose access to all your secrets permanently. There is no recovery option.
 			</p>
 		</div>
-	</section>
-</div>
+</DocsPage>

@@ -1,6 +1,7 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
+import DocsPage from '$lib/components/DocsPage.svelte';
 </script>
 
 <svelte:head>
@@ -8,13 +9,7 @@ import ProseHeading from '$lib/components/ProseHeading.svelte';
 	<meta name="description" content="Understanding the Nostr protocol and how Redshift uses it for decentralized secret management." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
-	<h1 class="mb-4 text-4xl font-bold">What is Nostr?</h1>
-	<p class="mb-8 text-lg text-muted-foreground">
-		Understanding the decentralized protocol that powers Redshift.
-	</p>
-
-	<section class="prose prose-invert max-w-none">
+<DocsPage title="What is Nostr?" description="Understanding the decentralized protocol that powers Redshift.">
 		<ProseHeading level={2} id="nostr-in-a-nutshell">Nostr in a Nutshell</ProseHeading>
 		<p>
 			<strong>Nostr</strong> (Notes and Other Stuff Transmitted by Relays) is a simple, open protocol for creating censorship-resistant global networks. Think of it as a decentralized alternative to platforms like Twitter or Slack, but the underlying technology can be used for much more than social media.
@@ -157,5 +152,4 @@ Private key (nsec): nsec1secret...key
 		<p>
 			Now that you understand Nostr, learn <a href="/docs/why-redshift">why Redshift vs. other secret managers</a> or dive into <a href="/docs/auth">authentication options</a>.
 		</p>
-	</section>
-</div>
+</DocsPage>

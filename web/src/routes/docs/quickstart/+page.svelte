@@ -2,6 +2,7 @@
 import CodeBlock from '$lib/components/CodeBlock.svelte';
 import InlineCode from '$lib/components/InlineCode.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
+import DocsPage from '$lib/components/DocsPage.svelte';
 </script>
 
 <svelte:head>
@@ -9,13 +10,7 @@ import ProseHeading from '$lib/components/ProseHeading.svelte';
 	<meta name="description" content="Get started with Redshift in 5 minutes." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
-	<h1 class="mb-4 text-4xl font-bold">Quick Start</h1>
-	<p class="mb-8 text-lg text-muted-foreground">
-		Create your first project and manage secrets in under 5 minutes.
-	</p>
-
-	<section class="prose prose-invert max-w-none">
+<DocsPage title="Quick Start" description="Create your first project and manage secrets in under 5 minutes.">
 		<ProseHeading level={2} id="authenticate">1. Authenticate</ProseHeading>
 		<p>
 			First, log in with your Nostr identity. If you don't have one, Redshift can generate one for you:
@@ -151,5 +146,4 @@ redshift run -- node index.js`} language="bash" />
 			<li><a href="/docs/cli">Explore all CLI commands</a></li>
 			<li><a href="/docs/why-redshift">Understand why Redshift vs. alternatives</a></li>
 		</ul>
-	</section>
-</div>
+</DocsPage>

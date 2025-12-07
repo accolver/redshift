@@ -10,7 +10,7 @@ import InlineCode from '$lib/components/InlineCode.svelte';
 	<meta name="description" content="Step-by-step tutorial for getting started with Redshift" />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-12">
+<div class="mx-auto max-w-4xl overflow-x-hidden px-4 py-12">
 	<h1 class="mb-4 text-4xl font-bold">Getting Started Tutorial</h1>
 	<p class="mb-12 text-xl text-muted-foreground">
 		Learn how to set up Redshift and manage your first secrets in 5 minutes.

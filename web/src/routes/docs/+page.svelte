@@ -2,6 +2,7 @@
 import { ArrowRight, Key, Shield, Terminal, Globe } from '@lucide/svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
 import InlineCode from '$lib/components/InlineCode.svelte';
+import DocsContainer from '$lib/components/DocsContainer.svelte';
 </script>
 
 <svelte:head>
@@ -9,7 +10,7 @@ import InlineCode from '$lib/components/InlineCode.svelte';
 	<meta name="description" content="Learn how to use Redshift for decentralized, censorship-resistant secret management." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
+<DocsContainer>
 	<!-- Hero -->
 	<div class="mb-12">
 		<h1 class="mb-4 text-4xl font-bold">Redshift Documentation</h1>
@@ -117,4 +118,4 @@ import InlineCode from '$lib/components/InlineCode.svelte';
 			<li>Open an issue on <a href="https://github.com/accolver/redshift" target="_blank" rel="noopener">GitHub</a></li>
 		</ul>
 	</section>
-</div>
+</DocsContainer>

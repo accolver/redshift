@@ -2,6 +2,7 @@
 import CodeBlock from '$lib/components/CodeBlock.svelte';
 import InlineCode from '$lib/components/InlineCode.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
+import DocsPage from '$lib/components/DocsPage.svelte';
 </script>
 
 <svelte:head>
@@ -9,13 +10,7 @@ import ProseHeading from '$lib/components/ProseHeading.svelte';
 	<meta name="description" content="Using the Redshift web admin interface to manage projects and secrets." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
-	<h1 class="mb-4 text-4xl font-bold">Web Admin</h1>
-	<p class="mb-8 text-lg text-muted-foreground">
-		Manage your projects and secrets through a visual interface.
-	</p>
-
-	<section class="prose prose-invert max-w-none">
+<DocsPage title="Web Admin" description="Manage your projects and secrets through a visual interface.">
 		<ProseHeading level={2} id="accessing-the-web-admin">Accessing the Web Admin</ProseHeading>
 		<p>There are two ways to access the Redshift web admin:</p>
 
@@ -184,5 +179,4 @@ import ProseHeading from '$lib/components/ProseHeading.svelte';
 				</tbody>
 			</table>
 		</div>
-	</section>
-</div>
+</DocsPage>

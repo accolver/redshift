@@ -2,6 +2,7 @@
 import CodeBlock from '$lib/components/CodeBlock.svelte';
 import InlineCode from '$lib/components/InlineCode.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
+import DocsPage from '$lib/components/DocsPage.svelte';
 </script>
 
 <svelte:head>
@@ -9,13 +10,7 @@ import ProseHeading from '$lib/components/ProseHeading.svelte';
 	<meta name="description" content="Complete reference for all Redshift CLI commands." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
-	<h1 class="mb-4 text-4xl font-bold">CLI Reference</h1>
-	<p class="mb-8 text-lg text-muted-foreground">
-		Complete reference for all Redshift CLI commands.
-	</p>
-
-	<section class="prose prose-invert max-w-none">
+<DocsPage title="CLI Reference" description="Complete reference for all Redshift CLI commands.">
 		<ProseHeading level={2} id="global-options">Global Options</ProseHeading>
 		<p>These options are available for all commands:</p>
 
@@ -289,5 +284,4 @@ redshift serve --open`} />
 				</tbody>
 			</table>
 		</div>
-	</section>
-</div>
+</DocsPage>

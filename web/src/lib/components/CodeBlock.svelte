@@ -55,14 +55,14 @@ async function copyCode() {
 }
 </script>
 
-<div class="code-block group relative my-4">
+<div class="code-block group relative my-4 max-w-full">
 	{#if filename}
 		<div class="flex items-center gap-2 rounded-t-lg border border-b-0 border-[#3b4261] bg-[#16161e] px-4 py-2 text-xs text-[#565f89]">
 			<span class="font-mono">{filename}</span>
 		</div>
 	{/if}
 	<div class="relative {filename ? 'rounded-b-lg rounded-t-none' : 'rounded-lg'}">
-		<pre class="overflow-x-auto {filename ? 'rounded-b-lg rounded-t-none' : 'rounded-lg'} border border-[#3b4261] bg-[#1a1b26] p-4 text-sm leading-relaxed"><code class="language-{prismLanguage}">{#if highlightedCode}{@html highlightedCode}{:else}{code}{/if}</code></pre>
+		<pre class="{filename ? 'rounded-b-lg rounded-t-none' : 'rounded-lg'} border border-[#3b4261] bg-[#1a1b26] p-4 text-sm leading-relaxed"><code class="language-{prismLanguage}">{#if highlightedCode}{@html highlightedCode}{:else}{code}{/if}</code></pre>
 		{#if copyable}
 			<button
 				type="button"
@@ -88,10 +88,10 @@ async function copyCode() {
 		font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', Monaco, 'Andale Mono', monospace;
 		font-size: 0.875rem;
 		text-align: left;
-		white-space: pre;
+		white-space: pre-wrap;
 		word-spacing: normal;
-		word-break: normal;
-		word-wrap: normal;
+		word-break: break-word;
+		overflow-wrap: break-word;
 		line-height: 1.6;
 		tab-size: 2;
 		hyphens: none;

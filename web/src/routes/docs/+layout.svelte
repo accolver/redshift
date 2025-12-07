@@ -125,7 +125,7 @@ function isActive(href: string): boolean {
 							</a>
 						</Sheet.Title>
 					</Sheet.Header>
-					<nav class="mt-4">
+					<nav class="mt-4 px-4">
 						<a
 							href="/"
 							class="mb-4 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -167,7 +167,7 @@ function isActive(href: string): boolean {
 		</header>
 
 		<!-- Main content -->
-		<main class="flex-1">
+		<main class="flex-1 overflow-x-hidden">
 			{@render children()}
 		</main>
 	</div>

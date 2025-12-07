@@ -2,6 +2,7 @@
 import CodeBlock from '$lib/components/CodeBlock.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
 import InlineCode from '$lib/components/InlineCode.svelte';
+import DocsPage from '$lib/components/DocsPage.svelte';
 import { TriangleAlert, Shield } from '@lucide/svelte';
 </script>
 
@@ -10,12 +11,7 @@ import { TriangleAlert, Shield } from '@lucide/svelte';
 	<meta name="description" content="Authenticate with Redshift by entering your Nostr private key (nsec) directly." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
-	<h1 class="mb-4 text-4xl font-bold">Private Key (nsec)</h1>
-	<p class="mb-8 text-lg text-muted-foreground">
-		Authenticate by entering your Nostr private key directly.
-	</p>
-
+<DocsPage title="Private Key (nsec)" description="Authenticate by entering your Nostr private key directly.">
 	<div class="not-prose mb-8 rounded-lg border border-tokyo-orange/50 bg-tokyo-orange/10 p-4">
 		<div class="flex gap-3">
 			<TriangleAlert class="size-5 shrink-0 text-tokyo-orange" />
@@ -29,7 +25,6 @@ import { TriangleAlert, Shield } from '@lucide/svelte';
 		</div>
 	</div>
 
-	<section class="prose prose-invert max-w-none">
 		<ProseHeading level={2} id="when-to-use-nsec">When to Use nsec</ProseHeading>
 		<p>
 			Entering your nsec directly is useful when:
@@ -180,5 +175,4 @@ redshift run -- npm start`} />
 		<p>
 			Your data remains the same since it's tied to your public key, not the authentication method.
 		</p>
-	</section>
-</div>
+</DocsPage>

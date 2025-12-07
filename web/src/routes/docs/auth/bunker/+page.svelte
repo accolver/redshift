@@ -1,6 +1,7 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
+import DocsPage from '$lib/components/DocsPage.svelte';
 import { Shield, Server, Smartphone } from '@lucide/svelte';
 </script>
 
@@ -9,13 +10,7 @@ import { Shield, Server, Smartphone } from '@lucide/svelte';
 	<meta name="description" content="Authenticate with Redshift using a NIP-46 bunker for remote signing." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
-	<h1 class="mb-4 text-4xl font-bold">Bunker (NIP-46)</h1>
-	<p class="mb-8 text-lg text-muted-foreground">
-		Connect to a remote signing service for enhanced security and automation.
-	</p>
-
-	<section class="prose prose-invert max-w-none">
+<DocsPage title="Bunker (NIP-46)" description="Connect to a remote signing service for enhanced security and automation.">
 		<ProseHeading level={2} id="what-is-a-bunker">What is a Bunker?</ProseHeading>
 		<p>
 			A bunker (defined in NIP-46) is a remote signing service that holds your private key and signs requests on your behalf. Instead of your key living in your browser or CLI, it stays securely on a separate server or device.
@@ -229,5 +224,4 @@ jobs:
 			<li>Manual approval was denied</li>
 			<li>Rate limiting triggered</li>
 		</ul>
-	</section>
-</div>
+</DocsPage>

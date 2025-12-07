@@ -1,6 +1,7 @@
 <script lang="ts">
 import CodeBlock from '$lib/components/CodeBlock.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
+import DocsPage from '$lib/components/DocsPage.svelte';
 import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 </script>
 
@@ -9,13 +10,7 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 	<meta name="description" content="Understanding Redshift's security model, encryption, and threat considerations." />
 </svelte:head>
 
-<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
-	<h1 class="mb-4 text-4xl font-bold">Security Model</h1>
-	<p class="mb-8 text-lg text-muted-foreground">
-		How Redshift protects your secrets and what threats it defends against.
-	</p>
-
-	<section class="prose prose-invert max-w-none">
+<DocsPage title="Security Model" description="How Redshift protects your secrets and what threats it defends against.">
 		<ProseHeading level={2} id="overview">Overview</ProseHeading>
 		<p>
 			Redshift is designed with a "zero trust" architecture. We assume that relay operators, network observers, and even the Redshift servers themselves could be compromised. Your secrets are protected through client-side encryption using keys only you control.
@@ -292,5 +287,4 @@ import { Shield, Lock, Globe, Key, Eye } from '@lucide/svelte';
 			<li>Do not disclose publicly until we've had a chance to address it</li>
 			<li>We'll acknowledge receipt within 48 hours</li>
 		</ul>
-	</section>
-</div>
+</DocsPage>
