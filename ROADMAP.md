@@ -35,25 +35,25 @@ functional, with comprehensive test coverage.
 
 ### Medium Priority
 
-| Feature                          | Description                                                                                 | Status                       |
-| -------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------- |
-| **Interactive project fetching** | `setup` command should fetch existing projects from relays instead of manual input          | Partial (manual input works) |
-| **Keychain storage**             | Store nsec in system keychain (macOS Keychain, Windows Credential Manager, Linux libsecret) | Complete                     |
-| **Rate limiting for relays**     | Add rate limiting to relay queries to prevent abuse                                         | Complete                     |
-| **Input validation**             | Validate secret keys, project IDs, environments, values, and relay URLs                     | Complete                     |
-| **Improved error handling**      | Better error handling in relay operations (avoid swallowing errors)                         | Complete                     |
+| Feature                          | Description                                                                                 | Status   |
+| -------------------------------- | ------------------------------------------------------------------------------------------- | -------- |
+| **Interactive project fetching** | `setup` command should fetch existing projects from relays instead of manual input          | Complete |
+| **Keychain storage**             | Store nsec in system keychain (macOS Keychain, Windows Credential Manager, Linux libsecret) | Complete |
+| **Rate limiting for relays**     | Add rate limiting to relay queries to prevent abuse                                         | Complete |
+| **Input validation**             | Validate secret keys, project IDs, environments, values, and relay URLs                     | Complete |
+| **Improved error handling**      | Better error handling in relay operations (avoid swallowing errors)                         | Complete |
 
 ### Low Priority
 
-| Feature                       | Description                                                          | Status                        |
-| ----------------------------- | -------------------------------------------------------------------- | ----------------------------- |
-| **svelte-motion animations**  | Enhanced animations for page transitions, lists, and UI feedback     | Partial (dashboard, projects) |
-| **Binary integration test**   | TDD Phase 4: spawn binary and test HTTP response                     | Not started                   |
-| **Remove duplicate code**     | Remove duplicate `injectSecrets` from parser.ts (use secret-manager) | Complete                      |
-| **CLI command tests: run.ts** | Add unit tests for `run` command                                     | Complete                      |
-| **CLI command tests: serve**  | Add unit tests for `serve` command                                   | Complete                      |
-| **CLI command tests: setup**  | Add unit tests for `setup` command                                   | Complete                      |
-| **TypeScript strict types**   | Fix exactOptionalPropertyTypes errors in types.ts and related files  | Complete                      |
+| Feature                       | Description                                                          | Status   |
+| ----------------------------- | -------------------------------------------------------------------- | -------- |
+| **svelte-motion animations**  | Enhanced animations for page transitions, lists, and UI feedback     | Complete |
+| **Binary integration test**   | TDD Phase 4: spawn binary and test HTTP response                     | Complete |
+| **Remove duplicate code**     | Remove duplicate `injectSecrets` from parser.ts (use secret-manager) | Complete |
+| **CLI command tests: run.ts** | Add unit tests for `run` command                                     | Complete |
+| **CLI command tests: serve**  | Add unit tests for `serve` command                                   | Complete |
+| **CLI command tests: setup**  | Add unit tests for `setup` command                                   | Complete |
+| **TypeScript strict types**   | Fix exactOptionalPropertyTypes errors in types.ts and related files  | Complete |
 
 ---
 

@@ -45,18 +45,36 @@ export async function setupCommand(options: SetupOptions): Promise<void> {
 	let environment: string;
 
 	try {
-		// For now, since relay fetching needs work, use manual input
-		// In future: fetch projects from relays and let user select
 		console.log('Redshift Setup');
 		console.log('==============\n');
 
+		// Fetch existing projects from relays
+		console.log('Fetching existing projects from relays...');
+		let existingProjects: string[] = [];
+		let existingEnvironments: string[] = [];
+
+		try {
+			existingProjects = await manager.listProjects();
+			if (existingProjects.length > 0) {
+				console.log(`Found ${existingProjects.length} existing project(s)\n`);
+			} else {
+				console.log('No existing projects found\n');
+			}
+		} catch (err) {
+			console.log('Could not fetch projects (will use manual input)\n');
+		}
+
+		// Select or create project
 		if (options.project) {
 			projectId = options.project;
+		} else if (existingProjects.length > 0) {
+			projectId = await selectProject(existingProjects, existingConfig?.project);
+			// If empty, prompt for new project name
+			if (!projectId) {
+				projectId = await promptForInput('Enter new project name: ');
+			}
 		} else {
-			projectId = await promptForInput(
-				'Enter project ID (or create new): ',
-				existingConfig?.project,
-			);
+			projectId = await promptForInput('Enter project ID: ', existingConfig?.project);
 		}
 
 		if (!projectId) {
@@ -64,8 +82,23 @@ export async function setupCommand(options: SetupOptions): Promise<void> {
 			process.exit(1);
 		}
 
+		// Fetch environments for selected project
+		if (existingProjects.includes(projectId)) {
+			try {
+				existingEnvironments = await manager.listEnvironments(projectId);
+			} catch {
+				// Ignore errors, will use defaults
+			}
+		}
+
+		// Select or create environment
 		if (options.environment) {
 			environment = options.environment;
+		} else if (existingEnvironments.length > 0 || existingProjects.includes(projectId)) {
+			environment = await selectEnvironment(
+				existingEnvironments,
+				existingConfig?.environment || 'development',
+			);
 		} else {
 			environment = await promptForInput(
 				'Enter environment (e.g., development, staging, production): ',

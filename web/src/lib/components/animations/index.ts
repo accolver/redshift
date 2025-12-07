@@ -2,7 +2,110 @@
  * Animation utilities and presets for Redshift UI
  *
  * Uses svelte-motion for smooth, physics-based animations
+ * and Svelte actions for scroll-triggered animations
  */
+
+import type { Action } from 'svelte/action';
+
+/**
+ * Svelte action for scroll-triggered animations using IntersectionObserver
+ * Elements start hidden and animate in when they enter the viewport
+ */
+export const inView: Action<
+	HTMLElement,
+	{ threshold?: number; delay?: number; once?: boolean } | undefined
+> = (node, options = {}) => {
+	const { threshold = 0.2, delay = 0, once = true } = options;
+
+	// Set initial state
+	node.style.opacity = '0';
+	node.style.transform = 'translateY(20px)';
+	node.style.transition = `opacity 0.5s ease ${delay}ms, transform 0.5s ease ${delay}ms`;
+
+	const observer = new IntersectionObserver(
+		(entries) => {
+			for (const entry of entries) {
+				if (entry.isIntersecting) {
+					node.style.opacity = '1';
+					node.style.transform = 'translateY(0)';
+					if (once) {
+						observer.unobserve(node);
+					}
+				} else if (!once) {
+					node.style.opacity = '0';
+					node.style.transform = 'translateY(20px)';
+				}
+			}
+		},
+		{ threshold },
+	);
+
+	observer.observe(node);
+
+	return {
+		destroy() {
+			observer.disconnect();
+		},
+		update(newOptions) {
+			// Options are set at initialization, no dynamic updates needed
+		},
+	};
+};
+
+/**
+ * Staggered in-view animation for lists
+ * Apply to parent, children will animate with stagger delay
+ */
+export const inViewStagger: Action<
+	HTMLElement,
+	{ threshold?: number; baseDelay?: number; staggerDelay?: number; once?: boolean } | undefined
+> = (node, options = {}) => {
+	const { threshold = 0.2, baseDelay = 0, staggerDelay = 80, once = true } = options;
+
+	const children = Array.from(node.children) as HTMLElement[];
+
+	// Set initial state for all children
+	for (const child of children) {
+		child.style.opacity = '0';
+		child.style.transform = 'translateY(20px)';
+	}
+
+	const observer = new IntersectionObserver(
+		(entries) => {
+			for (const entry of entries) {
+				if (entry.isIntersecting) {
+					// Animate children with stagger
+					children.forEach((child, i) => {
+						const delay = baseDelay + i * staggerDelay;
+						child.style.transition = `opacity 0.4s ease ${delay}ms, transform 0.4s ease ${delay}ms`;
+						// Use requestAnimationFrame to ensure transition is applied
+						requestAnimationFrame(() => {
+							child.style.opacity = '1';
+							child.style.transform = 'translateY(0)';
+						});
+					});
+					if (once) {
+						observer.unobserve(node);
+					}
+				} else if (!once) {
+					for (const child of children) {
+						child.style.opacity = '0';
+						child.style.transform = 'translateY(20px)';
+					}
+				}
+			}
+		},
+		{ threshold },
+	);
+
+	observer.observe(node);
+
+	return {
+		destroy() {
+			observer.disconnect();
+		},
+	};
+};
 
 // Fade in animation preset
 export const fadeIn = {
