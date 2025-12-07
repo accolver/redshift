@@ -272,7 +272,8 @@ describe('Rate Limiter Module', () => {
 			const elapsed = Date.now() - start;
 
 			// Should have min delay between each call (2 delays for 3 calls)
-			expect(elapsed).toBeGreaterThanOrEqual(60);
+			// Allow 2ms tolerance for timer precision
+			expect(elapsed).toBeGreaterThanOrEqual(58);
 		});
 	});
 

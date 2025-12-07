@@ -1,6 +1,6 @@
 /// <reference types="@testing-library/jest-dom" />
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
 import MultiEnvSaveModal from '$lib/components/MultiEnvSaveModal.svelte';
 import type { Environment } from '$lib/types/nostr';
 
@@ -23,6 +23,11 @@ describe('MultiEnvSaveModal', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+	});
+
+	afterEach(() => {
+		// Clean up components to prevent bits-ui body-scroll-lock cleanup errors
+		cleanup();
 	});
 
 	it('renders the modal with secret key in description', () => {
