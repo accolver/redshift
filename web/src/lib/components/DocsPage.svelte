@@ -10,19 +10,15 @@ interface Props {
 let { title, description, children }: Props = $props();
 </script>
 
-<div class="docs-container mx-auto w-full max-w-4xl">
-	<!-- Sticky header - top-14 accounts for mobile nav header on small screens, top-0 on lg -->
-	<header class="sticky top-14 z-30 bg-background/95 px-4 pb-4 pt-6 backdrop-blur-sm sm:px-6 sm:pt-8 lg:top-0">
+<div class="docs-container mx-auto w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
+	<header class="mb-6">
 		<h1 class="text-3xl font-bold sm:text-4xl">{title}</h1>
 		<p class="mt-2 text-muted-foreground sm:text-lg">{description}</p>
 	</header>
 
-	<!-- Content -->
-	<div class="px-4 pb-8 pt-4 sm:px-6">
-		<section class="prose prose-invert max-w-none">
-			{@render children()}
-		</section>
-	</div>
+	<section class="prose prose-invert max-w-none">
+		{@render children()}
+	</section>
 </div>
 
 <style>
