@@ -14,6 +14,7 @@ import {
 } from '@lucide/svelte';
 import * as Sheet from '$lib/components/ui/sheet';
 import { Button } from '$lib/components/ui/button';
+import { docsStore } from '$lib/stores/docs.svelte';
 
 let { children } = $props();
 
@@ -164,6 +165,15 @@ function isActive(href: string): boolean {
 				<Book class="size-5 text-tokyo-blue" />
 				Docs
 			</a>
+			<!-- Floating title that appears when main title scrolls out of view -->
+			{#if docsStore.currentTitle}
+				<span
+					class="floating-title -ml-1 truncate text-sm font-medium text-muted-foreground"
+					class:visible={!docsStore.titleVisible}
+				>
+					{docsStore.currentTitle}
+				</span>
+			{/if}
 		</header>
 
 		<!-- Main content -->
@@ -172,3 +182,18 @@ function isActive(href: string): boolean {
 		</main>
 	</div>
 </div>
+
+<style>
+	.floating-title {
+		opacity: 0;
+		transform: translateX(-1rem);
+		transition: opacity 200ms ease, transform 200ms ease;
+		pointer-events: none;
+	}
+
+	.floating-title.visible {
+		opacity: 1;
+		transform: translateX(0);
+		pointer-events: auto;
+	}
+</style>
