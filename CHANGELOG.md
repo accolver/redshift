@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.9.0](https://github.com/accolver/redshift/compare/v0.8.0...v0.9.0) (2025-12-08)
+
+
+### Features
+
+* **web:** add floating page title in docs mobile header on scroll ([cc36805](https://github.com/accolver/redshift/commit/cc3680558d1140745c4261ec23a519f6ea8b6ed1))
+
+
+### Bug Fixes
+
+* **web:** add apple-touch-icon for iOS home screen ([17c0c4a](https://github.com/accolver/redshift/commit/17c0c4a3db8eaf00b15fd9f4d6d48686a96a8049))
+* **web:** add color-scheme meta tag for dark mode ([4baba85](https://github.com/accolver/redshift/commit/4baba8574f814a65e906c35ee7ad77a3214c8efb))
+* **web:** correct CLI commands and prevent table horizontal scrolling ([df7510f](https://github.com/accolver/redshift/commit/df7510ff4451f3a3edd3b2f57e615fd36393385a))
+* **web:** simplify DocsPage layout and reduce mobile spacing ([a870880](https://github.com/accolver/redshift/commit/a870880b91a82903b4d44413799f6544217a979d))
+
 ## [0.8.0](https://github.com/accolver/redshift/compare/v0.7.0...v0.8.0) (2025-12-07)
 
 
