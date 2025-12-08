@@ -75,32 +75,34 @@ Private key (nsec): nsec1secret...key
 			Redshift leverages Nostr's architecture for secret management:
 		</p>
 
-		<table>
-			<thead>
-				<tr>
-					<th>Nostr Concept</th>
-					<th>Redshift Usage</th>
-				</tr>
-			</thead>
-			<tbody>
-				<tr>
-					<td>Key pair identity</td>
-					<td>Your Nostr keys authenticate you and encrypt your secrets</td>
-				</tr>
-				<tr>
-					<td>Signed events</td>
-					<td>Your project and secret data is signed, preventing tampering</td>
-				</tr>
-				<tr>
-					<td>Relays</td>
-					<td>Your encrypted secrets are stored across multiple relays</td>
-				</tr>
-				<tr>
-					<td>Event kinds</td>
-					<td>Redshift uses Kind 30078 (parameterized replaceable events)</td>
-				</tr>
-			</tbody>
-		</table>
+		<div class="not-prose my-6 overflow-x-auto">
+			<table class="w-full text-sm">
+				<thead>
+					<tr class="border-b border-border">
+						<th class="px-4 py-3 text-left font-medium">Nostr Concept</th>
+						<th class="px-4 py-3 text-left font-medium">Redshift Usage</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-border">
+					<tr>
+						<td class="px-4 py-3 font-medium">Key pair identity</td>
+						<td class="px-4 py-3 text-muted-foreground">Your Nostr keys authenticate you and encrypt your secrets</td>
+					</tr>
+					<tr>
+						<td class="px-4 py-3 font-medium">Signed events</td>
+						<td class="px-4 py-3 text-muted-foreground">Your project and secret data is signed, preventing tampering</td>
+					</tr>
+					<tr>
+						<td class="px-4 py-3 font-medium">Relays</td>
+						<td class="px-4 py-3 text-muted-foreground">Your encrypted secrets are stored across multiple relays</td>
+					</tr>
+					<tr>
+						<td class="px-4 py-3 font-medium">Event kinds</td>
+						<td class="px-4 py-3 text-muted-foreground">Redshift uses Kind 30078 (parameterized replaceable events)</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
 
 		<ProseHeading level={3} id="security-model">Security Model</ProseHeading>
 		<p>

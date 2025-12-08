@@ -31,10 +31,11 @@ function getStaggerDelay(index: number, baseDelay = 0.1) {
 // CLI commands reference
 const cliCommands = [
 	{ command: 'redshift login', description: 'Authenticate with your Nostr identity' },
+	{ command: 'redshift setup', description: 'Configure project and environment' },
 	{ command: 'redshift run -- npm start', description: 'Run a command with secrets injected' },
-	{ command: 'redshift set API_KEY sk-xxx', description: 'Set a secret value' },
-	{ command: 'redshift get API_KEY', description: 'Get a secret value' },
-	{ command: 'redshift list', description: 'List all secrets in current environment' },
+	{ command: 'redshift secrets set KEY value', description: 'Set a secret value' },
+	{ command: 'redshift secrets get KEY', description: 'Get a secret value' },
+	{ command: 'redshift secrets list', description: 'List all secrets in current environment' },
 ];
 </script>
 

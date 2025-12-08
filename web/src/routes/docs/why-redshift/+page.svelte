@@ -56,14 +56,14 @@ import { CircleCheck, CircleX, Minus } from '@lucide/svelte';
 		</div>
 
 		<ProseHeading level={2} id="feature-comparison">Feature Comparison</ProseHeading>
-		<div class="not-prose my-8">
-			<table class="w-full min-w-[500px] text-sm">
+		<div class="not-prose my-8 overflow-x-auto">
+			<table class="w-full text-sm">
 				<thead>
 					<tr class="border-b border-border">
 						<th class="px-2 py-3 text-left font-medium sm:px-4">Feature</th>
 						<th class="px-2 py-3 text-center font-medium sm:px-4">Redshift</th>
 						<th class="px-2 py-3 text-center font-medium sm:px-4">Doppler</th>
-						<th class="whitespace-nowrap px-2 py-3 text-center font-medium sm:px-4">HashiCorp Vault</th>
+						<th class="px-2 py-3 text-center font-medium sm:px-4">Vault</th>
 						<th class="px-2 py-3 text-center font-medium sm:px-4">AWS SM</th>
 					</tr>
 				</thead>
@@ -97,7 +97,7 @@ import { CircleCheck, CircleX, Minus } from '@lucide/svelte';
 						<td class="px-2 py-3 text-center sm:px-4"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
 					</tr>
 					<tr>
-						<td class="px-2 py-3 sm:px-4">No infrastructure to manage</td>
+						<td class="px-2 py-3 sm:px-4">No infra to manage</td>
 						<td class="px-2 py-3 text-center sm:px-4"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
 						<td class="px-2 py-3 text-center sm:px-4"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
 						<td class="px-2 py-3 text-center sm:px-4"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
@@ -111,7 +111,7 @@ import { CircleCheck, CircleX, Minus } from '@lucide/svelte';
 						<td class="px-2 py-3 text-center sm:px-4"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
 					</tr>
 					<tr>
-						<td class="px-2 py-3 sm:px-4">Familiar CLI (Doppler-compatible)</td>
+						<td class="px-2 py-3 sm:px-4">Doppler-compatible CLI</td>
 						<td class="px-2 py-3 text-center sm:px-4"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
 						<td class="px-2 py-3 text-center sm:px-4"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
 						<td class="px-2 py-3 text-center sm:px-4"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
