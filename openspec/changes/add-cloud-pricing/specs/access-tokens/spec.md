@@ -12,7 +12,7 @@ subscribers using NIP-78 (Kind 30078).
 - **WHEN** a subscription payment is confirmed
 - **THEN** the system generates an access token event containing:
   - Kind: 30078 (NIP-78 arbitrary app data)
-  - d-tag: "redshift-access-token"
+  - d-tag: "com.redshiftapp.access-token" (reverse-DNS for global uniqueness)
   - User's Nostr pubkey
   - Tier: "cloud"
   - Issue timestamp
@@ -36,7 +36,7 @@ The system SHALL validate access tokens on relay connection.
 
 - **WHEN** a client connects to the managed relay with NIP-42 AUTH
 - **AND** the relay finds a valid Kind 30078 token with d-tag
-  "redshift-access-token" for that pubkey
+  "com.redshiftapp.access-token" for that pubkey
 - **THEN** the client is granted full read/write access
 
 #### Scenario: Invalid signature rejected
@@ -95,6 +95,7 @@ compatibility.
 - **THEN** the inner rumor (before NIP-59 wrapping) contains:
   - kind: 30078 (NIP-78 arbitrary app data)
   - pubkey: user's pubkey
-  - tags: `["d", "redshift-access-token"]`, `["t", "redshift-cloud"]`,
-    `["tier", "cloud"]`, `["expires", timestamp]`, `["invoice", invoiceId]`
+  - tags: `["d", "com.redshiftapp.access-token"]` (reverse-DNS for global
+    uniqueness), `["t", "redshift-cloud"]`, `["tier", "cloud"]`,
+    `["expires", timestamp]`, `["invoice", invoiceId]`
   - content: JSON with issuedAt, relayUrl, and relayOperatorSignature

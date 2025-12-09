@@ -147,6 +147,10 @@ Objects + R2.
 > event kind `30078` (an _addressable_ event) with a `d` tag containing some
 > reference to the app name and context"
 
+**d-tag Naming Convention**: NIP-78 recommends using reverse-DNS notation for
+global uniqueness (e.g., `com.example.myapp.user-settings`). We use the
+`com.redshiftapp` prefix for all d-tags.
+
 **Token Schema**:
 
 ```typescript
@@ -156,8 +160,8 @@ Objects + R2.
   pubkey: userPubkey,
   created_at: timestamp,
   tags: [
-    ["d", "redshift-access-token"],  // App-specific d-tag
-    ["t", "redshift-cloud"],          // Type tag for filtering
+    ["d", "com.redshiftapp.access-token"],  // Reverse-DNS for global uniqueness
+    ["t", "redshift-cloud"],                 // Type tag for filtering
     ["tier", "cloud"],
     ["expires", expiryTimestamp],
     ["invoice", btcpayInvoiceId],
@@ -191,10 +195,11 @@ encrypted content.
   pubkey: userPubkey,
   created_at: timestamp,
   tags: [
-    ["d", `redshift-audit-${timestamp}`],  // Unique per event
-    ["t", "redshift-audit"],               // Type tag for filtering
+    ["d", `com.redshiftapp.audit.${timestamp}`],  // Reverse-DNS + unique timestamp
+    ["t", "redshift-audit"],                      // Type tag for filtering
     ["action", "secret:create"],
     ["target", projectId],
+    ["expiration", `${timestamp + 7 * 24 * 60 * 60}`],  // NIP-40: 7-day retention
   ],
   content: encryptedDetails,  // NIP-44 encrypted to user's key
 }
@@ -379,6 +384,9 @@ infrastructure/               # New: Infrastructure configs
 
 ## Event Schemas (Updated for NIP-78)
 
+All d-tags use reverse-DNS notation (`com.redshiftapp.*`) for global uniqueness
+as recommended by NIP-78.
+
 ### Access Token (Kind 30078, NIP-78)
 
 ```typescript
@@ -389,8 +397,8 @@ infrastructure/               # New: Infrastructure configs
   pubkey: userPubkey,
   created_at: timestamp,
   tags: [
-    ["d", "redshift-access-token"],  // App-specific identifier
-    ["t", "redshift-cloud"],          // Type tag for filtering
+    ["d", "com.redshiftapp.access-token"],  // Reverse-DNS identifier
+    ["t", "redshift-cloud"],                 // Type tag for filtering
     ["tier", "cloud"],
     ["expires", expiryTimestamp],
     ["invoice", btcpayInvoiceId],
@@ -413,10 +421,11 @@ infrastructure/               # New: Infrastructure configs
   pubkey: userPubkey,
   created_at: timestamp,
   tags: [
-    ["d", `redshift-audit-${Date.now()}`],  // Unique d-tag per event
-    ["t", "redshift-audit"],                 // Type tag for filtering
+    ["d", `com.redshiftapp.audit.${Date.now()}`],  // Reverse-DNS + unique timestamp
+    ["t", "redshift-audit"],                        // Type tag for filtering
     ["action", "secret:create"],
     ["target", projectId],
+    ["expiration", `${timestamp + 7 * 24 * 60 * 60}`],  // NIP-40: 7-day retention
   ],
   content: encryptedDetails,  // NIP-44 encrypted JSON
 }

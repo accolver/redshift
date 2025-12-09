@@ -43,8 +43,10 @@ Audit events SHALL conform to NIP-78 event schema for ecosystem compatibility.
 - **THEN** the inner rumor (before NIP-59 wrapping) contains:
   - kind: 30078 (NIP-78 arbitrary app data)
   - pubkey: user's pubkey
-  - tags: `["d", "redshift-audit-{timestamp}"]`, `["t", "redshift-audit"]`,
-    `["action", actionType]`, `["target", projectId]`
+  - tags: `["d", "com.redshiftapp.audit.{timestamp}"]` (reverse-DNS for global
+    uniqueness), `["t", "redshift-audit"]`, `["action", actionType]`,
+    `["target", projectId]`, `["expiration", expiryTimestamp]` (7 days from
+    creation, per NIP-40)
   - content: NIP-44 encrypted JSON with operation details
 
 ### Requirement: Audit Log Viewer
@@ -76,8 +78,11 @@ The system SHALL enforce 7-day retention for Cloud tier audit logs.
 #### Scenario: Logs older than 7 days expired
 
 - **WHEN** an audit event is older than 7 days
-- **THEN** the Nosflare relay expires/deletes the event via NIP-40
+- **THEN** the Nosflare relay expires/deletes the event via NIP-40 `expiration`
+  tag
 - **AND** the event is no longer returned in queries
+- **AND** the relay MAY persist events indefinitely but SHOULD NOT serve expired
+  events to clients
 
 #### Scenario: Retention policy displayed
 
