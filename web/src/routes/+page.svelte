@@ -2,6 +2,7 @@
 import { onMount } from 'svelte';
 import { Button } from '$lib/components/ui/button';
 import InlineCode from '$lib/components/InlineCode.svelte';
+import Navbar from '$lib/components/Navbar.svelte';
 import { inView, inViewStagger } from '$lib/components/animations';
 import { Shield, Terminal, Globe, Key, Zap, Lock, ArrowRight, Copy, Check } from '@lucide/svelte';
 
@@ -86,35 +87,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 		></div>
 	</div>
 
-	<!-- Navigation -->
-	<nav class="glass fixed left-0 right-0 top-0 z-50 border-b border-border/50">
-		<div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-			<a href="/" class="flex items-center gap-2">
-				<img src="/favicon.svg" alt="Redshift" class="size-8" />
-				<span class="text-lg font-semibold">Redshift</span>
-			</a>
-			<div class="hidden items-center gap-8 md:flex">
-				<a href="/docs" class="text-sm text-foreground/70 transition-colors hover:text-foreground"
-					>Docs</a
-				>
-				<a
-					href="/tutorial"
-					class="text-sm text-foreground/70 transition-colors hover:text-foreground">Tutorial</a
-				>
-				<a
-					href="https://github.com/accolver/redshift"
-					class="text-sm text-foreground/70 transition-colors hover:text-foreground"
-					target="_blank">GitHub</a
-				>
-			</div>
-			<div class="flex items-center gap-3">
-				<Button variant="ghost" size="sm" href="/admin">Sign in</Button>
-				<Button size="sm" href="/admin" class="bg-tokyo-blue hover:bg-tokyo-blue/90">
-					Get Started
-				</Button>
-			</div>
-		</div>
-	</nav>
+	<Navbar />
 
 	<!-- Hero Section -->
 	<section
@@ -469,10 +442,10 @@ const orbOffset2 = $derived(scrollY * 0.08);
 				<Button
 					variant="outline"
 					size="lg"
-					href="/tutorial"
+					href="/pricing"
 					class="h-14 border-border/50 bg-card/50 px-10 text-lg backdrop-blur-sm transition-colors hover:bg-card"
 				>
-					View Tutorial
+					View Pricing
 				</Button>
 			</div>
 		</div>
@@ -487,7 +460,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 			</div>
 			<div class="flex gap-8 text-sm text-foreground/60">
 				<a href="/docs" class="transition-colors hover:text-foreground">Documentation</a>
-				<a href="/tutorial" class="transition-colors hover:text-foreground">Tutorial</a>
+				<a href="/pricing" class="transition-colors hover:text-foreground">Pricing</a>
 				<a
 					href="https://github.com/accolver/redshift"
 					target="_blank"
