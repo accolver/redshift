@@ -204,6 +204,92 @@ redshift serve --open`} />
 
 		<hr />
 
+		<ProseHeading level={2} id="subscription">redshift subscription</ProseHeading>
+		<p>Manage your Redshift Cloud subscription.</p>
+
+		<ProseHeading level={3} id="subscription-status">subscription status</ProseHeading>
+		<p>Check your current subscription status.</p>
+		<CodeBlock language="bash" code={`redshift subscription status
+
+# Output for active subscription:
+# Tier: Cloud
+# Status: Active
+# Expires: 2024-02-15
+# Relay: wss://relay.redshiftapp.com
+
+# Output for free tier:
+# Tier: Free
+# Status: No active subscription`} />
+
+		<ProseHeading level={3} id="subscription-upgrade">subscription upgrade</ProseHeading>
+		<p>Open the subscription page in your browser to upgrade or renew.</p>
+		<CodeBlock language="bash" code={`redshift subscription upgrade
+
+# Opens https://redshiftapp.com/admin/subscribe in your default browser`} />
+
+		<hr />
+
+		<ProseHeading level={2} id="relay">redshift relay</ProseHeading>
+		<p>Manage Nostr relay configuration.</p>
+
+		<ProseHeading level={3} id="relay-list">relay (list)</ProseHeading>
+		<p>List configured relays (default when no subcommand given).</p>
+		<CodeBlock language="bash" code={`redshift relay
+
+# Output:
+# Configured relays:
+#   wss://relay.damus.io
+#   wss://relay.primal.net`} />
+
+		<ProseHeading level={3} id="relay-add">relay add</ProseHeading>
+		<p>Add a relay to your configuration.</p>
+		<CodeBlock language="bash" code={`redshift relay add <url>
+
+# Example
+redshift relay add wss://relay.nostr.band`} />
+
+		<ProseHeading level={3} id="relay-remove">relay remove</ProseHeading>
+		<p>Remove a relay from your configuration.</p>
+		<CodeBlock language="bash" code={`redshift relay remove <url>
+
+# Example
+redshift relay remove wss://relay.nostr.band`} />
+
+		<ProseHeading level={3} id="relay-set">relay set</ProseHeading>
+		<p>Replace all relays with a new list.</p>
+		<CodeBlock language="bash" code={`redshift relay set <url1> [url2] [url3] ...
+
+# Example - set exactly two relays
+redshift relay set wss://relay.damus.io wss://nos.lol`} />
+
+		<ProseHeading level={3} id="relay-reset">relay reset</ProseHeading>
+		<p>Reset to default relays.</p>
+		<CodeBlock language="bash" code={`redshift relay reset
+
+# Restores: wss://relay.damus.io, wss://relay.primal.net, wss://nos.lol`} />
+
+		<hr />
+
+		<ProseHeading level={2} id="configure">redshift configure</ProseHeading>
+		<p>Show current configuration including authentication, relays, and subscription status.</p>
+
+		<CodeBlock language="bash" code={`redshift configure
+
+# Output:
+# Configuration:
+#   Config directory: ~/.config/redshift
+#   Authentication: Logged in as npub1abc...
+#
+# Relays:
+#   wss://relay.damus.io
+#   wss://relay.primal.net
+#
+# Subscription:
+#   Tier: Cloud
+#   Status: Active (expires in 25 days)`} />
+
+		<hr />
+
 		<ProseHeading level={2} id="environment-variables">Environment Variables</ProseHeading>
 		<p>Redshift respects these environment variables:</p>
 
