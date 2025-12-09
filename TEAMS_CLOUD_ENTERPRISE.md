@@ -11,6 +11,86 @@ payment systems for Redshift's paid tiers. All designs prioritize:
 
 ---
 
+## Key Decisions (December 2024)
+
+These decisions were made based on enterprise market research and guide all
+implementation work.
+
+### Decision Summary
+
+| # | Decision                | Rationale                                                  | Status              |
+| - | ----------------------- | ---------------------------------------------------------- | ------------------- |
+| 1 | **Bunker Orchestrator** | Build orchestration around `nak bunker`, not custom NIP-46 | Approved            |
+| 2 | **SSO Bridge Priority** | OIDC→Nostr is table stakes for Enterprise sales            | Approved            |
+| 3 | **SOC2 Type II**        | Required for enterprise vendor approval                    | Approved (Q4 2025+) |
+| 4 | **NIP-EE for Teams**    | MLS provides forward secrecy; accept draft NIP risk        | Approved            |
+
+### 1. Bunker Strategy: Orchestrator, Not Engine
+
+**Decision**: Build a thin orchestration layer around `nak bunker` instead of
+reimplementing NIP-46 in TypeScript.
+
+**What Redshift Builds**:
+
+- Process lifecycle management (spawn, monitor, restart)
+- Authorized pubkey management (team onboarding/offboarding)
+- Health monitoring and alerts
+- Audit log integration
+- systemd/Docker deployment configs
+
+**What Redshift Does NOT Build**:
+
+- NIP-46 protocol implementation (use `nak bunker`)
+- Cryptographic signing (use `nak bunker`)
+- MPC/threshold signatures (future: consider partnering with Cubist or similar)
+
+### 2. SSO Bridge is Priority
+
+**Decision**: The OIDC→Nostr SSO Bridge is the highest priority Enterprise
+feature.
+
+**Rationale**:
+
+- Without SSO, enterprises cannot adopt Redshift (security policy requirement)
+- Competitors (Doppler, HashiCorp Vault) all offer SSO at enterprise tier
+- SSO enables: automated user provisioning, compliance, audit trails
+
+### 3. SOC2 Type II Required
+
+**Decision**: SOC2 Type II certification is required for Enterprise tier.
+
+**Timeline**: Begin preparation Q4 2025, after Teams tier is validated.
+
+**Budget**: $75k-$150k+ annually (audit fees, tooling, personnel)
+
+**Note**: Focus on Teams tier first to validate product-market fit before
+significant compliance investment.
+
+### 4. NIP-EE for Group Encryption
+
+**Decision**: Use NIP-EE (MLS protocol, RFC 9420) for Teams tier group
+encryption.
+
+**Benefits**:
+
+- Forward secrecy (past messages protected if key leaks)
+- Post-compromise security (future messages protected after key rotation)
+- Efficient O(log n) complexity for member changes
+
+**Risk**: NIP-EE is still a draft NIP and may change before finalization.
+
+**Mitigation**: Design abstraction layer to allow protocol swap if needed.
+
+### Pricing Summary
+
+| Tier           | Price                             | Target Audience                         |
+| -------------- | --------------------------------- | --------------------------------------- |
+| **Cloud**      | $5/month                          | Individual developers, small projects   |
+| **Teams**      | $20/user/month                    | Startups, small teams (5-50 people)     |
+| **Enterprise** | Custom (~$500/mo base + per-seat) | Large organizations, compliance-focused |
+
+---
+
 ## Tier 1: Redshift Cloud ($5/month)
 
 ### Value Proposition
@@ -198,7 +278,241 @@ function validateCloudAccess(
 ### Value Proposition
 
 Secure multi-user collaboration with cryptographic access control, automatic key
-rotation, and audit logging.
+rotation, and audit logging. Includes managed bunker deployment for team key
+custody.
+
+### Key Decision: Bunker Orchestrator Architecture
+
+**Decision (December 2024)**: Build an orchestration layer around `nak bunker`,
+not a custom NIP-46 implementation.
+
+**Rationale**:
+
+- `nak bunker` is battle-tested, maintained by fiatjaf (core Nostr developer)
+- Avoids reimplementing cryptographic signing in TypeScript (security risk)
+- Focuses Redshift engineering on secrets management (our core value prop)
+- Provides enterprise-ready deployment without reinventing the wheel
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                    Bunker Orchestrator Architecture               │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │              Redshift Bunker Orchestrator                    │ │
+│  │              (TypeScript - lifecycle management)             │ │
+│  │                                                              │ │
+│  │  ┌────────────────────────────────────────────────────────┐ │ │
+│  │  │                   Core Functions                        │ │ │
+│  │  │                                                         │ │ │
+│  │  │  • Process Management                                   │ │ │
+│  │  │    - Spawn nak bunker subprocess                        │ │ │
+│  │  │    - Monitor health, restart on failure                 │ │ │
+│  │  │    - Graceful shutdown handling                         │ │ │
+│  │  │                                                         │ │ │
+│  │  │  • Access Control                                       │ │ │
+│  │  │    - Manage authorized client pubkeys                   │ │ │
+│  │  │    - Team member onboarding/offboarding                 │ │ │
+│  │  │    - SSO integration for authorization                  │ │ │
+│  │  │                                                         │ │ │
+│  │  │  • Compliance                                           │ │ │
+│  │  │    - Audit log generation                               │ │ │
+│  │  │    - Uptime tracking for SLA                            │ │ │
+│  │  │    - Key backup/recovery workflows                      │ │ │
+│  │  └────────────────────────────────────────────────────────┘ │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                              │                                    │
+│                              │ spawn/manage                       │
+│                              ▼                                    │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │                    nak bunker (Go binary)                    │ │
+│  │                    (NIP-46 Remote Signer)                    │ │
+│  │                                                              │ │
+│  │  Flags used:                                                 │ │
+│  │  --persist         Persistent configuration                  │ │
+│  │  -k <pubkey>       Authorized client pubkeys                 │ │
+│  │  --relay <url>     Relay for NIP-46 communication            │ │
+│  │                                                              │ │
+│  │  Responsibilities:                                           │ │
+│  │  • All cryptographic signing operations                      │ │
+│  │  • nsec storage and protection                               │ │
+│  │  • NIP-46 protocol handling                                  │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                                                                   │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Bunker Orchestrator Implementation
+
+```typescript
+// cli/src/lib/bunker-orchestrator.ts
+
+interface BunkerConfig {
+  nsec?: string; // Optional: orchestrator can generate
+  relays: string[]; // Relays for NIP-46 communication
+  authorizedPubkeys: string[]; // Team members allowed to connect
+  persistPath: string; // ~/.redshift/bunker/
+  healthCheckInterval: number; // ms
+}
+
+interface BunkerStatus {
+  running: boolean;
+  pid?: number;
+  uptime: number; // seconds
+  connectedClients: number;
+  lastHealthCheck: number;
+  connectionUri?: string; // bunker://... for clients
+}
+
+class BunkerOrchestrator {
+  private process: ChildProcess | null = null;
+  private config: BunkerConfig;
+
+  async start(): Promise<BunkerStatus> {
+    // 1. Check nak binary exists (or download)
+    await this.ensureNakBinary();
+
+    // 2. Build command with flags
+    const args = [
+      "bunker",
+      "--persist",
+      ...this.config.relays.flatMap((r) => ["--relay", r]),
+      ...this.config.authorizedPubkeys.flatMap((p) => ["-k", p]),
+    ];
+
+    // 3. Spawn subprocess
+    this.process = spawn("nak", args, {
+      cwd: this.config.persistPath,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    // 4. Parse connection URI from stdout
+    const uri = await this.parseConnectionUri();
+
+    // 5. Start health monitoring
+    this.startHealthMonitor();
+
+    // 6. Log audit event
+    await this.logAuditEvent("bunker:start", { uri });
+
+    return this.getStatus();
+  }
+
+  async authorize(pubkey: string): Promise<void> {
+    // Add pubkey to authorized list
+    this.config.authorizedPubkeys.push(pubkey);
+
+    // Restart bunker with updated config
+    await this.restart();
+
+    // Log audit event
+    await this.logAuditEvent("bunker:authorize", { pubkey });
+  }
+
+  async revoke(pubkey: string): Promise<void> {
+    // Remove pubkey from authorized list
+    this.config.authorizedPubkeys = this.config.authorizedPubkeys.filter(
+      (p) => p !== pubkey,
+    );
+
+    // Restart bunker (immediately invalidates sessions)
+    await this.restart();
+
+    // Log audit event
+    await this.logAuditEvent("bunker:revoke", { pubkey });
+  }
+
+  async backup(): Promise<{ encryptedBackup: string; timestamp: number }> {
+    // Create encrypted backup of nsec
+    // Uses team's encryption key (MLS group key)
+    // ...
+  }
+}
+```
+
+### CLI Commands (Teams Tier)
+
+```bash
+# Start bunker for team
+redshift bunker start
+# Output: Bunker started. Connection URI: bunker://abc123...
+
+# Check bunker status
+redshift bunker status
+# Output:
+#   Status: Running
+#   Uptime: 3d 14h 22m
+#   Connected clients: 3
+#   Authorized pubkeys: 5
+
+# Authorize team member
+redshift bunker authorize npub1abc...
+# Output: Authorized npub1abc... to connect to bunker
+
+# Revoke access (e.g., when team member leaves)
+redshift bunker revoke npub1abc...
+# Output: Revoked npub1abc... - bunker restarted
+
+# Create encrypted backup
+redshift bunker backup
+# Output: Backup saved to ~/.redshift/bunker/backup-2024-12-09.enc
+
+# Generate systemd service file for production
+redshift bunker systemd > /etc/systemd/system/redshift-bunker.service
+```
+
+### Deployment Configurations
+
+```yaml
+# docker-compose.yml for Teams bunker deployment
+version: "3.9"
+
+services:
+  bunker-orchestrator:
+    image: ghcr.io/redshift/bunker-orchestrator:latest
+    environment:
+      - REDSHIFT_TEAM_ID=${TEAM_ID}
+      - REDSHIFT_RELAYS=wss://relay.redshift.dev
+      - REDSHIFT_AUTHORIZED_PUBKEYS=${AUTHORIZED_PUBKEYS}
+    volumes:
+      - bunker-data:/data
+      - ./nak:/usr/local/bin/nak:ro # Mount nak binary
+    ports:
+      - "3333:3333" # Health check API
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3333/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  bunker-data:
+```
+
+```ini
+# systemd service file (generated by `redshift bunker systemd`)
+[Unit]
+Description=Redshift Bunker Orchestrator
+After=network.target
+
+[Service]
+Type=simple
+User=redshift
+WorkingDirectory=/var/lib/redshift/bunker
+ExecStart=/usr/local/bin/redshift bunker start --daemon
+ExecStop=/usr/local/bin/redshift bunker stop
+Restart=always
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/redshift/bunker
+
+[Install]
+WantedBy=multi-user.target
+```
 
 ### Core Security: MLS Protocol (NIP-EE)
 
@@ -420,7 +734,35 @@ async function handleSeatChange(teamId: string, newSeatCount: number) {
 SSO integration, on-premise deployment, compliance documentation, and dedicated
 support for organizations with strict security requirements.
 
-### SSO Bridge: OIDC to Nostr
+**Pricing**: Custom, starting ~$500/mo base + per-seat fees. Annual contracts.
+
+### Key Decisions (December 2024)
+
+| Decision                   | Rationale                                                                  |
+| -------------------------- | -------------------------------------------------------------------------- |
+| **SSO Bridge is Priority** | Table stakes for enterprise sales; without OIDC, enterprises cannot adopt  |
+| **SOC2 Type II Required**  | Required for vendor approval at most enterprises; budget $75-150k annually |
+| **Focus Teams First**      | Teams tier provides foundation; Enterprise builds on top                   |
+
+### Enterprise Feature Matrix
+
+| Feature                   | Teams | Enterprise |
+| ------------------------- | ----- | ---------- |
+| Bunker Orchestrator       | ✓     | ✓          |
+| RBAC (4 built-in roles)   | ✓     | ✓          |
+| 90-day audit logs         | ✓     | Unlimited  |
+| SAML SSO                  | ✓     | ✓          |
+| Custom roles              | -     | ✓          |
+| SCIM provisioning         | -     | ✓          |
+| SIEM log forwarding       | -     | ✓          |
+| SSO Bridge (OIDC→Nostr)   | -     | ✓          |
+| On-premise deployment     | -     | ✓          |
+| SOC2 Type II              | -     | ✓          |
+| 99.95% SLA                | -     | ✓          |
+| 24/7 support              | -     | ✓          |
+| Dedicated account manager | -     | ✓          |
+
+### SSO Bridge: OIDC to Nostr (Priority Feature)
 
 The SSO bridge allows enterprise users to authenticate via corporate identity
 providers (Okta, AzureAD, Google Workspace) while maintaining Nostr's
@@ -843,37 +1185,72 @@ interface SubscriptionStatus {
 
 ### Phase 2: Teams Tier (Q3 2025)
 
-1. **MLS Implementation**
-   - Integrate MLS library (OpenMLS or custom)
+**Priority: Bunker Orchestrator + RBAC + MLS**
+
+1. **Bunker Orchestrator** (HIGH PRIORITY)
+   - Implement `BunkerOrchestrator` class
+   - `nak` binary detection/download
+   - Process lifecycle management
+   - Health monitoring and alerts
+   - CLI commands: `bunker start/stop/status/authorize/revoke`
+   - systemd/Docker deployment configs
+
+2. **MLS Implementation (NIP-EE)**
+   - Integrate OpenMLS via WASM bindings
    - Implement NIP-EE event format
    - Build key rotation service
+   - Design abstraction layer for potential protocol swap
 
-2. **RBAC System**
-   - Role definitions
+3. **RBAC System**
+   - 4 built-in roles: owner, admin, developer, readonly
    - Permission checking
    - Invitation flow
+   - Team member onboarding/offboarding
 
-3. **Audit Logging**
+4. **Audit Logging**
+   - 90-day retention
    - Event generation
    - Encrypted storage
    - Query interface
 
+5. **SAML SSO**
+   - Okta integration
+   - AzureAD integration
+   - Google Workspace integration
+
 ### Phase 3: Enterprise Tier (Q4 2025)
 
-1. **SSO Bridge**
-   - OIDC integration
-   - HSM key derivation
-   - Session management
+**Priority: SSO Bridge (OIDC→Nostr) is critical path**
 
-2. **On-Premise Package**
+1. **SSO Bridge** (HIGHEST PRIORITY)
+   - OIDC integration with major IdPs
+   - Deterministic key derivation (HKDF)
+   - HSM support for master seed storage
+   - Session management
+   - User provisioning/deprovisioning
+
+2. **Advanced RBAC**
+   - Custom roles
+   - SCIM provisioning for user sync
+   - OIDC group → Redshift role mapping
+
+3. **Compliance Infrastructure**
+   - SIEM log forwarding (Splunk, Datadog)
+   - Unlimited audit log retention
+   - 99.95% SLA monitoring
+
+4. **On-Premise Package**
    - Docker Compose setup
    - Kubernetes Helm charts
-   - Documentation
+   - Air-gapped deployment docs
 
-3. **Compliance**
-   - SOC 2 Type I preparation
+5. **SOC2 Type II Preparation** (Q4 2025 - Q1 2026)
    - Security documentation
    - Penetration testing
+   - Auditor engagement
+   - Estimated cost: $75k-$150k+
+   - **Note**: This is a significant investment; begin after Teams tier
+     validated
 
 ---
 

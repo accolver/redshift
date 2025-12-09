@@ -539,16 +539,134 @@ through "Convenience & Enterprise" layers.
     events.
   - _Feature:_ Automatic nightly encrypted backups to S3/R2.
   - _Cost:_ $5/month.
-- **Tier 2: Teams & RBAC (Multi-Sig)**
+- **Tier 2: Teams & RBAC ($20/user/month)**
   - _Problem:_ Sharing secrets securely among 5+ developers is hard with a
     single key.
   - _Product:_ "Redshift Teams."
-  - _Feature:_ Implements **NIP-04/Group Encryption**. The UI manages Key
-    rotation. When a dev leaves, Redshift automatically re-rolls the bundle
-    keys.
+  - _Features:_
+    - **MLS Group Encryption (NIP-EE)**: Forward secrecy, post-compromise
+      security
+    - **Bunker Orchestrator**: Managed nak bunker deployment for team key
+      custody
+    - **RBAC**: 4 built-in roles (owner, admin, developer, readonly)
+    - **90-day audit log retention**
+    - **SAML SSO** (Okta, AzureAD, Google)
+    - **Trusted IPs**
   - _Cost:_ $20/user/month.
-- **Tier 3: Enterprise SSO Bridge**
+- **Tier 3: Enterprise SSO Bridge (Custom pricing, starting ~$500/mo base)**
   - _Problem:_ Corporations mandate Okta/AzureAD login, not private keys.
   - _Product:_ An OIDC-to-Nostr bridge. Users login with Okta; the bridge
     (running in their enclave) unlocks a specialized NSEC for the session.
-  - _Cost:_ Most permissive open source license that assumes NO responsibility
+  - _Features:_
+    - **SSO Bridge (Priority)**: OIDC→Nostr key derivation with HSM support
+    - **Custom roles & SCIM provisioning**
+    - **Unlimited audit log retention**
+    - **SIEM log forwarding** (Splunk, Datadog)
+    - **99.95% SLA**
+    - **24/7 support + dedicated account manager**
+    - **On-premise deployment option**
+    - **SOC2 Type II compliance** (required for enterprise sales)
+  - _Cost:_ Custom pricing, annual contracts
+
+### ---
+
+**7\. Key Architecture Decisions**
+
+These decisions were made based on enterprise research (December 2024) and guide
+implementation priorities.
+
+#### **7.1. Bunker Strategy: Orchestrator, Not Engine**
+
+**Decision**: Build an orchestration layer around `nak bunker`, not a custom
+NIP-46 implementation.
+
+**Rationale**:
+
+- `nak bunker` is battle-tested, maintained by core Nostr developers (fiatjaf)
+- Avoids reimplementing cryptographic signing in TypeScript
+- Focuses Redshift engineering on secrets management (core value prop)
+- Reduces security responsibility for signing operations
+
+**Architecture**:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Redshift Bunker Orchestrator                  │
+│  (TypeScript - manages lifecycle, not crypto)                    │
+│                                                                  │
+│  • Spawns/monitors nak bunker subprocess                         │
+│  • Manages authorized client pubkeys                             │
+│  • Provides health checks / uptime monitoring                    │
+│  • Handles key backup/recovery workflows                         │
+│  • Integrates with SSO for user authorization                    │
+│  • Generates audit logs for compliance                           │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                    nak bunker (Go binary)                         │
+│  (The actual NIP-46 remote signer)                               │
+│                                                                  │
+│  • Handles all signing operations                                │
+│  • Manages nsec storage                                          │
+│  • Battle-tested by Nostr community                              │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**CLI Commands** (Teams tier):
+
+```bash
+redshift bunker start          # Start orchestrated nak bunker
+redshift bunker status         # Health check, uptime, connected clients
+redshift bunker authorize      # Add client pubkey to allow list
+redshift bunker revoke         # Remove client pubkey
+redshift bunker backup         # Encrypted key backup
+```
+
+#### **7.2. SSO Bridge Priority**
+
+**Decision**: SSO Bridge is a priority feature for Enterprise tier.
+
+**Rationale**:
+
+- SSO is table stakes for enterprise sales
+- Without OIDC integration, enterprises cannot use Redshift
+- Competitors (Doppler, HashiCorp Vault) all offer SSO
+
+**Implementation Priority**: High (after Teams tier basics)
+
+#### **7.3. SOC2 Type II Requirement**
+
+**Decision**: SOC2 Type II certification is required for Enterprise tier.
+
+**Rationale**:
+
+- Enterprise customers require SOC2 for vendor approval
+- Estimated cost: $75k-$150k+ annually
+- Timeline: Begin preparation after Teams tier launch
+
+**Note**: Focus on Teams tier first; SOC2 is a Q4 2025 goal.
+
+#### **7.4. NIP-EE for Group Encryption**
+
+**Decision**: Use NIP-EE (MLS protocol) for Teams tier group encryption.
+
+**Rationale**:
+
+- MLS provides forward secrecy and post-compromise security
+- RFC 9420 standardized, OpenMLS has WASM bindings
+- Superior to simpler NIP-44 group encryption for security properties
+
+**Risk**: NIP-EE is still a draft NIP and may change.
+
+**Mitigation**: Design abstraction layer to allow protocol swap if needed.
+
+#### **7.5. Pricing Tiers (Finalized)**
+
+| Tier           | Price                             | Target                 | Key Features                                             |
+| -------------- | --------------------------------- | ---------------------- | -------------------------------------------------------- |
+| **Cloud**      | $5/mo                             | Individual devs        | Managed relay, 7-day logs, 99.5% uptime                  |
+| **Teams**      | $20/user/mo                       | Startups (5-50 people) | Bunker orchestrator, RBAC, 90-day logs, SAML SSO         |
+| **Enterprise** | Custom (~$500/mo base + per-seat) | Large orgs             | SSO Bridge, SCIM, unlimited logs, SIEM, SOC2, 99.95% SLA |
+
+See `TEAMS_CLOUD_ENTERPRISE.md` for detailed architecture.
