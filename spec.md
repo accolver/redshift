@@ -535,10 +535,15 @@ through "Convenience & Enterprise" layers.
 - **Tier 1: Redshift Cloud (Managed Relay)**
   - _Problem:_ Free relays often drop data or have strict rate limits. Users
     risk losing their "Secret History."
-  - _Product:_ A paid, high-availability Nostr Relay optimized for Kind 1059
-    events.
-  - _Feature:_ Automatic nightly encrypted backups to S3/R2.
+  - _Product:_ Managed Nosflare relay on Cloudflare Workers
+    (`wss://relay.redshiftapp.com`).
+  - _Features:_
+    - Serverless, globally distributed relay
+    - Automatic encrypted backups to Cloudflare R2
+    - 7-day audit logs
+    - BTCPay Server payments (Lightning via Voltage Cloud LND, on-chain BTC)
   - _Cost:_ $5/month.
+  - _See:_ `CLOUD_TIER_PLAN.md` for detailed implementation plan.
 - **Tier 2: Teams & RBAC ($20/user/month)**
   - _Problem:_ Sharing secrets securely among 5+ developers is hard with a
     single key.

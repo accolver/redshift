@@ -178,7 +178,7 @@ secrets remain protected by NIP-59.
 ┌──────────────────────────────────────────────────────────────────┐
 │                     Subscription Flow                             │
 │                                                                   │
-│  1. User visits cloud.redshift.dev/subscribe                     │
+│  1. User visits cloud.redshiftapp.com/subscribe                     │
 │  2. BTCPay generates Lightning invoice ($5 equivalent)           │
 │  3. User pays via wallet (Phoenix, Zeus, etc.)                   │
 │  4. BTCPay webhook notifies backend                              │
@@ -207,7 +207,7 @@ secrets remain protected by NIP-59.
 ```typescript
 // BTCPay Greenfield API integration
 interface BTCPayConfig {
-  serverUrl: string; // https://btcpay.redshift.dev
+  serverUrl: string; // https://btcpay.redshiftapp.com
   storeId: string; // Store identifier
   apiKey: string; // Greenfield API key (server-side only)
   webhookSecret: string; // HMAC secret for webhook validation
@@ -471,7 +471,7 @@ services:
     image: ghcr.io/redshift/bunker-orchestrator:latest
     environment:
       - REDSHIFT_TEAM_ID=${TEAM_ID}
-      - REDSHIFT_RELAYS=wss://relay.redshift.dev
+      - REDSHIFT_RELAYS=wss://relay.redshiftapp.com
       - REDSHIFT_AUTHORIZED_PUBKEYS=${AUTHORIZED_PUBKEYS}
     volumes:
       - bunker-data:/data
@@ -1006,7 +1006,7 @@ interface BTCPayStoreConfig {
 
   webhooks: [
     {
-      url: "https://api.redshift.dev/webhooks/btcpay";
+      url: "https://api.redshiftapp.com/webhooks/btcpay";
       events: [
         "InvoiceSettled",
         "InvoiceExpired",
@@ -1019,7 +1019,7 @@ interface BTCPayStoreConfig {
 
   checkoutAppearance: {
     brand: "Redshift";
-    logo: "https://redshift.dev/logo.svg";
+    logo: "https://redshiftapp.com/logo.svg";
     customCSS: string;
   };
 }
@@ -1032,7 +1032,7 @@ Cashu tokens enable privacy-preserving payments without requiring identity:
 ```typescript
 // Cashu mint configuration
 interface CashuMintConfig {
-  mintUrl: "https://mint.redshift.dev";
+  mintUrl: "https://mint.redshiftapp.com";
 
   // Tokens for anonymous cloud access
   denominations: [
@@ -1041,7 +1041,7 @@ interface CashuMintConfig {
   ];
 
   // Redeem flow
-  redeemEndpoint: "https://api.redshift.dev/cashu/redeem";
+  redeemEndpoint: "https://api.redshiftapp.com/cashu/redeem";
 }
 
 // Cashu redemption for anonymous access
@@ -1071,7 +1071,7 @@ interface LockedCashuToken {
 // LNURL-pay for recurring subscriptions
 interface LNURLSubscription {
   // User's wallet stores this
-  callback: "https://api.redshift.dev/lnurl/subscribe";
+  callback: "https://api.redshiftapp.com/lnurl/subscribe";
 
   metadata: {
     pubkey: string;
