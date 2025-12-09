@@ -11,9 +11,20 @@ import DocsPage from '$lib/components/DocsPage.svelte';
 </svelte:head>
 
 <DocsPage title="Quick Start" description="Create your first project and manage secrets in under 5 minutes.">
-		<ProseHeading level={2} id="authenticate">1. Authenticate</ProseHeading>
+		<ProseHeading level={2} id="install">1. Install the CLI</ProseHeading>
 		<p>
-			First, log in with your Nostr identity. If you don't have one, Redshift can generate one for you:
+			Install the Redshift CLI using the install script or your package manager:
+		</p>
+
+		<CodeBlock code={`# Using install script (recommended)
+curl -fsSL https://redshiftapp.com/install | sh
+
+# Or with bun
+bun add -g redshift`} language="bash" />
+
+		<ProseHeading level={2} id="authenticate">2. Authenticate</ProseHeading>
+		<p>
+			Log in with your Nostr identity. If you don't have one, Redshift can generate one for you:
 		</p>
 
 		<CodeBlock code={`redshift login
@@ -32,7 +43,13 @@ import DocsPage from '$lib/components/DocsPage.svelte';
 			See the <a href="/docs/auth">Authentication docs</a> for all options.
 		</p>
 
-		<ProseHeading level={2} id="create-project">2. Create a Project</ProseHeading>
+		<div class="not-prose my-6 rounded-lg border border-tokyo-red/50 bg-tokyo-red/10 p-4">
+			<p class="text-sm">
+				<strong class="text-tokyo-red">Important:</strong> Never share your nsec (private key). Anyone with your nsec can access your secrets.
+			</p>
+		</div>
+
+		<ProseHeading level={2} id="create-project">3. Create a Project</ProseHeading>
 		<p>
 			Projects organize your secrets. You might have one project per application:
 		</p>
@@ -47,7 +64,7 @@ redshift serve
 			Visit <a href="/admin">/admin</a> to create projects and environments through the web interface.
 		</p>
 
-		<ProseHeading level={2} id="setup-directory">3. Set Up Your Directory</ProseHeading>
+		<ProseHeading level={2} id="setup-directory">4. Set Up Your Directory</ProseHeading>
 		<p>
 			Link a directory to a project/environment:
 		</p>
@@ -76,7 +93,7 @@ redshift setup
 			</p>
 		</div>
 
-		<ProseHeading level={2} id="add-secrets">4. Add Secrets</ProseHeading>
+		<ProseHeading level={2} id="add-secrets">5. Add Secrets</ProseHeading>
 		<p>
 			Add secrets via the web admin or CLI:
 		</p>
@@ -94,7 +111,7 @@ redshift secrets list
 # API_KEY       sk-...
 # STRIPE_SECRET sk_test_...`} language="bash" />
 
-		<ProseHeading level={2} id="run-application">5. Run Your Application</ProseHeading>
+		<ProseHeading level={2} id="run-application">6. Run Your Application</ProseHeading>
 		<p>
 			Use <InlineCode>redshift run</InlineCode> to inject secrets as environment variables:
 		</p>
