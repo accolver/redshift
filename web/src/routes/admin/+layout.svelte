@@ -144,11 +144,11 @@ function getDisplayName(pubkey: string): string {
 <div class="flex min-h-screen flex-col bg-background">
 	<!-- Admin Header - full width with inner container -->
 	<header class="sticky top-0 z-40 border-b border-border/50 bg-card/95 backdrop-blur-sm">
-		<div class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-3 sm:px-6">
+		<div class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
 			<!-- Left: Logo + Nav + Search -->
 			<div class="flex min-w-0 items-center gap-2 sm:gap-8">
 				<a href="/" class="flex shrink-0 items-center gap-2">
-					<img src="/favicon.svg" alt="Redshift" class="size-7" />
+					<img src="/favicon.svg" alt="Redshift" class="size-8" />
 					<span class="hidden text-lg font-semibold sm:inline">Redshift</span>
 				</a>
 				<nav class="hidden items-center gap-1 sm:flex">
