@@ -26,6 +26,7 @@ import {
 	getDecryptFn,
 } from './auth.svelte';
 import { wrapSecrets, wrapSecretsWithSigner, createDTag, type NostrEvent } from '$lib/crypto';
+import { auditSecretCreate, auditSecretUpdate, auditSecretDelete } from '$lib/services/audit';
 
 /**
  * Secrets state using $state rune
@@ -221,7 +222,10 @@ export async function subscribeToSecrets(
 
 				// Recalculate missing secrets when current env secrets change
 				if (allEnvSecretsState.size > 0) {
-					missingSecretsState.missing = calculateMissingSecrets(allEnvSecretsState, environmentSlug);
+					missingSecretsState.missing = calculateMissingSecrets(
+						allEnvSecretsState,
+						environmentSlug,
+					);
 				}
 			},
 			error: (err) => {
@@ -388,6 +392,9 @@ export async function setSecret(key: string, value: string): Promise<void> {
 	secretsState.saveError = null;
 
 	try {
+		// Check if this is a create or update
+		const isUpdate = secretsState.secrets.some((s) => s.key === trimmedKey);
+
 		// Update secrets array
 		const updatedSecrets = upsertSecret(secretsState.secrets, trimmedKey, value);
 
@@ -401,6 +408,13 @@ export async function setSecret(key: string, value: string): Promise<void> {
 
 		// Optimistically update local state
 		secretsState.secrets = updatedSecrets;
+
+		// Audit the operation (async, non-blocking)
+		if (isUpdate) {
+			auditSecretUpdate(currentProjectSlug, currentEnvironmentSlug, trimmedKey).catch(() => {});
+		} else {
+			auditSecretCreate(currentProjectSlug, currentEnvironmentSlug, trimmedKey).catch(() => {});
+		}
 	} catch (err) {
 		secretsState.saveError = err instanceof Error ? err.message : 'Failed to save secret';
 		throw err;
@@ -436,6 +450,9 @@ export async function setSecretToMultipleEnvs(
 			// Get current secrets for this environment
 			const currentSecrets = allEnvSecretsState.get(envSlug) ?? [];
 
+			// Check if this is a create or update
+			const isUpdate = currentSecrets.some((s) => s.key === trimmedKey);
+
 			// Update secrets array
 			const updatedSecrets = upsertSecret(currentSecrets, trimmedKey, value);
 
@@ -446,6 +463,13 @@ export async function setSecretToMultipleEnvs(
 
 			// Publish the Gift Wrap event
 			await publishEvent(event);
+
+			// Audit the operation (async, non-blocking)
+			if (isUpdate) {
+				auditSecretUpdate(projectSlug, envSlug, trimmedKey).catch(() => {});
+			} else {
+				auditSecretCreate(projectSlug, envSlug, trimmedKey).catch(() => {});
+			}
 		}
 	} catch (err) {
 		secretsState.saveError = err instanceof Error ? err.message : 'Failed to save secret';
@@ -484,6 +508,9 @@ export async function deleteSecret(key: string): Promise<void> {
 
 		// Optimistically update local state
 		secretsState.secrets = updatedSecrets;
+
+		// Audit the deletion (async, non-blocking)
+		auditSecretDelete(currentProjectSlug, currentEnvironmentSlug, key).catch(() => {});
 	} catch (err) {
 		secretsState.saveError = err instanceof Error ? err.message : 'Failed to delete secret';
 		throw err;
