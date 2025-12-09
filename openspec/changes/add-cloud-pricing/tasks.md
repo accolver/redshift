@@ -1,5 +1,22 @@
 # Tasks: Cloud Tier Implementation
 
+## Implementation Status Summary
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Phase 1: Infrastructure | ⏳ Pending | Requires manual BTCPay/Nosflare deployment |
+| Phase 2: Shared Packages | ✅ Complete | `@redshift/cloud` and `@redshift/payments` |
+| Phase 3: Backend API | ✅ Complete | API routes implemented |
+| Phase 4: Web Integration | ✅ Complete | UI components, stores, pages |
+| Phase 5: CLI Integration | ✅ Complete | Subscription and relay commands |
+| Phase 6: Audit Logging | ✅ Complete | Event generation, viewer, retention |
+| Phase 7: Monitoring | ⏳ Pending | Requires Phase 1 infrastructure |
+| Phase 8: Launch | ⏳ Pending | Requires all prior phases |
+
+**Code implementation is complete.** Remaining work requires infrastructure deployment.
+
+---
+
 ## Phase 1: Infrastructure Setup (2-3 weeks)
 
 ### 1.1 BTCPay Server + Voltage Cloud Setup
