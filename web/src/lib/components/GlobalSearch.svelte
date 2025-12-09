@@ -2,12 +2,13 @@
 import { Dialog, DialogContent } from '$lib/components/ui/dialog';
 import { Search, Key, Folder, ArrowRight, LoaderCircle } from '@lucide/svelte';
 import { getProjectsState } from '$lib/stores/projects.svelte';
-import { getAuthState } from '$lib/stores/auth.svelte';
-import { eventStore, REDSHIFT_KIND, getSecretsDTag } from '$lib/stores/nostr.svelte';
-import { parseSecretsContent } from '$lib/models/secrets';
+import { getAuthState, getPrivateKey, getDecryptFn } from '$lib/stores/auth.svelte';
+import { eventStore } from '$lib/stores/nostr.svelte';
+import { AllGiftWrapSecretsModel, type Decryptor } from '$lib/models/gift-wrap-secrets';
 import type { Secret, Project, Environment } from '$lib/types/nostr';
 import { goto } from '$app/navigation';
 import { fuzzyMatch, matchScore } from '$lib/utils/search';
+import type { Subscription } from 'rxjs';
 
 interface Props {
 	open: boolean;
@@ -21,6 +22,9 @@ let isSearching = $state(false);
 
 // Cache of secrets per project/environment
 let secretsCache = $state<Map<string, Secret[]>>(new Map());
+
+// Track active subscriptions for cleanup
+let activeSubscriptions: Subscription[] = [];
 
 const auth = $derived(getAuthState());
 const projectsState = $derived(getProjectsState());
@@ -41,36 +45,96 @@ $effect(() => {
 	if (open && auth.isConnected && auth.pubkey) {
 		loadAllSecrets();
 	}
+
+	// Cleanup when dialog closes
+	return () => {
+		for (const sub of activeSubscriptions) {
+			sub.unsubscribe();
+		}
+		activeSubscriptions = [];
+	};
 });
 
 async function loadAllSecrets() {
 	if (!auth.pubkey) return;
 
-	isSearching = true;
-	const newCache = new Map<string, Secret[]>();
+	// Get decryption capabilities
+	const privateKey = await getPrivateKey();
+	const decryptFn = getDecryptFn();
 
-	for (const project of projectsState.projects) {
-		for (const env of project.environments) {
-			const dTag = getSecretsDTag(project.slug, env.slug);
-			const cacheKey = `${project.slug}/${env.slug}`;
-
-			// Get event from EventStore
-			const event = eventStore.getReplaceable(REDSHIFT_KIND, auth.pubkey, dTag);
-
-			if (event?.content) {
-				try {
-					const content = JSON.parse(event.content);
-					const secrets = parseSecretsContent(content);
-					newCache.set(cacheKey, secrets);
-				} catch {
-					// Ignore parse errors
-				}
-			}
-		}
+	// Build the decryptor
+	let decryptor: Decryptor | null = null;
+	if (privateKey) {
+		decryptor = { type: 'privateKey', key: privateKey };
+	} else if (decryptFn) {
+		decryptor = { type: 'decryptFn', fn: decryptFn };
 	}
 
-	secretsCache = newCache;
-	isSearching = false;
+	if (!decryptor) {
+		// No encryption available, can't decrypt secrets
+		isSearching = false;
+		return;
+	}
+
+	isSearching = true;
+
+	// Clean up previous subscriptions
+	for (const sub of activeSubscriptions) {
+		sub.unsubscribe();
+	}
+	activeSubscriptions = [];
+
+	const newCache = new Map<string, Secret[]>();
+	let pendingProjects = projectsState.projects.length;
+
+	if (pendingProjects === 0) {
+		isSearching = false;
+		return;
+	}
+
+	// Subscribe to secrets for each project
+	for (const project of projectsState.projects) {
+		const envSlugs = project.environments.map((e) => e.slug);
+
+		if (envSlugs.length === 0) {
+			pendingProjects--;
+			if (pendingProjects === 0) {
+				secretsCache = newCache;
+				isSearching = false;
+			}
+			continue;
+		}
+
+		const subscription = AllGiftWrapSecretsModel(
+			eventStore,
+			decryptor,
+			project.slug,
+			envSlugs,
+		).subscribe({
+			next: (envMap) => {
+				// Add secrets to cache with project/env key
+				for (const [envSlug, secrets] of envMap) {
+					const cacheKey = `${project.slug}/${envSlug}`;
+					newCache.set(cacheKey, secrets);
+				}
+
+				pendingProjects--;
+				if (pendingProjects <= 0) {
+					secretsCache = newCache;
+					isSearching = false;
+				}
+			},
+			error: () => {
+				pendingProjects--;
+				if (pendingProjects <= 0) {
+					secretsCache = newCache;
+					isSearching = false;
+				}
+			},
+		});
+
+		activeSubscriptions.push(subscription);
+	}
 }
 
 // Filter results based on search query
