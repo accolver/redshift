@@ -19,6 +19,7 @@ let { open = $bindable(), onOpenChange }: Props = $props();
 
 let searchQuery = $state('');
 let isSearching = $state(false);
+let selectedIndex = $state(0);
 
 // Cache of secrets per project/environment
 let secretsCache = $state<Map<string, Secret[]>>(new Map());
@@ -203,6 +204,13 @@ const searchResults = $derived(() => {
 	return results.slice(0, 12); // Limit results
 });
 
+// Reset selected index when results change
+$effect(() => {
+	// Access searchResults to create dependency
+	const _ = searchResults();
+	selectedIndex = 0;
+});
+
 function handleSelect(result: SearchResult) {
 	// Close dialog and clear search first
 	searchQuery = '';
@@ -211,12 +219,12 @@ function handleSelect(result: SearchResult) {
 	// Then navigate after a microtask to ensure dialog closes cleanly
 	setTimeout(() => {
 		if (result.type === 'secret' && result.environment) {
-			// Navigate to project with environment and highlight the secret
+			// Navigate to project/environment with highlight param
 			goto(
-				`/admin/projects/${result.project.slug}?env=${result.environment.slug}&highlight=${encodeURIComponent(result.secret!.key)}`,
+				`/admin/projects/${result.project.slug}/${result.environment.slug}?highlight=${encodeURIComponent(result.secret!.key)}`,
 			);
 		} else if (result.type === 'environment' && result.environment) {
-			goto(`/admin/projects/${result.project.slug}?env=${result.environment.slug}`);
+			goto(`/admin/projects/${result.project.slug}/${result.environment.slug}`);
 		} else {
 			goto(`/admin/projects/${result.project.slug}`);
 		}
@@ -224,8 +232,30 @@ function handleSelect(result: SearchResult) {
 }
 
 function handleKeydown(e: KeyboardEvent) {
-	if (e.key === 'Escape') {
-		onOpenChange(false);
+	const results = searchResults();
+
+	switch (e.key) {
+		case 'Escape':
+			onOpenChange(false);
+			break;
+		case 'ArrowDown':
+			e.preventDefault();
+			if (results.length > 0) {
+				selectedIndex = (selectedIndex + 1) % results.length;
+			}
+			break;
+		case 'ArrowUp':
+			e.preventDefault();
+			if (results.length > 0) {
+				selectedIndex = (selectedIndex - 1 + results.length) % results.length;
+			}
+			break;
+		case 'Enter':
+			e.preventDefault();
+			if (results.length > 0 && selectedIndex >= 0 && selectedIndex < results.length) {
+				handleSelect(results[selectedIndex]);
+			}
+			break;
 	}
 }
 </script>
@@ -259,11 +289,12 @@ function handleKeydown(e: KeyboardEvent) {
 				</div>
 			{:else if searchResults().length > 0}
 				<div class="p-2">
-					{#each searchResults() as result}
+					{#each searchResults() as result, index}
 						<button
 							type="button"
-							class="flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-muted"
+							class="flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-muted {index === selectedIndex ? 'bg-muted' : ''}"
 							onclick={() => handleSelect(result)}
+							onmouseenter={() => (selectedIndex = index)}
 						>
 							<div class="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
 								{#if result.type === 'secret'}

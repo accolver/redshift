@@ -26,7 +26,11 @@ import {
 	deleteSecret,
 	clearSaveError,
 } from '$lib/stores/secrets.svelte';
-import { getAuthState, supportsEncryption, isAuthRestorationAttempted } from '$lib/stores/auth.svelte';
+import {
+	getAuthState,
+	supportsEncryption,
+	isAuthRestorationAttempted,
+} from '$lib/stores/auth.svelte';
 import {
 	ChevronDown,
 	Plus,
@@ -150,21 +154,29 @@ let highlightedKey = $state<string | null>(null);
 let newSecretKeyInput = $state<HTMLInputElement | null>(null);
 
 // Read highlight from URL query param and clear after a delay
+// Track if we've already processed a highlight to avoid re-triggering
+let lastProcessedHighlight = $state<string | null>(null);
+
 $effect(() => {
 	const highlight = page.url.searchParams.get('highlight');
-	if (highlight) {
-		highlightedKey = highlight;
-		// Scroll to the highlighted element after a short delay to ensure DOM is ready
+	// Also depend on secrets so we re-run when they load
+	const hasSecrets = secretsState.secrets.length > 0;
+
+	if (highlight && hasSecrets && highlight !== lastProcessedHighlight) {
+		lastProcessedHighlight = highlight;
+		// Delay setting highlight to allow entry animations to complete (fade: 200ms + 50ms delay, flip: 300ms)
 		setTimeout(() => {
+			highlightedKey = highlight;
+			// Scroll to the highlighted element
 			const element = document.querySelector(`[data-secret-key="${highlight}"]`);
 			if (element) {
 				element.scrollIntoView({ behavior: 'smooth', block: 'center' });
 			}
-		}, 100);
-		// Auto-clear highlight after 3 seconds
-		setTimeout(() => {
-			highlightedKey = null;
-		}, 3000);
+			// Auto-clear highlight after 3 seconds
+			setTimeout(() => {
+				highlightedKey = null;
+			}, 3000);
+		}, 350);
 	}
 });
 
@@ -442,14 +454,14 @@ async function handleAddSecret() {
 	// Single environment, save directly
 	const keyToSave = newSecretKey.trim().toUpperCase();
 	const valueToSave = newSecretValue;
-	
+
 	// Hide the add row immediately and mark the key as saving
 	showAddSecretRow = false;
 	newSecretKey = '';
 	newSecretValue = '';
 	savingSecrets.add(keyToSave);
 	savingSecrets = new Set(savingSecrets);
-	
+
 	try {
 		await setSecret(keyToSave, valueToSave);
 		// Mark as saved for visual feedback
@@ -457,7 +469,7 @@ async function handleAddSecret() {
 		savedSecrets.add(keyToSave);
 		savingSecrets = new Set(savingSecrets);
 		savedSecrets = new Set(savedSecrets);
-		
+
 		// Clear saved status after 2 seconds
 		setTimeout(() => {
 			savedSecrets.delete(keyToSave);
@@ -1107,7 +1119,7 @@ async function handleDeleteEnvironment() {
 								{@const isHighlighted = highlightedKey === secret.key}
 								<div 
 									data-secret-key={secret.key}
-									class="group flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-2 transition-all duration-300 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0 {isHighlighted ? 'ring-2 ring-primary ring-offset-2 ring-offset-background sm:rounded-lg sm:p-2 sm:bg-primary/5' : ''}"
+									class="group flex flex-col gap-2 rounded-lg border border-border bg-card/50 p-2 transition-all duration-300 sm:flex-row sm:items-center sm:border-0 sm:bg-transparent sm:p-0 {isHighlighted ? 'outline outline-2 outline-primary outline-offset-4 !rounded-lg !bg-primary/5' : ''}"
 									class:border-primary={status === 'dirty'}
 									in:fade={{ duration: 200, delay: 50 }}
 									animate:flip={{ duration: 300 }}
