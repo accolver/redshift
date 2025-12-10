@@ -23,6 +23,10 @@ export interface FlagDef {
 	default?: string | boolean;
 	/** Example value shown in help (e.g., "dev" for --config) */
 	placeholder?: string;
+	/** If set, this flag is an alias for another flag (value will be merged) */
+	aliasOf?: string;
+	/** Hide from help output (useful for aliases) */
+	hidden?: boolean;
 }
 
 /**
@@ -260,6 +264,8 @@ export class CLI {
 
 		// Build options for parseArgs
 		const options: Record<string, { type: 'string' | 'boolean'; short?: string }> = {};
+		// Collect all flag definitions for alias resolution
+		const allFlagDefs: Record<string, FlagDef> = {};
 
 		// Helper to add flag definition
 		const addFlag = (name: string, def: FlagDef) => {
@@ -268,6 +274,7 @@ export class CLI {
 				opt.short = def.short;
 			}
 			options[name] = opt;
+			allFlagDefs[name] = def;
 		};
 
 		// Add global flags
@@ -304,7 +311,8 @@ export class CLI {
 				});
 
 				const globalFlags = extractGlobalFlags(values);
-				const flags = extractCommandFlags(values, GLOBAL_FLAGS);
+				const rawFlags = extractCommandFlags(values, GLOBAL_FLAGS);
+				const flags = resolveFlagAliases(rawFlags, allFlagDefs);
 
 				return {
 					command: commandName,
@@ -326,7 +334,8 @@ export class CLI {
 			});
 
 			const globalFlags = extractGlobalFlags(values);
-			const flags = extractCommandFlags(values, GLOBAL_FLAGS);
+			const rawFlags = extractCommandFlags(values, GLOBAL_FLAGS);
+			const flags = resolveFlagAliases(rawFlags, allFlagDefs);
 
 			return {
 				command: commandName,
@@ -540,6 +549,29 @@ function extractCommandFlags(
 }
 
 /**
+ * Resolve flag aliases - merge aliased flag values into their primary flags
+ */
+function resolveFlagAliases(
+	flags: Record<string, string | boolean | undefined>,
+	flagDefs: Record<string, FlagDef>,
+): Record<string, string | boolean | undefined> {
+	const result = { ...flags };
+
+	for (const [name, def] of Object.entries(flagDefs)) {
+		if (def.aliasOf && result[name] !== undefined) {
+			// If alias has a value and primary doesn't, copy it over
+			if (result[def.aliasOf] === undefined) {
+				result[def.aliasOf] = result[name];
+			}
+			// Remove the alias from results
+			delete result[name];
+		}
+	}
+
+	return result;
+}
+
+/**
  * Format flags for help output
  */
 function formatFlags(flags: Record<string, FlagDef>): string {
@@ -551,6 +583,11 @@ function formatFlags(flags: Record<string, FlagDef>): string {
 	const formattedEntries: Array<{ flagStr: string; desc: string }> = [];
 
 	for (const [name, def] of entries) {
+		// Skip hidden flags (typically aliases)
+		if (def.hidden) {
+			continue;
+		}
+
 		let flagStr = '      ';
 		if (def.short) {
 			flagStr = `  -${def.short}, `;
@@ -687,6 +724,14 @@ function createSetupCommand(): CommandDef {
 				description: 'config/environment (e.g. dev)',
 				placeholder: 'name',
 			},
+			environment: {
+				type: 'string',
+				short: 'e',
+				description: 'alias for --config',
+				placeholder: 'name',
+				aliasOf: 'config',
+				hidden: true,
+			},
 			'no-interactive': {
 				type: 'boolean',
 				description:
@@ -722,6 +767,14 @@ function createRunCommand(): CommandDef {
 				short: 'c',
 				description: 'config/environment (e.g. dev)',
 				placeholder: 'name',
+			},
+			environment: {
+				type: 'string',
+				short: 'e',
+				description: 'alias for --config',
+				placeholder: 'name',
+				aliasOf: 'config',
+				hidden: true,
 			},
 			mount: {
 				type: 'string',
@@ -801,6 +854,14 @@ function createSecretsCommand(): CommandDef {
 				short: 'c',
 				description: 'config/environment (e.g. dev)',
 				placeholder: 'name',
+			},
+			environment: {
+				type: 'string',
+				short: 'e',
+				description: 'alias for --config',
+				placeholder: 'name',
+				aliasOf: 'config',
+				hidden: true,
 			},
 			'only-names': {
 				type: 'boolean',
