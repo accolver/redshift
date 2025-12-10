@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.0](https://github.com/accolver/redshift/compare/v0.10.0...v0.11.0) (2025-12-10)
+
+
+### Features
+
+* **cli:** add --environment/-e as alias for --config/-c ([2a43a11](https://github.com/accolver/redshift/commit/2a43a11bcc8bb360b612e2e6340c5c27537feec5))
+
+
+### Bug Fixes
+
+* **docs:** remove unavailable npm/brew install instructions ([6509f56](https://github.com/accolver/redshift/commit/6509f5623c2e5ebbb56fa18875b835c89b5f7b6c))
+
 ## [0.10.0](https://github.com/accolver/redshift/compare/v0.9.0...v0.10.0) (2025-12-09)
 
 
