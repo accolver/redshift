@@ -1,0 +1,20 @@
+{
+	"name": "@redshift/payments",
+	"version": "0.1.0",
+	"description": "BTCPay Server integration for Redshift Cloud subscriptions",
+	"type": "module",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"test": "bun test",
+		"test:watch": "bun test --watch",
+		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"typescript": "^5.0.0"
+	}
+}

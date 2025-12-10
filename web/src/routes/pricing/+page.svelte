@@ -9,7 +9,7 @@ import { Check, Github, Heart } from '@lucide/svelte';
 const tiers = Object.values(PRICING_TIERS);
 
 // Only show "Most Popular" highlight if the tier is available
-function shouldHighlight(tier: typeof tiers[number]) {
+function shouldHighlight(tier: (typeof tiers)[number]) {
 	return tier.highlight && tier.available;
 }
 </script>
@@ -149,11 +149,11 @@ function shouldHighlight(tier: typeof tiers[number]) {
 				</p>
 			</div>
 			<div class="rounded-lg border border-border/50 bg-card/50 p-6">
-				<h3 class="mb-2 font-semibold">What's coming in paid tiers?</h3>
+				<h3 class="mb-2 font-semibold">What do paid tiers offer?</h3>
 				<p class="text-sm text-muted-foreground">
-					Cloud adds managed relays and backups. Teams adds MLS group encryption, 
-					Bunker Orchestrator for key custody, and SAML SSO. Enterprise adds 
-					OIDC→Nostr SSO Bridge, SCIM provisioning, and SOC2 compliance.
+					Cloud ($5/mo) adds a managed relay with automatic backups, audit logs, and 99.5% SLA.
+					Teams (coming soon) adds MLS group encryption, Bunker Orchestrator, and SAML SSO.
+					Enterprise adds OIDC→Nostr SSO Bridge, SCIM provisioning, and SOC2 compliance.
 				</p>
 			</div>
 			<div class="rounded-lg border border-border/50 bg-card/50 p-6">
@@ -168,6 +168,13 @@ function shouldHighlight(tier: typeof tiers[number]) {
 				<p class="text-sm text-muted-foreground">
 					Doppler is centralized - they hold your secrets. With Redshift, your secrets are 
 					encrypted client-side and stored on decentralized Nostr relays. You own your keys, you own your data.
+				</p>
+			</div>
+			<div class="rounded-lg border border-border/50 bg-card/50 p-6">
+				<h3 class="mb-2 font-semibold">How do I pay for Cloud?</h3>
+				<p class="text-sm text-muted-foreground">
+					Cloud subscriptions are paid with Bitcoin - either on-chain or via Lightning Network.
+					We use BTCPay Server for privacy-preserving payments. No credit card or personal info required.
 				</p>
 			</div>
 		</div>

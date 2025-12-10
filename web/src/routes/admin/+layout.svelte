@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onMount, untrack } from 'svelte';
 import { Button } from '$lib/components/ui/button';
-import { ChevronDown, LogOut, Radio, Search, LoaderCircle } from '@lucide/svelte';
+import { ChevronDown, LogOut, Radio, Search, Cloud, Settings } from '@lucide/svelte';
 import {
 	getAuthState,
 	connectWithNip07,
@@ -9,13 +9,17 @@ import {
 	hasNip07Extension,
 	restoreAuth,
 } from '$lib/stores/auth.svelte';
-import { getProjectsState, subscribeToProjects, unsubscribeFromProjects } from '$lib/stores/projects.svelte';
+import {
+	getProjectsState,
+	subscribeToProjects,
+	unsubscribeFromProjects,
+} from '$lib/stores/projects.svelte';
 import {
 	connectAndSync,
 	disconnect as nostrDisconnect,
 	getRelayState,
-	DEFAULT_RELAYS,
 } from '$lib/stores/nostr.svelte';
+import { getEffectiveRelays } from '$lib/stores/relay-settings.svelte';
 import { nip19 } from 'nostr-tools';
 import GlobalSearch from '$lib/components/GlobalSearch.svelte';
 import LoginDialog from '$lib/components/LoginDialog.svelte';
@@ -84,8 +88,9 @@ $effect(() => {
 		const lastPubkey = untrack(() => lastConnectedPubkey);
 		if (lastPubkey !== pubkey) {
 			lastConnectedPubkey = pubkey;
-			// Connect to relays and start syncing
-			connectAndSync(pubkey);
+			// Connect to relays using effective relay list from settings
+			const relays = getEffectiveRelays();
+			connectAndSync(pubkey, relays);
 			// Subscribe to projects from EventStore
 			subscribeToProjects();
 		}
@@ -153,6 +158,14 @@ function getDisplayName(pubkey: string): string {
 				</a>
 				<nav class="hidden items-center gap-1 sm:flex">
 					<a href="/admin" class="rounded-md px-3 py-1.5 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground">Dashboard</a>
+					<a href="/admin/subscribe" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground">
+						<Cloud class="size-3.5" />
+						<span>Cloud</span>
+					</a>
+					<a href="/admin/settings" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground">
+						<Settings class="size-3.5" />
+						<span>Settings</span>
+					</a>
 				</nav>
 				<!-- Search Button -->
 				{#if auth.isConnected}
@@ -234,13 +247,16 @@ function getDisplayName(pubkey: string): string {
 									<span class="text-xs {relayStatusInfo().textColor}">{relayStatusInfo().label}</span>
 								</div>
 								<div class="space-y-1.5">
-									{#each DEFAULT_RELAYS as relay}
+									{#each getEffectiveRelays() as relay}
 										<div class="flex items-center gap-2 text-xs">
 											<span class="flex size-1.5 rounded-full {relayState.status === 'connected' ? 'bg-green-500' : 'bg-muted-foreground/40'}"></span>
 											<span class="truncate text-muted-foreground">{relay.replace('wss://', '')}</span>
 										</div>
 									{/each}
 								</div>
+								<a href="/admin/settings" class="mt-3 block text-center text-xs text-muted-foreground transition-colors hover:text-foreground">
+									Manage relays
+								</a>
 							</div>
 						{/if}
 					</div>

@@ -18,6 +18,11 @@ import { runCommand } from './commands/run';
 import { secretsCommand, type SecretsSubcommand } from './commands/secrets';
 import { serveCommand } from './commands/serve';
 import { setupCommand } from './commands/setup';
+import {
+	subscriptionCommand,
+	getSubscriptionLabel,
+	type SubscriptionSubcommand,
+} from './commands/subscription';
 import { upgradeCommand } from './commands/upgrade';
 
 // Create and configure CLI
@@ -32,7 +37,7 @@ async function main(): Promise<void> {
 
 	// Handle global flags first
 	if (parsed.globalFlags.version) {
-		console.log(`redshift v${VERSION}`);
+		await showVersion();
 		return;
 	}
 
@@ -82,6 +87,21 @@ async function main(): Promise<void> {
 }
 
 /**
+ * Show version information including subscription status
+ */
+async function showVersion(): Promise<void> {
+	console.log(`redshift v${VERSION}`);
+
+	// Try to get subscription label (won't fail if not logged in)
+	try {
+		const subscriptionLabel = await getSubscriptionLabel();
+		console.log(`Subscription: ${subscriptionLabel}`);
+	} catch {
+		// Silently ignore errors - just show version without subscription
+	}
+}
+
+/**
  * Execute a command based on parsed arguments
  */
 async function executeCommand(parsed: ParsedArgs): Promise<void> {
@@ -121,7 +141,7 @@ async function executeCommand(parsed: ParsedArgs): Promise<void> {
 		case 'run': {
 			// Handle --command flag or -- separator
 			let commandToRun: string[] = [];
-			
+
 			if (typeof flags.command === 'string') {
 				// --command "echo hi" style
 				commandToRun = flags.command.split(' ');
@@ -205,10 +225,7 @@ async function executeCommand(parsed: ParsedArgs): Promise<void> {
 		}
 
 		case 'serve': {
-			const port =
-				typeof flags.port === 'string'
-					? Number.parseInt(flags.port, 10)
-					: 3000;
+			const port = typeof flags.port === 'string' ? Number.parseInt(flags.port, 10) : 3000;
 
 			await serveCommand({
 				port,
@@ -233,6 +250,23 @@ async function executeCommand(parsed: ParsedArgs): Promise<void> {
 				force: flags.force === true,
 				version: typeof flags.tag === 'string' ? flags.tag : undefined,
 			});
+			break;
+		}
+
+		case 'subscription': {
+			// Default to status if no subcommand
+			const subscriptionSubcommand = (subcommand || 'status') as SubscriptionSubcommand;
+
+			await subscriptionCommand({
+				subcommand: subscriptionSubcommand,
+				refresh: flags.refresh === true,
+				json: globalFlags.json,
+			});
+			break;
+		}
+
+		case 'relay': {
+			await handleRelayCommand(subcommand, positionals);
 			break;
 		}
 
@@ -317,7 +351,7 @@ async function handleConfigureCommand(
 			// Show current config
 			const configDir = getConfigDir();
 			const config = await loadConfig();
-			
+
 			if (flags.all === true) {
 				console.log(`Config directory: ${configDir}`);
 				console.log('');
@@ -332,8 +366,41 @@ async function handleConfigureCommand(
 				if (config.defaultProject) {
 					console.log(`Default project: ${config.defaultProject}`);
 				}
+
+				// Show relays
+				console.log('');
+				console.log('Relays:');
 				if (config.relays && config.relays.length > 0) {
-					console.log(`Relays: ${config.relays.join(', ')}`);
+					for (const relay of config.relays) {
+						console.log(`  ${relay}`);
+					}
+				} else {
+					console.log('  (using defaults: relay.damus.io, nos.lol, relay.nostr.band)');
+				}
+
+				// Show subscription status if available
+				if (config.subscription?.status) {
+					console.log('');
+					const sub = config.subscription.status;
+					if (sub.active) {
+						const tierName =
+							sub.tier === 'cloud'
+								? 'Cloud'
+								: sub.tier === 'teams'
+									? 'Teams'
+									: sub.tier === 'enterprise'
+										? 'Enterprise'
+										: 'Unknown';
+						console.log(`Subscription: ${tierName}`);
+						if (sub.relayUrl) {
+							console.log(`  Managed relay: ${sub.relayUrl}`);
+						}
+						if (sub.daysRemaining !== undefined) {
+							console.log(`  Days remaining: ${sub.daysRemaining}`);
+						}
+					} else {
+						console.log('Subscription: Free');
+					}
 				}
 			}
 			break;
@@ -344,9 +411,7 @@ async function handleConfigureCommand(
 /**
  * Handle the me/whoami command
  */
-async function handleMeCommand(
-	globalFlags: { json: boolean; silent: boolean },
-): Promise<void> {
+async function handleMeCommand(globalFlags: { json: boolean; silent: boolean }): Promise<void> {
 	const { getAuth } = await import('./lib/config');
 	const { decodeNsec } = await import('./lib/crypto');
 	const { getPublicKey } = await import('nostr-tools/pure');
@@ -407,6 +472,148 @@ async function handleMeCommand(
 			console.log(JSON.stringify({ authenticated: false }));
 		} else {
 			console.log('Authentication method not fully configured.');
+		}
+	}
+}
+
+/**
+ * Handle the relay command
+ */
+async function handleRelayCommand(
+	subcommand: string | undefined,
+	positionals: string[],
+): Promise<void> {
+	const { loadConfig, saveConfig, getRelays } = await import('./lib/config');
+
+	const urls = positionals;
+
+	// Validate relay URLs
+	const validateUrl = (url: string): boolean => {
+		try {
+			const parsed = new URL(url);
+			return parsed.protocol === 'wss:' || parsed.protocol === 'ws:';
+		} catch {
+			return false;
+		}
+	};
+
+	switch (subcommand) {
+		case 'add': {
+			if (urls.length === 0) {
+				console.error('Error: No relay URL provided');
+				console.error('Usage: redshift configure relay add <url>');
+				process.exit(1);
+			}
+
+			for (const url of urls) {
+				if (!validateUrl(url)) {
+					console.error(`Error: Invalid relay URL: ${url}`);
+					console.error('Relay URLs must start with wss:// or ws://');
+					process.exit(1);
+				}
+			}
+
+			const config = await loadConfig();
+			const currentRelays = config.relays || [];
+			const newRelays = [...new Set([...currentRelays, ...urls])];
+			config.relays = newRelays;
+			await saveConfig(config);
+
+			console.log('Added relay(s):');
+			for (const url of urls) {
+				console.log(`  ${url}`);
+			}
+			break;
+		}
+
+		case 'remove': {
+			if (urls.length === 0) {
+				console.error('Error: No relay URL provided');
+				console.error('Usage: redshift configure relay remove <url>');
+				process.exit(1);
+			}
+
+			const config = await loadConfig();
+			const currentRelays = config.relays || [];
+			const newRelays = currentRelays.filter((r) => !urls.includes(r));
+
+			if (newRelays.length === currentRelays.length) {
+				console.log('No matching relays found to remove.');
+				return;
+			}
+
+			if (newRelays.length > 0) {
+				config.relays = newRelays;
+			} else {
+				delete config.relays;
+			}
+			await saveConfig(config);
+
+			console.log('Removed relay(s):');
+			for (const url of urls) {
+				if (currentRelays.includes(url)) {
+					console.log(`  ${url}`);
+				}
+			}
+			break;
+		}
+
+		case 'set': {
+			if (urls.length === 0) {
+				console.error('Error: No relay URLs provided');
+				console.error('Usage: redshift configure relay set <url1> [url2] ...');
+				process.exit(1);
+			}
+
+			for (const url of urls) {
+				if (!validateUrl(url)) {
+					console.error(`Error: Invalid relay URL: ${url}`);
+					console.error('Relay URLs must start with wss:// or ws://');
+					process.exit(1);
+				}
+			}
+
+			const config = await loadConfig();
+			config.relays = urls;
+			await saveConfig(config);
+
+			console.log('Set relays to:');
+			for (const url of urls) {
+				console.log(`  ${url}`);
+			}
+			break;
+		}
+
+		case 'reset': {
+			const config = await loadConfig();
+			delete config.relays;
+			await saveConfig(config);
+			console.log('Relays reset to defaults.');
+
+			const defaults = await getRelays();
+			console.log('Default relays:');
+			for (const url of defaults) {
+				console.log(`  ${url}`);
+			}
+			break;
+		}
+
+		default: {
+			// No action or unknown action - list current relays
+			const relays = await getRelays();
+			const config = await loadConfig();
+			const isCustom = config.relays && config.relays.length > 0;
+
+			console.log(isCustom ? 'Configured relays:' : 'Default relays:');
+			for (const url of relays) {
+				console.log(`  ${url}`);
+			}
+
+			if (!isCustom) {
+				console.log('');
+				console.log('Use `redshift relay set <url>` to customize.');
+			}
+			break;
 		}
 	}
 }
