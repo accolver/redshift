@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.10.0](https://github.com/accolver/redshift/compare/v0.9.0...v0.10.0) (2025-12-09)
+
+
+### Features
+
+* add OpenSpec framework for spec-driven development ([c8baab6](https://github.com/accolver/redshift/commit/c8baab6feb1287ed92d947841d9dca6f19bcce27))
+* **web:** add pricing page with tiered plans ([8fe8bba](https://github.com/accolver/redshift/commit/8fe8bba783f93fd516b535a18de31b3f8a680b65))
+
+
+### Bug Fixes
+
+* **web:** add @redshift/crypto to Vite optimizeDeps ([09d47a7](https://github.com/accolver/redshift/commit/09d47a7b2027e4cc3b3b3b9120ea4756e3c186e2))
+* **web:** align pricing features with spec and Telos framework ([d2a02c1](https://github.com/accolver/redshift/commit/d2a02c14cb71b5ac5e656ece79f67692aad68acf))
+* **web:** fix global search navigation URL and add arrow key support ([202b9c1](https://github.com/accolver/redshift/commit/202b9c1df829b59aa5bf5ae2201e92e277122c05))
+* **web:** match admin navbar spacing to public navbar ([41aabf6](https://github.com/accolver/redshift/commit/41aabf699bb15c4f1de44c297c8332080e56b764))
+* **web:** restore global search to search secrets using Gift Wrap decryption ([078903e](https://github.com/accolver/redshift/commit/078903e35441a7729a6f186bda3c25d5c1b03227))
+
 ## [0.9.0](https://github.com/accolver/redshift/compare/v0.8.0...v0.9.0) (2025-12-08)
 
 
