@@ -25,17 +25,9 @@ import { CircleCheck } from '@lucide/svelte';
 
 		<ProseHeading level={2} id="package-managers">Package Managers</ProseHeading>
 
-		<ProseHeading level={3} id="npm-bun">npm / Bun</ProseHeading>
-		<p>If you prefer using a JavaScript package manager:</p>
-		<CodeBlock code={`# Using npm
-npm install -g @redshift/cli
-
-# Using bun
-bun add -g @redshift/cli`} language="bash" />
-
-		<ProseHeading level={3} id="homebrew">Homebrew (macOS)</ProseHeading>
-		<p>Coming soon:</p>
-		<CodeBlock code="brew install redshift" language="bash" />
+		<p class="text-tokyo-gray">
+			Package manager support (npm, Homebrew) is coming soon. For now, use the install script above or download from GitHub releases.
+		</p>
 
 		<ProseHeading level={2} id="manual-installation">Manual Installation</ProseHeading>
 		<p>
@@ -72,10 +64,6 @@ sudo mv redshift-* /usr/local/bin/redshift`} language="bash" />
 			<div class="flex items-center gap-3">
 				<CircleCheck class="size-5 text-tokyo-green" />
 				<span>Windows 10+ with WSL2</span>
-			</div>
-			<div class="flex items-center gap-3">
-				<CircleCheck class="size-5 text-tokyo-green" />
-				<span>Node.js 18+ (only for npm installation)</span>
 			</div>
 		</div>
 
