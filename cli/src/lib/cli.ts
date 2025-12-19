@@ -521,9 +521,7 @@ export class CLI {
 /**
  * Extract global flags from parsed values
  */
-function extractGlobalFlags(
-	values: Record<string, string | boolean | undefined>,
-): GlobalFlags {
+function extractGlobalFlags(values: Record<string, string | boolean | undefined>): GlobalFlags {
 	return {
 		help: values.help === true,
 		version: values.version === true,
@@ -635,6 +633,8 @@ export function createCLI(version: string): CLI {
 	cli.registerCommand(createConfigureCommand());
 	cli.registerCommand(createMeCommand());
 	cli.registerCommand(createUpgradeCommand());
+	cli.registerCommand(createSubscriptionCommand());
+	cli.registerCommand(createRelayCommand());
 
 	return cli;
 }
@@ -710,10 +710,7 @@ function createSetupCommand(): CommandDef {
 	return {
 		name: 'setup',
 		description: 'Setup the Redshift CLI for managing secrets',
-		examples: [
-			'redshift setup',
-			'redshift setup --project backend --config dev',
-		],
+		examples: ['redshift setup', 'redshift setup --project backend --config dev'],
 		flags: {
 			project: {
 				type: 'string',
@@ -781,8 +778,7 @@ function createRunCommand(): CommandDef {
 			},
 			mount: {
 				type: 'string',
-				description:
-					'write secrets to an ephemeral file, accessible at REDSHIFT_CLI_SECRETS_PATH',
+				description: 'write secrets to an ephemeral file, accessible at REDSHIFT_CLI_SECRETS_PATH',
 				placeholder: 'path',
 			},
 			'mount-format': {
@@ -880,10 +876,7 @@ function createSecretsCommand(): CommandDef {
 			get: {
 				name: 'get',
 				description: 'Get the value of one or more secrets',
-				examples: [
-					'redshift secrets get API_KEY',
-					'redshift secrets get API_KEY CRYPTO_KEY',
-				],
+				examples: ['redshift secrets get API_KEY', 'redshift secrets get API_KEY CRYPTO_KEY'],
 				positionals: [
 					{
 						name: 'secrets',
@@ -1101,11 +1094,7 @@ function createUpgradeCommand(): CommandDef {
 		name: 'upgrade',
 		description: 'Update the Redshift CLI',
 		aliases: ['update'],
-		examples: [
-			'redshift upgrade',
-			'redshift upgrade --force',
-			'redshift upgrade --tag v0.3.0',
-		],
+		examples: ['redshift upgrade', 'redshift upgrade --force', 'redshift upgrade --tag v0.3.0'],
 		flags: {
 			force: {
 				type: 'boolean',
@@ -1117,6 +1106,113 @@ function createUpgradeCommand(): CommandDef {
 				short: 't',
 				description: 'install a specific version (e.g., v0.2.0)',
 				placeholder: 'version',
+			},
+		},
+	};
+}
+
+function createSubscriptionCommand(): CommandDef {
+	return {
+		name: 'subscription',
+		description: 'Manage your Cloud subscription',
+		aliases: ['sub'],
+		examples: [
+			'redshift subscription',
+			'redshift subscription status',
+			'redshift subscription upgrade',
+			'redshift sub status --refresh',
+		],
+		flags: {
+			refresh: {
+				type: 'boolean',
+				short: 'r',
+				description: 'force refresh from API (skip cache)',
+			},
+		},
+		subcommands: {
+			status: {
+				name: 'status',
+				description: 'Show current subscription status',
+				examples: [
+					'redshift subscription status',
+					'redshift subscription status --json',
+					'redshift subscription status --refresh',
+				],
+				flags: {
+					refresh: {
+						type: 'boolean',
+						short: 'r',
+						description: 'force refresh from API (skip cache)',
+					},
+				},
+			},
+			upgrade: {
+				name: 'upgrade',
+				description: 'Open browser to upgrade or renew subscription',
+				examples: ['redshift subscription upgrade'],
+			},
+		},
+	};
+}
+
+function createRelayCommand(): CommandDef {
+	return {
+		name: 'relay',
+		description: 'Manage Nostr relay configuration',
+		examples: [
+			'redshift relay',
+			'redshift relay add wss://relay.example.com',
+			'redshift relay remove wss://relay.example.com',
+			'redshift relay set wss://relay1.com wss://relay2.com',
+			'redshift relay reset',
+		],
+		subcommands: {
+			add: {
+				name: 'add',
+				description: 'Add one or more relays to the configuration',
+				examples: [
+					'redshift relay add wss://relay.example.com',
+					'redshift relay add wss://relay1.com wss://relay2.com',
+				],
+				positionals: [
+					{
+						name: 'urls',
+						description: 'Relay URL(s) to add',
+						required: true,
+						variadic: true,
+					},
+				],
+			},
+			remove: {
+				name: 'remove',
+				description: 'Remove one or more relays from the configuration',
+				examples: ['redshift relay remove wss://relay.example.com'],
+				positionals: [
+					{
+						name: 'urls',
+						description: 'Relay URL(s) to remove',
+						required: true,
+						variadic: true,
+					},
+				],
+			},
+			set: {
+				name: 'set',
+				description: 'Replace all relays with the specified list',
+				examples: ['redshift relay set wss://relay1.com wss://relay2.com'],
+				positionals: [
+					{
+						name: 'urls',
+						description: 'Relay URL(s) to use',
+						required: true,
+						variadic: true,
+					},
+				],
+			},
+			reset: {
+				name: 'reset',
+				description: 'Reset relays to default configuration',
+				examples: ['redshift relay reset'],
 			},
 		},
 	};

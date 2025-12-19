@@ -4,10 +4,7 @@
 	"description": "Decentralized, censorship-resistant secret management platform",
 	"type": "module",
 	"private": true,
-	"workspaces": [
-		"packages/*",
-		"web"
-	],
+	"workspaces": ["packages/*", "web"],
 	"bin": {
 		"redshift": "./dist/redshift"
 	},
@@ -48,19 +45,13 @@
 		"typescript": "^5.0.0"
 	},
 	"dependencies": {
+		"@redshift/cloud": "workspace:*",
 		"@redshift/crypto": "workspace:*",
 		"exponential-backoff": "^3.1.3",
 		"nostr-tools": "^2.18.2",
 		"yaml": "^2.8.2"
 	},
-	"keywords": [
-		"secrets",
-		"nostr",
-		"decentralized",
-		"cli",
-		"doppler",
-		"environment-variables"
-	],
+	"keywords": ["secrets", "nostr", "decentralized", "cli", "doppler", "environment-variables"],
 	"author": "",
 	"license": "MIT",
 	"repository": {

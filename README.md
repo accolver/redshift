@@ -10,6 +10,7 @@ Decentralized, censorship-resistant secret management built on
 - **Nostr-based** - Your keys, your data. No vendor lock-in
 - **Doppler-compatible CLI** - Familiar commands like `redshift run`
 - **Censorship-resistant** - Distributed across Nostr relays
+- **Free & Open Source** - MIT licensed, self-host everything
 
 ## Quick Start
 
@@ -58,6 +59,30 @@ When creating a project in the web UI, you'll set:
 - **Display Name** - Human-readable name (can be changed later)
 - **Slug** - Immutable identifier used by the CLI (lowercase, hyphens only)
 
+## Pricing
+
+Redshift is **free and open source** for individual developers.
+
+| Tier       | Price       | Features                                           |
+| ---------- | ----------- | -------------------------------------------------- |
+| Free       | $0          | Unlimited projects, CLI, web admin, any relay      |
+| Cloud      | $5/month    | Managed relay, automatic backups, 7-day audit logs |
+| Teams      | Coming soon | Team sharing, RBAC, SAML SSO                       |
+| Enterprise | Coming soon | SSO Bridge, SCIM, SOC2 compliance                  |
+
+Cloud subscriptions are paid with **Bitcoin** (on-chain or Lightning) via BTCPay
+Server - no credit card or personal info required.
+
+```bash
+# Check your subscription status
+redshift subscription status
+
+# Upgrade to Cloud
+redshift subscription upgrade
+```
+
+See [redshiftapp.com/pricing](https://redshiftapp.com/pricing) for details.
+
 ## Development
 
 ```bash
@@ -82,11 +107,14 @@ bun run build:all
 
 ```
 redshift/
-├── cli/              # CLI source code
-├── web/              # SvelteKit web dashboard
-├── packages/crypto/  # Shared NIP-59 Gift Wrap encryption
-├── dist/             # Built binaries
-└── .github/          # CI/CD workflows
+├── cli/               # CLI source code
+├── web/               # SvelteKit web dashboard
+├── packages/
+│   ├── crypto/        # Shared NIP-59 Gift Wrap encryption
+│   ├── cloud/         # Cloud tier access tokens & audit events
+│   └── payments/      # BTCPay Server integration
+├── dist/              # Built binaries
+└── .github/           # CI/CD workflows
 ```
 
 ## Release

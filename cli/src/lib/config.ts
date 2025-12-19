@@ -12,6 +12,21 @@ import { deleteNsecFromKeychain, getNsecFromKeychain } from './keychain';
 import type { AuthMethod, BunkerAuth, RedshiftConfig } from './types';
 
 /**
+ * Cached subscription data stored in config
+ */
+export interface CachedSubscription {
+	status: {
+		active: boolean;
+		tier?: 'cloud' | 'teams' | 'enterprise';
+		expiresAt?: number;
+		daysRemaining?: number;
+		relayUrl?: string;
+	};
+	fetchedAt: number;
+	pubkey: string;
+}
+
+/**
  * Global Redshift configuration stored in ~/.redshift/config.json
  */
 export interface Config {
@@ -25,6 +40,8 @@ export interface Config {
 	relays?: string[];
 	/** Default project ID */
 	defaultProject?: string;
+	/** Cached subscription status */
+	subscription?: CachedSubscription;
 }
 
 /**

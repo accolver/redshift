@@ -1,0 +1,24 @@
+{
+	"$schema": "https://json.schemastore.org/wrangler",
+	"name": "redshift-web",
+	"main": ".svelte-kit/cloudflare/_worker.js",
+	"compatibility_date": "2025-01-01",
+	"compatibility_flags": ["nodejs_compat"],
+
+	// Static assets configuration
+	"assets": {
+		"binding": "ASSETS",
+		"directory": ".svelte-kit/cloudflare"
+	},
+
+	// Environment variables (secrets should be set via wrangler secret)
+	"vars": {
+		"BTCPAY_URL": "https://btcpay.redshiftapp.com"
+	}
+
+	// Secrets to be set via `wrangler secret put`:
+	// - BTCPAY_API_KEY
+	// - BTCPAY_STORE_ID
+	// - BTCPAY_WEBHOOK_SECRET
+	// - RELAY_OPERATOR_NSEC
+}

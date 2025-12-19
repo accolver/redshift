@@ -14,6 +14,13 @@ import {
 	validateSecretValue,
 } from '../lib/validation';
 import { requireAuth } from './login';
+import {
+	auditSecretCreate,
+	auditSecretUpdate,
+	auditSecretDelete,
+	auditSecretRead,
+	auditSecretUpload,
+} from '../lib/audit';
 
 export type SecretsSubcommand = 'list' | 'get' | 'set' | 'delete' | 'download' | 'upload';
 
@@ -113,7 +120,14 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 					console.error(formatValidationError('secret value', setValueValidation));
 					process.exit(1);
 				}
-				await setSecret(manager, projectId, environment, options.key, options.value);
+				await setSecret(
+					manager,
+					projectId,
+					environment,
+					options.key,
+					options.value,
+					auth.privateKey,
+				);
 				break;
 			}
 
@@ -128,16 +142,16 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 					console.error(formatValidationError('secret key', deleteKeyValidation));
 					process.exit(1);
 				}
-				await deleteSecret(manager, projectId, environment, options.key);
+				await deleteSecret(manager, projectId, environment, options.key, auth.privateKey);
 				break;
 			}
 
 			case 'download':
-				await downloadSecrets(manager, projectId, environment, options);
+				await downloadSecrets(manager, projectId, environment, options, auth.privateKey);
 				break;
 
 			case 'upload':
-				await uploadSecrets(manager, projectId, environment, options.key);
+				await uploadSecrets(manager, projectId, environment, options.key, auth.privateKey);
 				break;
 
 			default:
@@ -237,9 +251,13 @@ async function setSecret(
 	environment: string,
 	key: string,
 	value: string,
+	privateKey: Uint8Array,
 ): Promise<void> {
 	// Fetch existing secrets
 	const existingSecrets = (await manager.fetchSecrets(projectId, environment)) || {};
+
+	// Check if this is an update or create
+	const isUpdate = key in existingSecrets;
 
 	// Store value as string (environment variables are always strings)
 	const updatedSecrets = mergeSecrets(existingSecrets, { [key]: value });
@@ -248,6 +266,13 @@ async function setSecret(
 	await manager.publishSecrets(projectId, environment, updatedSecrets);
 
 	console.log(`✓ Set ${key} in ${projectId}/${environment}`);
+
+	// Audit the operation (async, non-blocking)
+	if (isUpdate) {
+		auditSecretUpdate(privateKey, projectId, environment, key).catch(() => {});
+	} else {
+		auditSecretCreate(privateKey, projectId, environment, key).catch(() => {});
+	}
 }
 
 /**
@@ -258,6 +283,7 @@ async function deleteSecret(
 	projectId: string,
 	environment: string,
 	key: string,
+	privateKey: Uint8Array,
 ): Promise<void> {
 	// Fetch existing secrets
 	const existingSecrets = (await manager.fetchSecrets(projectId, environment)) || {};
@@ -275,6 +301,9 @@ async function deleteSecret(
 	await manager.publishSecrets(projectId, environment, updatedSecrets);
 
 	console.log(`✓ Deleted ${key} from ${projectId}/${environment}`);
+
+	// Audit the deletion (async, non-blocking)
+	auditSecretDelete(privateKey, projectId, environment, key).catch(() => {});
 }
 
 /**
@@ -285,6 +314,7 @@ async function downloadSecrets(
 	projectId: string,
 	environment: string,
 	_options: SecretsOptions,
+	privateKey: Uint8Array,
 ): Promise<void> {
 	const secrets = await manager.fetchSecrets(projectId, environment);
 
@@ -299,6 +329,9 @@ async function downloadSecrets(
 		const escaped = strValue.replace(/"/g, '\\"').replace(/\n/g, '\\n');
 		console.log(`${key}="${escaped}"`);
 	}
+
+	// Audit the download (async, non-blocking)
+	auditSecretRead(privateKey, projectId, environment, 'Downloaded secrets via CLI').catch(() => {});
 }
 
 /**
@@ -308,7 +341,8 @@ async function uploadSecrets(
 	manager: SecretManager,
 	projectId: string,
 	environment: string,
-	filePath?: string,
+	filePath: string | undefined,
+	privateKey: Uint8Array,
 ): Promise<void> {
 	// Default to .env in current directory
 	const envFile = filePath || '.env';
@@ -358,6 +392,16 @@ async function uploadSecrets(
 	await manager.publishSecrets(projectId, environment, updatedSecrets);
 
 	console.log(`✓ Uploaded ${newKeys.length} secrets from ${envFile}`);
+
+	// Audit the upload (async, non-blocking)
+	auditSecretUpload(
+		privateKey,
+		projectId,
+		environment,
+		newKeys.length,
+		addedKeys,
+		overwrittenKeys,
+	).catch(() => {});
 }
 
 /**
