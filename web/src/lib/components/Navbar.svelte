@@ -5,6 +5,7 @@ import { Button } from '$lib/components/ui/button';
 const navLinks = [
 	{ href: '/docs', label: 'Docs' },
 	{ href: '/pricing', label: 'Pricing' },
+	{ href: '/blog', label: 'Blog' },
 	{ href: 'https://github.com/accolver/redshift', label: 'GitHub', external: true },
 ];
 

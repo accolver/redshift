@@ -461,6 +461,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 			<div class="flex gap-8 text-sm text-foreground/60">
 				<a href="/docs" class="transition-colors hover:text-foreground">Documentation</a>
 				<a href="/pricing" class="transition-colors hover:text-foreground">Pricing</a>
+				<a href="/blog" class="transition-colors hover:text-foreground">Blog</a>
 				<a
 					href="https://github.com/accolver/redshift"
 					target="_blank"
