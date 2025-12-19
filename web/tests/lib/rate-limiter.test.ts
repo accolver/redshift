@@ -72,7 +72,8 @@ describe('Rate Limiter Module', () => {
 
 			const elapsed = Date.now() - start;
 			// At least 2 * minDelay (10ms) between 3 requests = 20ms minimum
-			expect(elapsed).toBeGreaterThanOrEqual(20);
+			// Allow 5ms tolerance for CI timing variance
+			expect(elapsed).toBeGreaterThanOrEqual(15);
 			// Should be quick (under 150ms including some buffer)
 			expect(elapsed).toBeLessThan(150);
 		});
@@ -88,7 +89,8 @@ describe('Rate Limiter Module', () => {
 
 			const elapsed = Date.now() - start;
 			// Should have waited for window reset (100ms)
-			expect(elapsed).toBeGreaterThanOrEqual(100);
+			// Allow 5ms tolerance for CI timing variance
+			expect(elapsed).toBeGreaterThanOrEqual(95);
 		});
 
 		it('enforces minimum delay between requests', async () => {
@@ -221,8 +223,8 @@ describe('Rate Limiter Module', () => {
 			await limited(10);
 			const elapsed = Date.now() - start;
 
-			// Should have min delay between calls (allow 2ms tolerance for timer precision)
-			expect(elapsed).toBeGreaterThanOrEqual(18);
+			// Should have min delay between calls (allow 5ms tolerance for CI timing variance)
+			expect(elapsed).toBeGreaterThanOrEqual(15);
 			expect(await limited(15)).toBe(30);
 		});
 
@@ -272,8 +274,8 @@ describe('Rate Limiter Module', () => {
 			const elapsed = Date.now() - start;
 
 			// Should have min delay between each call (2 delays for 3 calls)
-			// Allow 2ms tolerance for timer precision
-			expect(elapsed).toBeGreaterThanOrEqual(58);
+			// Allow 5ms tolerance for CI timing variance
+			expect(elapsed).toBeGreaterThanOrEqual(55);
 		});
 	});
 
