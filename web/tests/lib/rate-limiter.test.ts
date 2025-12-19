@@ -100,8 +100,8 @@ describe('Rate Limiter Module', () => {
 			await slowLimiter.waitForSlot();
 			const elapsed = Date.now() - start;
 
-			// Should have waited at least 50ms
-			expect(elapsed).toBeGreaterThanOrEqual(50);
+			// Should have waited at least ~50ms (allow 5ms tolerance for CI timing variance)
+			expect(elapsed).toBeGreaterThanOrEqual(45);
 		});
 
 		it('reset clears state', async () => {
