@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.11.0](https://github.com/accolver/redshift/compare/v0.10.0...v0.11.0) (2025-12-21)
+
+
+### Features
+
+* **cli:** add --environment/-e as alias for --config/-c ([2a43a11](https://github.com/accolver/redshift/commit/2a43a11bcc8bb360b612e2e6340c5c27537feec5))
+* **web:** add blog with 12 SEO-optimized articles ([c86ee49](https://github.com/accolver/redshift/commit/c86ee49fbc6f947b6ddcaf2480b0ecb5ecdafb26))
+
+
+### Bug Fixes
+
+* **docs:** remove unavailable npm/brew install instructions ([6509f56](https://github.com/accolver/redshift/commit/6509f5623c2e5ebbb56fa18875b835c89b5f7b6c))
+* ensure web dependencies are installed before build ([3450b30](https://github.com/accolver/redshift/commit/3450b304d0834f08617cb773e77727994ca5d08e))
+* **web:** add missing @sveltejs/adapter-cloudflare dependency ([b687784](https://github.com/accolver/redshift/commit/b687784acfe258ee076c7e1b43dbbf140d829bfe))
+* **web:** add timing tolerance to all rate limiter tests for CI ([ce5033c](https://github.com/accolver/redshift/commit/ce5033c33f2dd78a235f6075230f67f6bbe58a25))
+* **web:** add tolerance to rate limiter timing test for CI ([db03ed2](https://github.com/accolver/redshift/commit/db03ed29b6a5a73d1ca0df13bfd6a9d585f68629))
+* **web:** move _headers to web root for Cloudflare adapter ([f2dff45](https://github.com/accolver/redshift/commit/f2dff45d7315b18da93f37b29150976c78a7ca95))
+* **web:** simplify to always use Cloudflare adapter ([aba02d4](https://github.com/accolver/redshift/commit/aba02d4b78b54b65845226976636e2c0012a9516))
+* **web:** use Cloudflare adapter when building on CF Pages ([37ef97b](https://github.com/accolver/redshift/commit/37ef97bba8f811a1cba5ca6db6c57b1ec0a8595a))
+* **web:** use conditional adapter for static (CLI) vs Cloudflare builds ([c25c935](https://github.com/accolver/redshift/commit/c25c935319632a3cbb9f2c713f4f13043df43a9b))
+
 ## [0.10.0](https://github.com/accolver/redshift/compare/v0.9.0...v0.10.0) (2025-12-09)
 
 
