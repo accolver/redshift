@@ -1,10 +1,13 @@
 {
 	"name": "redshift",
-	"version": "0.10.0",
+	"version": "0.11.0",
 	"description": "Decentralized, censorship-resistant secret management platform",
 	"type": "module",
 	"private": true,
-	"workspaces": ["packages/*", "web"],
+	"workspaces": [
+		"packages/*",
+		"web"
+	],
 	"bin": {
 		"redshift": "./dist/redshift"
 	},
