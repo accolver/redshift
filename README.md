@@ -1,7 +1,7 @@
 # Redshift
 
 Decentralized, censorship-resistant secret management built on
-[Nostr](https://nostr.com).
+[Nostr](https://nostr.com). Learn more at [redshiftapp.com](https://redshiftapp.com).
 
 ## Features
 
