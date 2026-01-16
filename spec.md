@@ -541,8 +541,8 @@ through "Convenience & Enterprise" layers.
     - Serverless, globally distributed relay
     - Automatic encrypted backups to Cloudflare R2
     - 7-day audit logs
-    - BTCPay Server payments (Lightning via Voltage Cloud LND, on-chain BTC)
-  - _Cost:_ $5/month.
+    - Lightning payments via nostr-zap
+  - _Cost:_ 12,121 sats (one-time).
   - _See:_ `CLOUD_TIER_PLAN.md` for detailed implementation plan.
 - **Tier 2: Teams & RBAC ($20/user/month)**
   - _Problem:_ Sharing secrets securely among 5+ developers is hard with a
@@ -670,7 +670,7 @@ redshift bunker backup         # Encrypted key backup
 
 | Tier           | Price                             | Target                 | Key Features                                             |
 | -------------- | --------------------------------- | ---------------------- | -------------------------------------------------------- |
-| **Cloud**      | $5/mo                             | Individual devs        | Managed relay, 7-day logs, 99.5% uptime                  |
+| **Cloud**      | 12,121 sats (one-time)            | Individual devs        | Managed relay, 7-day logs, 99.5% uptime                  |
 | **Teams**      | $20/user/mo                       | Startups (5-50 people) | Bunker orchestrator, RBAC, 90-day logs, SAML SSO         |
 | **Enterprise** | Custom (~$500/mo base + per-seat) | Large orgs             | SSO Bridge, SCIM, unlimited logs, SIEM, SOC2, 99.95% SLA |
 

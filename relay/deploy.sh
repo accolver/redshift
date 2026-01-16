@@ -1,0 +1,358 @@
+#!/bin/bash
+set -e
+
+# Redshift Relay Deployment Script (Idempotent)
+# Usage: ./deploy.sh <CLOUDFLARE_API_TOKEN>
+#
+# This script is idempotent - safe to run multiple times:
+# - Database: Created once, reused on subsequent runs
+# - Config files: Always updated with latest settings
+# - Worker: Created or updated as needed
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NOSFLARE_DIR="$SCRIPT_DIR/nosflare"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_skip() { echo -e "${CYAN}[SKIP]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_step() { echo -e "${BLUE}[STEP]${NC} $1"; }
+
+# API token is required (wrangler needs it in non-interactive/script mode)
+if [ -z "$1" ]; then
+    log_error "Usage: ./deploy.sh <CLOUDFLARE_API_TOKEN>"
+    echo ""
+    echo "Create a token at https://dash.cloudflare.com/profile/api-tokens"
+    echo ""
+    echo "Required permissions:"
+    echo "  Account:"
+    echo "    - Workers Scripts: Edit"
+    echo "    - D1: Edit"
+    echo "    - Account Settings: Read"
+    echo "  Zone (All zones or specific zone):"
+    echo "    - Workers Routes: Edit"
+    echo "    - DNS: Edit"
+    echo ""
+    echo "Tip: Use the 'Edit Cloudflare Workers' template and add D1:Edit + Account Settings:Read"
+    exit 1
+fi
+
+export CLOUDFLARE_API_TOKEN="$1"
+
+# Verify we're in the right directory
+if [ ! -d "$NOSFLARE_DIR" ]; then
+    log_error "Nosflare directory not found at $NOSFLARE_DIR"
+    exit 1
+fi
+
+cd "$NOSFLARE_DIR"
+log_info "Working directory: $NOSFLARE_DIR"
+
+echo ""
+log_step "1/8 Checking prerequisites..."
+
+if ! command -v node &> /dev/null; then
+    log_error "Node.js is not installed. Please install Node.js v18+"
+    exit 1
+fi
+
+NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+if [ "$NODE_VERSION" -lt 18 ]; then
+    log_error "Node.js v18+ required. Current version: $(node -v)"
+    exit 1
+fi
+log_info "Node.js $(node -v) OK"
+
+# Install wrangler if not present
+if command -v wrangler &> /dev/null; then
+    log_skip "Wrangler CLI already installed"
+else
+    log_info "Installing Wrangler CLI..."
+    npm install -g wrangler
+fi
+log_info "Wrangler $(wrangler --version 2>/dev/null | head -1)"
+
+echo ""
+log_step "2/8 Verifying Cloudflare authentication..."
+
+AUTH_RESPONSE=$(curl -s "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+
+if ! echo "$AUTH_RESPONSE" | grep -q '"success":true'; then
+    log_error "API token verification failed"
+    echo "$AUTH_RESPONSE" | head -5
+    exit 1
+fi
+log_info "API token verified"
+
+# Quick check for account access (tests Account Settings: Read permission)
+ACCOUNT_CHECK=$(curl -s "https://api.cloudflare.com/client/v4/accounts" \
+    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+
+if ! echo "$ACCOUNT_CHECK" | grep -q '"success":true'; then
+    log_error "Token cannot access account info. Missing 'Account Settings: Read' permission?"
+    echo "$ACCOUNT_CHECK" | head -5
+    exit 1
+fi
+log_info "Account access verified"
+
+echo ""
+log_step "3/8 Installing dependencies..."
+
+if [ -d "node_modules" ] && [ -f "package-lock.json" ]; then
+    log_skip "Dependencies already installed (node_modules exists)"
+    log_info "Running npm install to check for updates..."
+fi
+npm install --silent
+log_info "Dependencies up to date"
+
+echo ""
+log_step "4/8 Setting up D1 database..."
+
+DB_NAME="redshift-relay-db"
+
+# List existing databases
+log_info "Checking for existing database '$DB_NAME'..."
+DB_LIST=$(wrangler d1 list 2>&1) || true
+
+# Check if our database exists
+if echo "$DB_LIST" | grep -q "$DB_NAME"; then
+    log_skip "Database '$DB_NAME' already exists"
+    # Extract ID from list output - format varies, try to find UUID on same line as DB_NAME
+    DB_ID=$(echo "$DB_LIST" | grep "$DB_NAME" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+else
+    log_info "Creating D1 database: $DB_NAME"
+    DB_OUTPUT=$(wrangler d1 create "$DB_NAME" 2>&1) || {
+        log_error "Failed to create database"
+        echo "$DB_OUTPUT"
+        exit 1
+    }
+    echo "$DB_OUTPUT"
+
+    # Extract database ID - look for UUID pattern
+    DB_ID=$(echo "$DB_OUTPUT" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+fi
+
+if [ -z "$DB_ID" ]; then
+    log_error "Could not extract database ID automatically."
+    echo ""
+    log_info "Database list output:"
+    echo "$DB_LIST"
+    echo ""
+    log_info "Please find your database ID in the Cloudflare dashboard."
+    log_info "Then manually update nosflare/wrangler.toml with the database_id"
+    exit 1
+fi
+
+log_info "Using database ID: $DB_ID"
+
+echo ""
+log_step "5/8 Updating wrangler.toml..."
+
+cat > wrangler.toml << EOF
+# Redshift Relay Configuration
+# Auto-generated by deploy.sh - safe to regenerate
+name = "redshift-relay"
+compatibility_date = "2025-01-04"
+main = "worker.js"
+
+# Durable Objects binding
+[[durable_objects.bindings]]
+name = "RELAY_WEBSOCKET"
+class_name = "RelayWebSocket"
+
+# D1 Database binding
+[[d1_databases]]
+binding = "RELAY_DATABASE"
+database_name = "$DB_NAME"
+database_id = "$DB_ID"
+
+# Cron trigger for 24hr database maintenance
+[triggers]
+crons = ["0 0 * * *"]
+
+# Disable logs
+[observability.logs]
+enabled = false
+
+# IMPORTANT: SQLite migration required for free plan
+[[migrations]]
+tag = "v4"
+new_sqlite_classes = ["RelayWebSocket"]
+EOF
+
+log_info "wrangler.toml updated"
+
+echo ""
+log_step "6/8 Updating src/config.ts..."
+
+cat > src/config.ts << 'CONFIGEOF'
+import { RelayInfo } from './types';
+
+// Redshift Relay Configuration
+// Auto-generated by deploy.sh - safe to regenerate
+// Specialized relay for encrypted secrets storage (NIP-59 Gift Wrapped NIP-78 events)
+
+// Pay to relay - One-time payment via Lightning zaps
+export const relayNpub = "npub1nyxg7ps82r86u0gunspsn8u8uuskh6sut77tulcqljue7rr7m6hquzh9ph";
+export const PAY_TO_RELAY_ENABLED = true;
+export const RELAY_ACCESS_PRICE_SATS = 12121;
+
+// NIP-42 Authentication - REQUIRED for paid relay access
+export const AUTH_REQUIRED = true;
+export const AUTH_TIMEOUT_MS = 600000; // 10 minutes
+
+// Relay info
+export const relayInfo: RelayInfo = {
+  name: "Redshift Cloud Relay",
+  description: "Managed relay for Redshift Cloud subscribers. Encrypted secrets storage only.",
+  pubkey: "990c8f060750cfae3d1c9c03099f87e7216bea1c5fbcbe7f00fcb99f0c7edeae",
+  contact: "support@redshiftapp.com",
+  supported_nips: [1, 9, 11, 33, 40, 42, 59, 78],
+  software: "https://github.com/Spl0itable/nosflare",
+  version: "8.0.0",
+  icon: "https://redshiftapp.com/logo-dark.png",
+  privacy_policy: "https://redshiftapp.com/relay/privacy-policy",
+  terms_of_service: "https://redshiftapp.com/relay/terms-of-service",
+
+  limitation: {
+    max_message_length: 524288,
+    max_subscriptions: 100,
+    max_limit: 1000,
+    max_event_tags: 100,
+    max_content_length: 70000,
+    auth_required: AUTH_REQUIRED,
+    payment_required: false,
+    restricted_writes: true,
+  },
+};
+
+// NIP-05 users - not used
+export const nip05Users: Record<string, string> = {};
+
+// Anti-spam
+export const enableAntiSpam = true;
+export const enableGlobalDuplicateCheck = false;
+export const antiSpamKinds = new Set([1059, 30078]);
+
+// Access control - handled via NIP-42 + external token validation
+export const blockedPubkeys = new Set<string>([]);
+export const allowedPubkeys = new Set<string>([]);
+export const blockedEventKinds = new Set<number>([]);
+
+// IMPORTANT: Only allow our specific event kinds
+export const allowedEventKinds = new Set<number>([
+  1059,  // NIP-59 Gift Wrap
+  30078, // NIP-78 App Data
+]);
+
+export const blockedContent = new Set<string>([]);
+export const checkValidNip05 = false;
+export const blockedNip05Domains = new Set<string>([]);
+export const allowedNip05Domains = new Set<string>([]);
+export const blockedTags = new Set<string>([]);
+export const allowedTags = new Set<string>([]);
+
+// Rate limiting
+export const PUBKEY_RATE_LIMIT = { rate: 50 / 60000, capacity: 50 };
+export const REQ_RATE_LIMIT = { rate: 500 / 60000, capacity: 500 };
+export const excludedRateLimitKinds = new Set<number>([3, 10002]);
+
+// Database pruning
+export const DB_PRUNING_ENABLED = true;
+export const DB_SIZE_THRESHOLD_GB = 9;
+export const DB_PRUNE_BATCH_SIZE = 1000;
+export const DB_PRUNE_TARGET_GB = 8;
+export const pruneProtectedKinds = new Set<number>([0, 3, 10002, 30078]);
+
+// Helper functions
+import { NostrEvent } from './types';
+
+export function isPubkeyAllowed(pubkey: string): boolean {
+  if (allowedPubkeys.size > 0 && !allowedPubkeys.has(pubkey)) return false;
+  return !blockedPubkeys.has(pubkey);
+}
+
+export function isEventKindAllowed(kind: number): boolean {
+  if (allowedEventKinds.size > 0 && !allowedEventKinds.has(kind)) return false;
+  return !blockedEventKinds.has(kind);
+}
+
+export function containsBlockedContent(event: NostrEvent): boolean {
+  const lowercaseContent = (event.content || "").toLowerCase();
+  const lowercaseTags = event.tags.map(tag => tag.join("").toLowerCase());
+  for (const blocked of blockedContent) {
+    const blockedLower = blocked.toLowerCase();
+    if (lowercaseContent.includes(blockedLower) || lowercaseTags.some(tag => tag.includes(blockedLower))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function isTagAllowed(tag: string): boolean {
+  if (allowedTags.size > 0 && !allowedTags.has(tag)) return false;
+  return !blockedTags.has(tag);
+}
+CONFIGEOF
+
+log_info "src/config.ts updated"
+
+echo ""
+log_step "7/8 Building worker.js..."
+
+# Need to install esbuild if not present
+if ! command -v esbuild &> /dev/null && ! [ -f "node_modules/.bin/esbuild" ]; then
+    log_info "Installing esbuild..."
+    npm install --save-dev esbuild --silent
+fi
+
+npm run build || {
+    log_error "Build failed. Check the output above for errors."
+    exit 1
+}
+log_info "worker.js built successfully"
+
+echo ""
+log_step "8/8 Deploying to Cloudflare..."
+
+# Check if worker already exists
+WORKER_LIST=$(wrangler deployments list 2>&1) || true
+if echo "$WORKER_LIST" | grep -q "redshift-relay"; then
+    log_info "Updating existing worker 'redshift-relay'..."
+else
+    log_info "Creating new worker 'redshift-relay'..."
+fi
+
+wrangler deploy || {
+    log_error "Deployment failed. Check the output above for errors."
+    exit 1
+}
+
+echo ""
+echo "=========================================="
+echo -e "${GREEN}  Deployment successful!${NC}"
+echo "=========================================="
+echo ""
+echo "Relay URL: https://redshift-relay.<your-subdomain>.workers.dev"
+echo ""
+echo "Next steps (if first deployment):"
+echo ""
+echo "1. Visit the relay URL to initialize the database tables"
+echo ""
+echo "2. Add custom domain in Cloudflare Dashboard:"
+echo "   Workers & Pages → redshift-relay → Settings → Domains & Routes"
+echo "   Add: relay.redshiftapp.com"
+echo ""
+echo "3. (Optional) Set relay operator pubkey in src/config.ts"
+echo ""
+echo -e "${CYAN}This script is idempotent - safe to run again to update config.${NC}"
+echo ""

@@ -133,7 +133,7 @@ Everything an individual developer needs:
 already yours. This tier uses the decentralized Nostr network—we have no
 infrastructure costs to pass on.
 
-#### Tier 1: Redshift Cloud ($5/month)
+#### Tier 1: Redshift Cloud (12,121 sats one-time)
 
 **Value: Reliability without maintenance**
 
@@ -199,7 +199,7 @@ These principles are enforced by the Telos Guardian (L9) and cannot be violated:
 | Tier       | Target Segment         | Est. Users | Monthly Revenue |
 | ---------- | ---------------------- | ---------- | --------------- |
 | Free       | Individual devs        | 10,000     | $0              |
-| Cloud      | Solo professionals     | 500        | $2,500          |
+| Cloud      | Solo professionals     | 500        | ~$2,500 (one-time) |
 | Teams      | Startups (avg 5 users) | 50 teams   | $5,000          |
 | Enterprise | Companies              | 5          | $10,000+        |
 
