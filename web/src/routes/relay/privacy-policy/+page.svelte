@@ -36,7 +36,7 @@ import { Shield, Eye, EyeOff, Server, Lock, Globe, Mail } from '@lucide/svelte';
 			<div>
 				<p class="font-semibold text-tokyo-green">Key Principle: We Cannot Access Your Secrets</p>
 				<p class="mt-1 text-muted-foreground">
-					All Redshift data is encrypted client-side before it reaches our servers.
+					All Redshift data is encrypted client-side using NIP-44 (XChaCha20-Poly1305) before it reaches our servers.
 					We only store and transmit encrypted blobs. This is enforced cryptographically, not by policy.
 				</p>
 			</div>
@@ -103,7 +103,7 @@ import { Shield, Eye, EyeOff, Server, Lock, Globe, Mail } from '@lucide/svelte';
 			</div>
 
 			<h3 id="information-we-cannot-see">2.2 Information We Cannot See</h3>
-			<p>Due to NIP-59 Gift Wrap encryption, we <strong>cannot access</strong>:</p>
+			<p>Due to <a href="https://github.com/nostr-protocol/nips/blob/master/59.md" target="_blank" rel="noopener">NIP-59</a> Gift Wrap encryption (using <a href="https://github.com/nostr-protocol/nips/blob/master/44.md" target="_blank" rel="noopener">NIP-44</a> XChaCha20-Poly1305), we <strong>cannot access</strong>:</p>
 
 			<div class="not-prose my-6 grid gap-3 sm:grid-cols-2">
 				<div class="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
@@ -194,7 +194,8 @@ import { Shield, Eye, EyeOff, Server, Lock, Globe, Mail } from '@lucide/svelte';
 
 			<h3 id="security-measures">4.2 Security Measures</h3>
 			<ul>
-				<li>End-to-end encryption (NIP-59 Gift Wrap)</li>
+				<li>End-to-end encryption (NIP-59 Gift Wrap with NIP-44 XChaCha20-Poly1305)</li>
+				<li>NIP-78 Kind 30078 events for application data storage</li>
 				<li>NIP-42 authentication required for all operations</li>
 				<li>Rate limiting to prevent abuse</li>
 				<li>Automatic encrypted backups</li>
@@ -227,8 +228,8 @@ import { Shield, Eye, EyeOff, Server, Lock, Globe, Mail } from '@lucide/svelte';
 							<td class="px-4 py-3 text-muted-foreground">30 days</td>
 						</tr>
 						<tr class="border-b border-border/50">
-							<td class="px-4 py-3">Audit logs</td>
-							<td class="px-4 py-3 text-muted-foreground">7 days</td>
+							<td class="px-4 py-3">Audit logs <span class="ml-1 rounded bg-tokyo-blue/10 px-1.5 py-0.5 text-xs text-tokyo-blue">Cloud only</span></td>
+							<td class="px-4 py-3 text-muted-foreground">7 days rolling</td>
 							<td class="px-4 py-3 text-muted-foreground">Deleted immediately</td>
 						</tr>
 						<tr class="border-b border-border/50">

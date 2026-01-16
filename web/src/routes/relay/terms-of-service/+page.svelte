@@ -40,7 +40,7 @@ import { FileText, Shield, CreditCard, AlertTriangle, Scale } from '@lucide/svel
 			</p>
 			<p>
 				The Redshift relay is a <strong>specialized Nostr relay</strong> designed exclusively for
-				storing encrypted application data (NIP-59 Gift Wrapped events) for Redshift
+				storing encrypted application data (NIP-59 Gift Wrapped <a href="https://github.com/nostr-protocol/nips/blob/master/78.md" target="_blank" rel="noopener">NIP-78</a> Kind 30078 events) for Redshift
 				Cloud subscribers. This is not a general-purpose social relay.
 			</p>
 		</section>
@@ -71,9 +71,9 @@ import { FileText, Shield, CreditCard, AlertTriangle, Scale } from '@lucide/svel
 				<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 					<Shield class="size-5 shrink-0 text-tokyo-green" />
 					<div>
-						<p class="font-medium leading-5">99.5% Uptime SLA</p>
+						<p class="font-medium leading-5">High Availability</p>
 						<p class="mt-1 text-sm text-muted-foreground">
-							For paid Cloud subscribers
+							Reliable infrastructure with monitoring
 						</p>
 					</div>
 				</div>
@@ -90,8 +90,9 @@ import { FileText, Shield, CreditCard, AlertTriangle, Scale } from '@lucide/svel
 
 			<h3 id="what-we-store">What We Store</h3>
 			<p>
-				We only store NIP-59 Gift Wrapped events (encrypted blobs) with the
-				<code>["t", "redshift-secrets"]</code> tag. <strong>We cannot access your secret names, values,
+				We only store NIP-59 Gift Wrapped events containing NIP-78 Kind 30078 inner events
+				(encrypted blobs) with the <code>["t", "redshift-secrets"]</code> tag. The encryption
+				uses NIP-44 (XChaCha20-Poly1305). <strong>We cannot access your secret names, values,
 				or metadata.</strong> All encryption and decryption happens client-side.
 			</p>
 		</section>
@@ -185,9 +186,10 @@ import { FileText, Shield, CreditCard, AlertTriangle, Scale } from '@lucide/svel
 					<div>
 						<p class="font-medium leading-5 text-tokyo-green">Cryptographic Privacy</p>
 						<p class="mt-1 text-sm text-muted-foreground">
-							All Redshift secrets are encrypted client-side using NIP-59 Gift Wrap before
-							transmission. We have no ability to decrypt or access your plaintext data.
-							This is by design and fundamental to our security model.
+							All Redshift secrets are encrypted client-side using NIP-59 Gift Wrap with
+							NIP-44 encryption (XChaCha20-Poly1305) before transmission. We have no ability
+							to decrypt or access your plaintext data. This is by design and fundamental
+							to our security model.
 						</p>
 					</div>
 				</div>
@@ -204,11 +206,25 @@ import { FileText, Shield, CreditCard, AlertTriangle, Scale } from '@lucide/svel
 		<section>
 			<h2 id="service-availability">7. Service Availability</h2>
 
-			<h3 id="uptime-commitment">7.1 Uptime Commitment</h3>
+			<h3 id="uptime-target">7.1 Uptime Target</h3>
 			<p>
-				We commit to 99.5% uptime for the relay service, measured monthly. This equates
-				to a maximum of approximately 3.6 hours of downtime per month.
+				We strive to maintain high availability for the relay service. While we do not
+				offer a formal SLA with the Cloud tier, we monitor uptime and work to resolve
+				any issues promptly.
 			</p>
+			<div class="not-prose my-6">
+				<div class="flex items-start gap-3 rounded-lg border border-tokyo-purple/30 bg-tokyo-purple/5 p-4">
+					<Shield class="size-5 shrink-0 text-tokyo-purple" />
+					<div>
+						<p class="font-medium leading-5 text-tokyo-purple">Enterprise SLA</p>
+						<p class="mt-1 text-sm text-muted-foreground">
+							Formal uptime SLAs with contractual guarantees and service credits will be
+							available with the Enterprise tier. Details will be published when Enterprise
+							launches.
+						</p>
+					</div>
+				</div>
+			</div>
 
 			<h3 id="maintenance">7.2 Maintenance</h3>
 			<p>
@@ -252,8 +268,8 @@ import { FileText, Shield, CreditCard, AlertTriangle, Scale } from '@lucide/svel
 							<td class="px-4 py-3 text-muted-foreground">30 days after subscription expires</td>
 						</tr>
 						<tr class="border-b border-border/50">
-							<td class="px-4 py-3">Audit logs</td>
-							<td class="px-4 py-3 text-muted-foreground">7 days (Cloud tier feature)</td>
+							<td class="px-4 py-3">Audit logs <span class="ml-1 rounded bg-tokyo-blue/10 px-1.5 py-0.5 text-xs text-tokyo-blue">Cloud only</span></td>
+							<td class="px-4 py-3 text-muted-foreground">7 days rolling window</td>
 						</tr>
 					</tbody>
 				</table>
