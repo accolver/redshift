@@ -7,7 +7,7 @@
     </linearGradient>
   </defs>
   <!-- White background -->
-  <rect width="168" height="64" fill="#ffffff" rx="8"/>
+  <rect width="168" height="64" fill="#ffffff"/>
   <!-- Icon scaled and positioned -->
   <g transform="translate(10, 8) scale(0.375)">
     <!-- Back chevron (shifted/offset) -->
