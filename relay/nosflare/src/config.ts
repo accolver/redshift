@@ -5,7 +5,7 @@ import { RelayInfo } from './types';
 // Specialized relay for encrypted secrets storage (NIP-59 Gift Wrapped NIP-78 events)
 
 // Pay to relay - One-time payment via Lightning zaps
-export const relayNpub = "npub1nyxg7ps82r86u0gunspsn8u8uuskh6sut77tulcqljue7rr7m6hquzh9ph";
+export const relayNpub = "npub14lcrmzysc0fsxyf46c60mmw7a3jj6akc9zewl0futhjrplqhu6uslc4x3q";
 export const PAY_TO_RELAY_ENABLED = true;
 export const RELAY_ACCESS_PRICE_SATS = 12121;
 
@@ -17,7 +17,7 @@ export const AUTH_TIMEOUT_MS = 600000; // 10 minutes
 export const relayInfo: RelayInfo = {
   name: "Redshift Cloud Relay",
   description: "Managed relay for Redshift Cloud subscribers. Encrypted secrets storage only.",
-  pubkey: "990c8f060750cfae3d1c9c03099f87e7216bea1c5fbcbe7f00fcb99f0c7edeae",
+  pubkey: "aff03d8890c3d3031135d634fdeddeec652d76d828b2efbd3c5de430fc17e6b9",
   contact: "support@redshiftapp.com",
   supported_nips: [1, 9, 11, 33, 40, 42, 59, 78],
   software: "https://github.com/Spl0itable/nosflare",
