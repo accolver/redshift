@@ -410,6 +410,20 @@ async function savePaidPubkey(pubkey: string, env: Env): Promise<boolean> {
   }
 }
 
+// TEST ONLY: Delete a pubkey from paid list (for payment testing)
+async function deletePaidPubkey(pubkey: string, env: Env): Promise<boolean> {
+  try {
+    const session = env.RELAY_DATABASE.withSession('first-primary');
+    await session.prepare(
+      "DELETE FROM paid_pubkeys WHERE pubkey = ?"
+    ).bind(pubkey).run();
+    return true;
+  } catch (error) {
+    console.error(`Error deleting paid pubkey ${pubkey}:`, error);
+    return false;
+  }
+}
+
 // Fetches kind 0 event from fallback relay
 function fetchEventFromFallbackRelay(pubkey: string): Promise<NostrEvent | null> {
   return new Promise((resolve, reject) => {
@@ -1797,9 +1811,9 @@ function serveLandingPage(): Response {
         }
 
         .logo {
-            max-width: 400px;
-            width: 100%;
-            height: auto;
+            width: 400px;
+            height: 152px;
+            max-width: 100%;
             margin-bottom: 1rem;
         }
 
@@ -1952,7 +1966,7 @@ function serveLandingPage(): Response {
 </head>
 <body>
     <div class="container">
-        <img src="${relayInfo.icon || 'https://nosflare.com/images/nosflare.png'}" alt="${relayInfo.name}" class="logo">
+        <img src="${relayInfo.icon || 'https://nosflare.com/images/nosflare.png'}" alt="${relayInfo.name}" class="logo" width="400" height="152">
         <p class="tagline">${relayInfo.description}</p>
 
         ${paySection}
@@ -2164,6 +2178,32 @@ async function handleCheckPayment(request: Request, env: Env): Promise<Response>
 
   return new Response(JSON.stringify({ paid }), {
     status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    }
+  });
+}
+
+// TEST ONLY: Reset payment status for a pubkey
+async function handleResetPayment(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const pubkey = url.searchParams.get('pubkey');
+
+  if (!pubkey) {
+    return new Response(JSON.stringify({ error: 'Missing pubkey' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  const deleted = await deletePaidPubkey(pubkey, env);
+
+  return new Response(JSON.stringify({
+    success: deleted,
+    message: deleted ? 'Payment status reset' : 'Failed to reset payment'
+  }), {
+    status: deleted ? 200 : 500,
     headers: {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*'
@@ -2494,6 +2534,11 @@ export default {
 
       if (url.pathname === "/api/check-payment" && PAY_TO_RELAY_ENABLED) {
         return await handleCheckPayment(request, env);
+      }
+
+      // TEST ONLY: Reset payment status (remove before production)
+      if (url.pathname === "/api/reset-payment" && PAY_TO_RELAY_ENABLED) {
+        return await handleResetPayment(request, env);
       }
 
       // Main endpoints

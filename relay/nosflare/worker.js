@@ -3075,6 +3075,19 @@ async function savePaidPubkey(pubkey, env) {
   }
 }
 __name(savePaidPubkey, "savePaidPubkey");
+async function deletePaidPubkey(pubkey, env) {
+  try {
+    const session = env.RELAY_DATABASE.withSession("first-primary");
+    await session.prepare(
+      "DELETE FROM paid_pubkeys WHERE pubkey = ?"
+    ).bind(pubkey).run();
+    return true;
+  } catch (error) {
+    console.error(`Error deleting paid pubkey ${pubkey}:`, error);
+    return false;
+  }
+}
+__name(deletePaidPubkey, "deletePaidPubkey");
 function fetchEventFromFallbackRelay(pubkey) {
   return new Promise((resolve, reject) => {
     const fallbackRelayUrl = "wss://relay.nostr.band";
@@ -4169,9 +4182,9 @@ function serveLandingPage() {
         }
 
         .logo {
-            max-width: 400px;
-            width: 100%;
-            height: auto;
+            width: 400px;
+            height: 152px;
+            max-width: 100%;
             margin-bottom: 1rem;
         }
 
@@ -4324,7 +4337,7 @@ function serveLandingPage() {
 </head>
 <body>
     <div class="container">
-        <img src="${relayInfo2.icon || "https://nosflare.com/images/nosflare.png"}" alt="${relayInfo2.name}" class="logo">
+        <img src="${relayInfo2.icon || "https://nosflare.com/images/nosflare.png"}" alt="${relayInfo2.name}" class="logo" width="400" height="152">
         <p class="tagline">${relayInfo2.description}</p>
 
         ${paySection}
@@ -4536,6 +4549,28 @@ async function handleCheckPayment(request, env) {
   });
 }
 __name(handleCheckPayment, "handleCheckPayment");
+async function handleResetPayment(request, env) {
+  const url = new URL(request.url);
+  const pubkey = url.searchParams.get("pubkey");
+  if (!pubkey) {
+    return new Response(JSON.stringify({ error: "Missing pubkey" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  const deleted = await deletePaidPubkey(pubkey, env);
+  return new Response(JSON.stringify({
+    success: deleted,
+    message: deleted ? "Payment status reset" : "Failed to reset payment"
+  }), {
+    status: deleted ? 200 : 500,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*"
+    }
+  });
+}
+__name(handleResetPayment, "handleResetPayment");
 async function handlePaymentNotification(request, env) {
   if (request.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
@@ -4970,6 +5005,9 @@ var relay_worker_default = {
       }
       if (url.pathname === "/api/check-payment" && PAY_TO_RELAY_ENABLED2) {
         return await handleCheckPayment(request, env);
+      }
+      if (url.pathname === "/api/reset-payment" && PAY_TO_RELAY_ENABLED2) {
+        return await handleResetPayment(request, env);
       }
       if (url.pathname === "/") {
         if (request.headers.get("Upgrade") === "websocket") {
