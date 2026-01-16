@@ -28,6 +28,116 @@ export const DEFAULT_RELAYS = [
 	'wss://relay.nostr.band',
 ];
 
+// Managed relay for Cloud tier subscribers
+export const MANAGED_RELAY = 'wss://relay.redshiftapp.com';
+export const MANAGED_RELAY_API = 'https://relay.redshiftapp.com';
+
+// Cache for payment status to avoid repeated API calls
+let paymentStatusCache: { pubkey: string; paid: boolean; checkedAt: number } | null = null;
+const PAYMENT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Track if we've synced secrets to managed relay this session
+let hasSyncedToManagedRelay = false;
+
+/**
+ * Check if a pubkey has paid for managed relay access
+ */
+export async function checkManagedRelayAccess(pubkey: string): Promise<boolean> {
+	// Check cache first
+	if (
+		paymentStatusCache &&
+		paymentStatusCache.pubkey === pubkey &&
+		Date.now() - paymentStatusCache.checkedAt < PAYMENT_CACHE_TTL
+	) {
+		return paymentStatusCache.paid;
+	}
+
+	try {
+		const response = await fetch(`${MANAGED_RELAY_API}/api/check-payment?pubkey=${pubkey}`);
+		if (!response.ok) return false;
+
+		const data = await response.json();
+		const paid = data.paid === true;
+
+		// Cache the result
+		paymentStatusCache = { pubkey, paid, checkedAt: Date.now() };
+
+		return paid;
+	} catch (error) {
+		console.error('Error checking managed relay access:', error);
+		return false;
+	}
+}
+
+/**
+ * Get relays for a user, including managed relay if they have access
+ */
+export async function getRelaysForUser(pubkey: string): Promise<string[]> {
+	const hasAccess = await checkManagedRelayAccess(pubkey);
+
+	if (hasAccess) {
+		// Put managed relay first for priority
+		return [MANAGED_RELAY, ...DEFAULT_RELAYS];
+	}
+
+	return DEFAULT_RELAYS;
+}
+
+/**
+ * Sync all existing secrets to the managed relay
+ * Called when user has paid for managed relay access
+ */
+export async function syncSecretsToManagedRelay(): Promise<{ synced: number; errors: number }> {
+	if (hasSyncedToManagedRelay) {
+		console.log('Already synced to managed relay this session');
+		return { synced: 0, errors: 0 };
+	}
+
+	let synced = 0;
+	let errors = 0;
+
+	// Get all events from the EventStore
+	// Gift-wrapped secrets (kind 1059) and Redshift app data (kind 30078)
+	const allEvents = eventStore.database.getAll();
+
+	const secretEvents = allEvents.filter(
+		(event) => event.kind === 1059 || event.kind === REDSHIFT_KIND,
+	);
+
+	console.log(`Syncing ${secretEvents.length} events to managed relay...`);
+
+	// Publish each event to the managed relay
+	for (const event of secretEvents) {
+		try {
+			await rateLimiter.waitForSlot();
+			await relayPool.publish([MANAGED_RELAY], event);
+			synced++;
+		} catch (error) {
+			console.error(`Failed to sync event ${event.id} to managed relay:`, error);
+			errors++;
+		}
+	}
+
+	hasSyncedToManagedRelay = true;
+	console.log(`Synced ${synced} events to managed relay (${errors} errors)`);
+
+	return { synced, errors };
+}
+
+/**
+ * Reset the sync flag (e.g., when user disconnects)
+ */
+export function resetManagedRelaySync(): void {
+	hasSyncedToManagedRelay = false;
+}
+
+/**
+ * Clear the payment status cache (for testing)
+ */
+export function clearPaymentCache(): void {
+	paymentStatusCache = null;
+}
+
 // Single EventStore instance for the entire app
 export const eventStore = new EventStore();
 
@@ -44,12 +154,16 @@ interface RelayState {
 	status: RelayStatus;
 	connectedCount: number;
 	totalCount: number;
+	relays: string[];
+	hasManagedAccess: boolean;
 }
 
 let relayState = $state<RelayState>({
 	status: 'disconnected',
 	connectedCount: 0,
 	totalCount: 0,
+	relays: [],
+	hasManagedAccess: false,
 });
 
 /**
@@ -69,10 +183,13 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 	}
 
 	// Update relay state
+	const hasManagedAccess = relays.includes(MANAGED_RELAY);
 	relayState = {
 		status: 'connecting',
 		connectedCount: 0,
 		totalCount: relays.length,
+		relays,
+		hasManagedAccess,
 	};
 
 	// Subscribe to:
@@ -132,7 +249,11 @@ export function disconnect(): void {
 		status: 'disconnected',
 		connectedCount: 0,
 		totalCount: 0,
+		relays: [],
+		hasManagedAccess: false,
 	};
+	// Reset sync flag so next session will sync again
+	resetManagedRelaySync();
 }
 
 /**

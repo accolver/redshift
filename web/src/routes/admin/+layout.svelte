@@ -15,6 +15,9 @@ import {
 	disconnect as nostrDisconnect,
 	getRelayState,
 	DEFAULT_RELAYS,
+	getRelaysForUser,
+	MANAGED_RELAY,
+	syncSecretsToManagedRelay,
 } from '$lib/stores/nostr.svelte';
 import { nip19 } from 'nostr-tools';
 import GlobalSearch from '$lib/components/GlobalSearch.svelte';
@@ -84,8 +87,23 @@ $effect(() => {
 		const lastPubkey = untrack(() => lastConnectedPubkey);
 		if (lastPubkey !== pubkey) {
 			lastConnectedPubkey = pubkey;
-			// Connect to relays and start syncing
-			connectAndSync(pubkey);
+			// Connect to relays (check for managed relay access first)
+			(async () => {
+				const relays = await getRelaysForUser(pubkey);
+				const hasManagedAccess = relays.includes(MANAGED_RELAY);
+				connectAndSync(pubkey, relays);
+
+				// If user has managed relay access, sync existing secrets after initial load
+				if (hasManagedAccess) {
+					// Wait for initial sync from other relays before republishing
+					setTimeout(async () => {
+						const result = await syncSecretsToManagedRelay();
+						if (result.synced > 0) {
+							console.log(`Synced ${result.synced} secrets to managed relay`);
+						}
+					}, 5000); // Wait 5 seconds for initial data load
+				}
+			})();
 			// Subscribe to projects from EventStore
 			subscribeToProjects();
 		}
@@ -234,13 +252,21 @@ function getDisplayName(pubkey: string): string {
 									<span class="text-xs {relayStatusInfo().textColor}">{relayStatusInfo().label}</span>
 								</div>
 								<div class="space-y-1.5">
-									{#each DEFAULT_RELAYS as relay}
+									{#each relayState.relays.length > 0 ? relayState.relays : DEFAULT_RELAYS as relay}
 										<div class="flex items-center gap-2 text-xs">
 											<span class="flex size-1.5 rounded-full {relayState.status === 'connected' ? 'bg-green-500' : 'bg-muted-foreground/40'}"></span>
 											<span class="truncate text-muted-foreground">{relay.replace('wss://', '')}</span>
+											{#if relay === MANAGED_RELAY}
+												<span class="rounded bg-tokyo-purple/20 px-1 py-0.5 text-[10px] text-tokyo-purple">Cloud</span>
+											{/if}
 										</div>
 									{/each}
 								</div>
+								{#if relayState.hasManagedAccess}
+									<div class="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">
+										<span class="text-tokyo-purple">✓</span> Cloud relay active
+									</div>
+								{/if}
 							</div>
 						{/if}
 					</div>
