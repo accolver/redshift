@@ -90,6 +90,10 @@ function shouldHighlight(tier: typeof tiers[number]) {
 							<span class="text-muted-foreground"> forever</span>
 						{:else if tier.price === null}
 							<span class="text-4xl font-bold">Custom</span>
+						{:else if tier.name === 'Cloud'}
+							<span class="text-4xl font-bold">12,121</span>
+							<span class="text-muted-foreground"> sats</span>
+							<div class="text-sm text-muted-foreground">one-time payment</div>
 						{:else}
 							<span class="text-4xl font-bold">${tier.price}</span>
 							<span class="text-muted-foreground">
