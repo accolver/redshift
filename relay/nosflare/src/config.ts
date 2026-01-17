@@ -6,6 +6,7 @@ import { RelayInfo } from './types';
 
 // Pay to relay - One-time payment via Lightning zaps
 export const relayNpub = "npub14lcrmzysc0fsxyf46c60mmw7a3jj6akc9zewl0futhjrplqhu6uslc4x3q";
+export const relayLnAddress = "alan@minibits.cash";
 export const PAY_TO_RELAY_ENABLED = true;
 export const RELAY_ACCESS_PRICE_SATS = 12121;
 

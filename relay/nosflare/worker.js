@@ -66,9 +66,11 @@ __export(config_exports, {
   nip05Users: () => nip05Users,
   pruneProtectedKinds: () => pruneProtectedKinds,
   relayInfo: () => relayInfo,
+  relayLnAddress: () => relayLnAddress,
   relayNpub: () => relayNpub
 });
 var relayNpub = "npub14lcrmzysc0fsxyf46c60mmw7a3jj6akc9zewl0futhjrplqhu6uslc4x3q";
+var relayLnAddress = "alan@minibits.cash";
 var PAY_TO_RELAY_ENABLED = true;
 var RELAY_ACCESS_PRICE_SATS = 12121;
 var AUTH_REQUIRED = true;
@@ -2716,6 +2718,7 @@ var {
   PAY_TO_RELAY_ENABLED: PAY_TO_RELAY_ENABLED2,
   RELAY_ACCESS_PRICE_SATS: RELAY_ACCESS_PRICE_SATS2,
   relayNpub: relayNpub2,
+  relayLnAddress: relayLnAddress2,
   nip05Users: nip05Users2,
   enableAntiSpam: enableAntiSpam2,
   enableGlobalDuplicateCheck: enableGlobalDuplicateCheck2,
@@ -3075,19 +3078,6 @@ async function savePaidPubkey(pubkey, env) {
   }
 }
 __name(savePaidPubkey, "savePaidPubkey");
-async function deletePaidPubkey(pubkey, env) {
-  try {
-    const session = env.RELAY_DATABASE.withSession("first-primary");
-    await session.prepare(
-      "DELETE FROM paid_pubkeys WHERE pubkey = ?"
-    ).bind(pubkey).run();
-    return true;
-  } catch (error) {
-    console.error(`Error deleting paid pubkey ${pubkey}:`, error);
-    return false;
-  }
-}
-__name(deletePaidPubkey, "deletePaidPubkey");
 function fetchEventFromFallbackRelay(pubkey) {
   return new Promise((resolve, reject) => {
     const fallbackRelayUrl = "wss://relay.nostr.band";
@@ -4119,7 +4109,8 @@ function serveLandingPage() {
       <button id="payButton"
         class="subscribe-button"
         data-npub="${relayNpub2}"
-        data-relays="wss://relay.damus.io,wss://relay.primal.net,wss://nos.lol"
+        data-lnaddress="${relayLnAddress2}"
+        data-relays="wss://relay.damus.io,wss://relay.primal.net,wss://nos.lol,wss://relay.nostr.band,wss://purplepag.es"
         data-sats-amount="${RELAY_ACCESS_PRICE_SATS2}">
         Pay ${RELAY_ACCESS_PRICE_SATS2.toLocaleString()} sats \u26A1
       </button>
@@ -4549,28 +4540,6 @@ async function handleCheckPayment(request, env) {
   });
 }
 __name(handleCheckPayment, "handleCheckPayment");
-async function handleResetPayment(request, env) {
-  const url = new URL(request.url);
-  const pubkey = url.searchParams.get("pubkey");
-  if (!pubkey) {
-    return new Response(JSON.stringify({ error: "Missing pubkey" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" }
-    });
-  }
-  const deleted = await deletePaidPubkey(pubkey, env);
-  return new Response(JSON.stringify({
-    success: deleted,
-    message: deleted ? "Payment status reset" : "Failed to reset payment"
-  }), {
-    status: deleted ? 200 : 500,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*"
-    }
-  });
-}
-__name(handleResetPayment, "handleResetPayment");
 async function handlePaymentNotification(request, env) {
   if (request.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
@@ -5005,9 +4974,6 @@ var relay_worker_default = {
       }
       if (url.pathname === "/api/check-payment" && PAY_TO_RELAY_ENABLED2) {
         return await handleCheckPayment(request, env);
-      }
-      if (url.pathname === "/api/reset-payment" && PAY_TO_RELAY_ENABLED2) {
-        return await handleResetPayment(request, env);
       }
       if (url.pathname === "/") {
         if (request.headers.get("Upgrade") === "websocket") {

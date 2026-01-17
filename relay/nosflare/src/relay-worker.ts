@@ -9,6 +9,7 @@ const {
   PAY_TO_RELAY_ENABLED,
   RELAY_ACCESS_PRICE_SATS,
   relayNpub,
+  relayLnAddress,
   nip05Users,
   enableAntiSpam,
   enableGlobalDuplicateCheck,
@@ -406,20 +407,6 @@ async function savePaidPubkey(pubkey: string, env: Env): Promise<boolean> {
     return true;
   } catch (error) {
     console.error(`Error saving paid pubkey ${pubkey}:`, error);
-    return false;
-  }
-}
-
-// TEST ONLY: Delete a pubkey from paid list (for payment testing)
-async function deletePaidPubkey(pubkey: string, env: Env): Promise<boolean> {
-  try {
-    const session = env.RELAY_DATABASE.withSession('first-primary');
-    await session.prepare(
-      "DELETE FROM paid_pubkeys WHERE pubkey = ?"
-    ).bind(pubkey).run();
-    return true;
-  } catch (error) {
-    console.error(`Error deleting paid pubkey ${pubkey}:`, error);
     return false;
   }
 }
@@ -1745,7 +1732,8 @@ function serveLandingPage(): Response {
       <button id="payButton"
         class="subscribe-button"
         data-npub="${relayNpub}"
-        data-relays="wss://relay.damus.io,wss://relay.primal.net,wss://nos.lol"
+        data-lnaddress="${relayLnAddress}"
+        data-relays="wss://relay.damus.io,wss://relay.primal.net,wss://nos.lol,wss://relay.nostr.band,wss://purplepag.es"
         data-sats-amount="${RELAY_ACCESS_PRICE_SATS}">
         Pay ${RELAY_ACCESS_PRICE_SATS.toLocaleString()} sats ⚡
       </button>
@@ -2185,32 +2173,6 @@ async function handleCheckPayment(request: Request, env: Env): Promise<Response>
   });
 }
 
-// TEST ONLY: Reset payment status for a pubkey
-async function handleResetPayment(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const pubkey = url.searchParams.get('pubkey');
-
-  if (!pubkey) {
-    return new Response(JSON.stringify({ error: 'Missing pubkey' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-
-  const deleted = await deletePaidPubkey(pubkey, env);
-
-  return new Response(JSON.stringify({
-    success: deleted,
-    message: deleted ? 'Payment status reset' : 'Failed to reset payment'
-  }), {
-    status: deleted ? 200 : 500,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    }
-  });
-}
-
 async function handlePaymentNotification(request: Request, env: Env): Promise<Response> {
   if (request.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
@@ -2534,11 +2496,6 @@ export default {
 
       if (url.pathname === "/api/check-payment" && PAY_TO_RELAY_ENABLED) {
         return await handleCheckPayment(request, env);
-      }
-
-      // TEST ONLY: Reset payment status (remove before production)
-      if (url.pathname === "/api/reset-payment" && PAY_TO_RELAY_ENABLED) {
-        return await handleResetPayment(request, env);
       }
 
       // Main endpoints
