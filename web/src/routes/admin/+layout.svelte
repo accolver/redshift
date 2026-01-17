@@ -197,6 +197,9 @@ function getDisplayName(pubkey: string): string {
 							onblur={() => setTimeout(() => (dropdownOpen = false), 150)}
 						>
 							<span class="hidden text-sm sm:inline">{getDisplayName(auth.pubkey!)}</span>
+							{#if relayState.hasManagedAccess}
+								<span class="hidden rounded-full bg-gradient-to-r from-tokyo-green to-tokyo-cyan px-2 py-0.5 text-[10px] font-semibold text-tokyo-bg sm:inline">Cloud</span>
+							{/if}
 							{#if auth.profile?.picture}
 								<img
 									src={auth.profile.picture}
