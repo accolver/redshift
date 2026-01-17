@@ -1950,12 +1950,43 @@ function serveLandingPage(): Response {
         .toast.show {
             transform: translateY(0);
         }
+
+        .subscriber-badge {
+            display: none;
+            align-items: center;
+            gap: 0.5rem;
+            background: linear-gradient(135deg, var(--accent-green), #73daca);
+            color: var(--bg-dark);
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 10px rgba(158, 206, 106, 0.3);
+        }
+
+        .subscriber-badge.show {
+            display: inline-flex;
+        }
+
+        .subscriber-badge svg {
+            width: 16px;
+            height: 16px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <img src="${relayInfo.icon || 'https://nosflare.com/images/nosflare.png'}" alt="${relayInfo.name}" class="logo" width="400" height="152">
         <p class="tagline">${relayInfo.description}</p>
+
+        <div id="subscriberBadge" class="subscriber-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            Cloud Subscriber
+        </div>
 
         ${paySection}
         ${accessSection}
@@ -2035,19 +2066,25 @@ function serveLandingPage(): Response {
         function showRelayAccess() {
             const paySection = document.getElementById('paySection');
             const accessSection = document.getElementById('accessSection');
-            
+            const subscriberBadge = document.getElementById('subscriberBadge');
+
+            // Show the subscriber badge
+            if (subscriberBadge) {
+                subscriberBadge.classList.add('show');
+            }
+
             if (paySection && accessSection) {
                 paySection.style.transition = 'opacity 0.3s ease-out';
                 paySection.style.opacity = '0';
-                
+
                 setTimeout(() => {
                     paySection.style.display = 'none';
                     accessSection.style.display = 'block';
                     accessSection.style.opacity = '0';
                     accessSection.style.transition = 'opacity 0.3s ease-in';
-                    
+
                     void accessSection.offsetHeight;
-                    
+
                     accessSection.style.opacity = '1';
                 }, 300);
             }
@@ -2083,8 +2120,23 @@ function serveLandingPage(): Response {
             };
             document.head.appendChild(script);
             
+            // Initial check
             await checkPaymentStatus();
+
+            // Retry after nostr-login has time to initialize (for returning users)
+            setTimeout(async () => {
+                await checkPaymentStatus();
+            }, 1000);
         }
+
+        // Listen for nostr-login authentication events
+        document.addEventListener('nlAuth', async (e) => {
+            console.log('nostr-login auth event:', e.detail);
+            if (e.detail.type === 'login' || e.detail.type === 'signup') {
+                // User just logged in, check their payment status
+                await checkPaymentStatus();
+            }
+        });
 
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initPayment);
