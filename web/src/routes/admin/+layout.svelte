@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onMount, untrack } from 'svelte';
+import { goto } from '$app/navigation';
 import { Button } from '$lib/components/ui/button';
 import { ChevronDown, LogOut, Radio, Search, LoaderCircle } from '@lucide/svelte';
 import {
@@ -196,9 +197,6 @@ function getDisplayName(pubkey: string): string {
 							onclick={() => (dropdownOpen = !dropdownOpen)}
 							onblur={() => setTimeout(() => (dropdownOpen = false), 150)}
 						>
-							{#if relayState.hasManagedAccess}
-								<span class="hidden rounded-full bg-gradient-to-r from-tokyo-green to-tokyo-cyan px-2 py-0.5 text-[10px] font-semibold text-background sm:inline">Cloud</span>
-							{/if}
 							<span class="hidden text-sm sm:inline">{getDisplayName(auth.pubkey!)}</span>
 							{#if auth.profile?.picture}
 								<img
@@ -221,6 +219,7 @@ function getDisplayName(pubkey: string): string {
 									onclick={() => {
 										dropdownOpen = false;
 										authDisconnect();
+										goto('/');
 									}}
 								>
 									<LogOut class="size-4" />
@@ -233,6 +232,11 @@ function getDisplayName(pubkey: string): string {
 					<Button size="sm" onclick={() => (loginDialogOpen = true)}>
 						Connect
 					</Button>
+				{/if}
+
+				<!-- Cloud Tier Badge -->
+				{#if auth.isConnected && relayState.hasManagedAccess}
+					<span class="hidden rounded-full bg-gradient-to-r from-tokyo-green to-tokyo-cyan px-2 py-0.5 text-[10px] font-semibold text-background sm:inline">Cloud</span>
 				{/if}
 
 				<!-- Relay Status Indicator -->
