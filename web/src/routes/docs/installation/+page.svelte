@@ -29,6 +29,15 @@ import { CircleCheck } from '@lucide/svelte';
 			Package manager support (npm, Homebrew) is coming soon. For now, use the install script above or download from GitHub releases.
 		</p>
 
+		<ProseHeading level={2} id="build-from-source">Build from Source</ProseHeading>
+		<p>
+			Clone the <a href="https://github.com/accolver/redshift" target="_blank" rel="noopener">GitHub repository</a> and build with <a href="https://bun.sh" target="_blank" rel="noopener">Bun</a>:
+		</p>
+
+		<CodeBlock code={`git clone https://github.com/accolver/redshift.git
+cd redshift && bun install
+bun build cli/src/main.ts --compile --outfile ~/.local/bin/redshift`} language="bash" />
+
 		<ProseHeading level={2} id="manual-installation">Manual Installation</ProseHeading>
 		<p>
 			Download the appropriate binary for your platform from the 
@@ -44,7 +53,7 @@ import { CircleCheck } from '@lucide/svelte';
 
 		<p>Then make it executable and move to your PATH:</p>
 		<CodeBlock code={`chmod +x redshift-*
-sudo mv redshift-* /usr/local/bin/redshift`} language="bash" />
+mv redshift-* ~/.local/bin/redshift`} language="bash" />
 
 		<ProseHeading level={2} id="verify-installation">Verify Installation</ProseHeading>
 		<p>Confirm Redshift is installed correctly:</p>

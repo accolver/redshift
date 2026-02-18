@@ -11,6 +11,8 @@ import {
 	ChevronRight,
 	Home,
 	Menu,
+	Puzzle,
+	Bot,
 } from '@lucide/svelte';
 import * as Sheet from '$lib/components/ui/sheet';
 import { Button } from '$lib/components/ui/button';
@@ -44,6 +46,12 @@ const navSections = [
 			{ href: '/docs/auth/extension', label: 'Browser Extension', icon: Globe },
 			{ href: '/docs/auth/nsec', label: 'Private Key (nsec)', icon: Key },
 			{ href: '/docs/auth/bunker', label: 'Bunker (NIP-46)', icon: Shield },
+		],
+	},
+	{
+		title: 'Integrations',
+		items: [
+			{ href: '/docs/integrations/openclaw', label: 'OpenClaw', icon: Bot },
 		],
 	},
 	{
