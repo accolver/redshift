@@ -11,11 +11,30 @@ Decentralized, censorship-resistant secret management built on
 - **Doppler-compatible CLI** - Familiar commands like `redshift run`
 - **Censorship-resistant** - Distributed across Nostr relays
 
+## Installation
+
+```bash
+# Install script
+curl -fsSL https://redshiftapp.com/install | sh
+
+# Or build from source
+git clone https://github.com/accolver/redshift.git
+cd redshift && bun install
+bun build cli/src/main.ts --compile --outfile ~/.local/bin/redshift
+```
+
+### OpenClaw Skill
+
+If you use [OpenClaw](https://openclaw.ai), install the Redshift skill for
+natural-language secret management:
+
+```bash
+clawhub install redshift
+```
+
 ## Quick Start
 
 ```bash
-# Install CLI
-curl -fsSL https://redshiftapp.com/install | sh
 
 # Login with your Nostr identity
 redshift login
