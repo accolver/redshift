@@ -37,6 +37,15 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # IntelliJ based IDEs
 .idea
 
+# OpenClaw agent config (local to each user's setup)
+SOUL.md
+IDENTITY.md
+USER.md
+TOOLS.md
+HEARTBEAT.md
+BOOTSTRAP.md
+memory/
+
 # Finder (MacOS) folder config
 .DS_Store
 .applesauce-src
