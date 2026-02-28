@@ -341,7 +341,6 @@ function getNetworkAddress(): string {
  * Open the default browser to a URL.
  */
 function openBrowser(url: string): void {
-	const { exec } = require('node:child_process');
 	const platform = process.platform;
 
 	let cmd: string;
@@ -353,6 +352,7 @@ function openBrowser(url: string): void {
 		cmd = `xdg-open "${url}"`;
 	}
 
+	const { exec } = require('node:child_process');
 	exec(cmd, (err: Error | null) => {
 		if (err) {
 			console.log(`Could not open browser automatically. Visit: ${url}`);
