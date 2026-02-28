@@ -1,7 +1,4 @@
-import { exec } from 'node:child_process';
-import { networkInterfaces } from 'node:os';
 import { decodeContent, getEmbeddedFile, hasEmbeddedFiles } from '../lib/embedded-files';
-import { VERSION } from '../version';
 import { tryAuth } from './login';
 
 export interface ServeOptions {
@@ -201,6 +198,8 @@ const FALLBACK_HTML = `<!DOCTYPE html>
  * Starts a local web server for the admin UI.
  */
 export async function serveCommand(options: ServeOptions): Promise<void> {
+	// Lazy import to avoid module-level JSON import which can fail in some Bun versions
+	const { VERSION } = await import('../version');
 	const port = options.port || 3000;
 	const host = options.host || '127.0.0.1';
 
@@ -322,6 +321,7 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
  */
 function getNetworkAddress(): string {
 	try {
+		const { networkInterfaces } = require('node:os');
 		const nets = networkInterfaces();
 
 		for (const name of Object.keys(nets)) {
@@ -341,6 +341,7 @@ function getNetworkAddress(): string {
  * Open the default browser to a URL.
  */
 function openBrowser(url: string): void {
+	const { exec } = require('node:child_process');
 	const platform = process.platform;
 
 	let cmd: string;
