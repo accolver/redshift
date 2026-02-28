@@ -8,6 +8,7 @@ import { getRelays, loadProjectConfig } from '../lib/config';
 import { SecretManager, mergeSecrets } from '../lib/secret-manager';
 import {
 	formatValidationError,
+	redactValue,
 	validateEnvironment,
 	validateProjectId,
 	validateSecretKey,
@@ -448,7 +449,7 @@ function formatSecretValue(value: unknown, showRaw: boolean): string {
 			return value.length > 50 ? `${value.substring(0, 50)}...` : value;
 		}
 		// Redact by default
-		return value.length > 0 ? `${'*'.repeat(Math.min(value.length, 8))}` : '(empty)';
+		return value.length > 0 ? redactValue(value) : '(empty)';
 	}
 
 	if (typeof value === 'number' || typeof value === 'boolean') {

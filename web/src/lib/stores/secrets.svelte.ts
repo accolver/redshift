@@ -9,23 +9,27 @@
  * L4: Integration-Contractor - NIP-59 protocol compliance
  */
 
-import type { SecretsState, Secret } from '$lib/types/nostr';
-import type { Subscription } from 'rxjs';
-import { eventStore, publishEvent } from './nostr.svelte';
+import { type NostrEvent, createDTag, wrapSecrets, wrapSecretsWithSigner } from '$lib/crypto';
 import {
-	GiftWrapSecretsModel,
 	AllGiftWrapSecretsModel,
 	type Decryptor,
+	GiftWrapSecretsModel,
+	clearDecryptionCache,
+	createSharedDecryptionPipeline,
 } from '$lib/models/gift-wrap-secrets';
-import { calculateMissingSecrets, type MissingSecret } from '$lib/models/secrets';
+import { type MissingSecret, calculateMissingSecrets } from '$lib/models/secrets';
+import type { Secret, SecretsState } from '$lib/types/nostr';
+import type { Subscription } from 'rxjs';
 import {
 	getAuthState,
-	getPrivateKey,
-	supportsEncryption,
-	getEncryptFn,
 	getDecryptFn,
+	getEncryptFn,
+	getPrivateKey,
+	signEvent,
+	supportsEncryption,
 } from './auth.svelte';
-import { wrapSecrets, wrapSecretsWithSigner, createDTag, type NostrEvent } from '$lib/crypto';
+// signEvent is used in wrapSecretsForPublish to sign the NIP-59 seal
+import { eventStore, publishEvent } from './nostr.svelte';
 
 /**
  * Secrets state using $state rune
@@ -76,6 +80,31 @@ let cachedEncryptFn: ((pubkey: string, plaintext: string) => Promise<string>) | 
  * Cached private key for publishing (nsec only)
  */
 let cachedPrivateKey: Uint8Array | null = null;
+
+/**
+ * The pubkey and auth method that were active when credentials were cached.
+ * Used to detect auth changes and invalidate stale cached credentials.
+ */
+let cachedAuthPubkey: string | null = null;
+let cachedAuthMethod: string | null = null;
+
+/**
+ * Check if cached credentials are stale (auth changed since caching).
+ * If stale, clears all cached credentials so they'll be re-initialized.
+ */
+function invalidateStaleCachedCredentials(): void {
+	const auth = getAuthState();
+	if (
+		cachedAuthPubkey !== null &&
+		(auth.pubkey !== cachedAuthPubkey || auth.method !== cachedAuthMethod)
+	) {
+		cachedDecryptor = null;
+		cachedEncryptFn = null;
+		cachedPrivateKey = null;
+		cachedAuthPubkey = null;
+		cachedAuthMethod = null;
+	}
+}
 
 /**
  * Track active subscriptions
@@ -173,10 +202,12 @@ export async function subscribeToSecrets(
 		return;
 	}
 
-	// Cache credentials for publishing and decryption
+	// Cache credentials for publishing and decryption, along with the auth identity
 	cachedDecryptor = decryptor;
 	cachedPrivateKey = privateKey;
 	cachedEncryptFn = encryptFn;
+	cachedAuthPubkey = auth.pubkey;
+	cachedAuthMethod = auth.method;
 
 	// Skip if already subscribed to the same project/environment
 	if (
@@ -221,7 +252,10 @@ export async function subscribeToSecrets(
 
 				// Recalculate missing secrets when current env secrets change
 				if (allEnvSecretsState.size > 0) {
-					missingSecretsState.missing = calculateMissingSecrets(allEnvSecretsState, environmentSlug);
+					missingSecretsState.missing = calculateMissingSecrets(
+						allEnvSecretsState,
+						environmentSlug,
+					);
 				}
 			},
 			error: (err) => {
@@ -257,12 +291,17 @@ export async function subscribeToSecrets(
 		secretsState.secrets = allEnvSecretsState.get(environmentSlug) ?? [];
 	}
 
+	// Create a shared decryption pipeline so both subscriptions share
+	// a single decryption stream (via shareReplay), eliminating 2x decryption
+	const sharedPipeline = createSharedDecryptionPipeline(eventStore, decryptor);
+
 	// Subscribe to GiftWrapSecretsModel (decrypts Gift Wrap events)
 	subscription = GiftWrapSecretsModel(
 		eventStore,
 		decryptor,
 		projectSlug,
 		environmentSlug,
+		sharedPipeline,
 	).subscribe({
 		next: (secrets) => {
 			secretsState.secrets = secrets;
@@ -288,6 +327,7 @@ export async function subscribeToSecrets(
 			decryptor,
 			projectSlug,
 			currentEnvironmentSlugs,
+			sharedPipeline,
 		).subscribe({
 			next: (envMap) => {
 				allEnvSecretsState = envMap;
@@ -323,6 +363,11 @@ export function unsubscribeFromSecrets(): void {
 	cachedDecryptor = null;
 	cachedEncryptFn = null;
 	cachedPrivateKey = null;
+	cachedAuthPubkey = null;
+	cachedAuthMethod = null;
+
+	// Clear the decryption cache when switching users/sessions
+	clearDecryptionCache();
 }
 
 /**
@@ -350,6 +395,9 @@ async function wrapSecretsForPublish(
 	bundle: Record<string, string>,
 	dTag: string,
 ): Promise<NostrEvent> {
+	// Invalidate cached credentials if the auth identity has changed
+	invalidateStaleCachedCredentials();
+
 	const auth = getAuthState();
 
 	if (cachedPrivateKey) {
@@ -360,7 +408,31 @@ async function wrapSecretsForPublish(
 
 	if (cachedEncryptFn && auth.pubkey) {
 		// Use signer-based wrapping (NIP-07/bunker)
-		const { event } = await wrapSecretsWithSigner(bundle, auth.pubkey, dTag, cachedEncryptFn);
+		// Pass signEvent as the signFn so the seal is properly signed per NIP-59
+		const signerSignFn = async (evt: {
+			kind: number;
+			created_at: number;
+			tags: string[][];
+			content: string;
+		}) => {
+			const signed = await signEvent(evt as NostrEvent);
+			return signed as {
+				id: string;
+				pubkey: string;
+				created_at: number;
+				kind: number;
+				tags: string[][];
+				content: string;
+				sig: string;
+			};
+		};
+		const { event } = await wrapSecretsWithSigner(
+			bundle,
+			auth.pubkey,
+			dTag,
+			cachedEncryptFn,
+			signerSignFn,
+		);
 		return event;
 	}
 
@@ -374,6 +446,9 @@ export async function setSecret(key: string, value: string): Promise<void> {
 	if (!currentProjectSlug || !currentEnvironmentSlug) {
 		throw new Error('No project/environment selected');
 	}
+
+	// Invalidate cached credentials if the auth identity has changed
+	invalidateStaleCachedCredentials();
 
 	if (!cachedPrivateKey && !cachedEncryptFn) {
 		throw new Error('Encryption not available. Please re-authenticate.');
@@ -411,6 +486,9 @@ export async function setSecret(key: string, value: string): Promise<void> {
 
 /**
  * Set a secret to multiple environments using NIP-59 Gift Wrap
+ *
+ * Performance: Crypto wrapping is parallelized across all environments,
+ * then events are published sequentially to respect relay rate limits.
  */
 export async function setSecretToMultipleEnvs(
 	projectSlug: string,
@@ -418,6 +496,9 @@ export async function setSecretToMultipleEnvs(
 	value: string,
 	environmentSlugs: string[],
 ): Promise<void> {
+	// Invalidate cached credentials if the auth identity has changed
+	invalidateStaleCachedCredentials();
+
 	if (!cachedPrivateKey && !cachedEncryptFn) {
 		throw new Error('Encryption not available. Please re-authenticate.');
 	}
@@ -430,25 +511,44 @@ export async function setSecretToMultipleEnvs(
 	secretsState.isSaving = true;
 	secretsState.saveError = null;
 
+	const errors: { envSlug: string; error: Error }[] = [];
+
 	try {
-		// Process each environment
-		for (const envSlug of environmentSlugs) {
-			// Get current secrets for this environment
-			const currentSecrets = allEnvSecretsState.get(envSlug) ?? [];
+		// Phase 1: Prepare all wrapped events in parallel (crypto operations)
+		const preparedEvents = await Promise.all(
+			environmentSlugs.map(async (envSlug) => {
+				const currentSecrets = allEnvSecretsState.get(envSlug) ?? [];
+				const updatedSecrets = upsertSecret(currentSecrets, trimmedKey, value);
+				const bundle = secretsToBundle(updatedSecrets);
+				const dTag = createDTag(projectSlug, envSlug);
+				const event = await wrapSecretsForPublish(bundle, dTag);
+				return { envSlug, event };
+			}),
+		);
 
-			// Update secrets array
-			const updatedSecrets = upsertSecret(currentSecrets, trimmedKey, value);
+		// Phase 2: Publish sequentially (respecting relay rate limits)
+		for (const { envSlug, event } of preparedEvents) {
+			try {
+				await publishEvent(event);
+			} catch (err) {
+				errors.push({
+					envSlug,
+					error: err instanceof Error ? err : new Error(String(err)),
+				});
+			}
+		}
 
-			// Convert to bundle format and wrap with NIP-59
-			const bundle = secretsToBundle(updatedSecrets);
-			const dTag = createDTag(projectSlug, envSlug);
-			const event = await wrapSecretsForPublish(bundle, dTag);
-
-			// Publish the Gift Wrap event
-			await publishEvent(event);
+		// Report errors if any environments failed
+		if (errors.length > 0) {
+			const failedEnvs = errors.map((e) => e.envSlug).join(', ');
+			const errorMsg = `Failed to publish to environments: ${failedEnvs}`;
+			secretsState.saveError = errorMsg;
+			throw new Error(errorMsg);
 		}
 	} catch (err) {
-		secretsState.saveError = err instanceof Error ? err.message : 'Failed to save secret';
+		if (!secretsState.saveError) {
+			secretsState.saveError = err instanceof Error ? err.message : 'Failed to save secret';
+		}
 		throw err;
 	} finally {
 		secretsState.isSaving = false;
@@ -462,6 +562,9 @@ export async function deleteSecret(key: string): Promise<void> {
 	if (!currentProjectSlug || !currentEnvironmentSlug) {
 		throw new Error('No project/environment selected');
 	}
+
+	// Invalidate cached credentials if the auth identity has changed
+	invalidateStaleCachedCredentials();
 
 	if (!cachedPrivateKey && !cachedEncryptFn) {
 		throw new Error('Encryption not available. Please re-authenticate.');

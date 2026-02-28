@@ -1,9 +1,11 @@
+import { REDSHIFT_KIND } from '$lib/constants';
+import { getRedshiftSecretsFilter } from '$lib/crypto';
+import { clearDecryptionCache } from '$lib/models/gift-wrap-secrets';
+import { RateLimiter, withPublishBackoff } from '$lib/rate-limiter';
+import { DEFAULT_RELAYS as CRYPTO_DEFAULT_RELAYS } from '@redshift/crypto';
 import { EventStore } from 'applesauce-core';
 import { RelayPool, onlyEvents } from 'applesauce-relay';
 import type { NostrEvent } from 'nostr-tools';
-import { REDSHIFT_KIND } from '$lib/constants';
-import { getRedshiftSecretsFilter, NostrKinds } from '$lib/crypto';
-import { RateLimiter, withPublishBackoff } from '$lib/rate-limiter';
 
 // Re-export constants for backward compatibility with existing imports
 export { REDSHIFT_KIND, getSecretsDTag, getProjectDTag, parseDTag } from '$lib/constants';
@@ -20,13 +22,8 @@ const rateLimiter = new RateLimiter(10, 1000, 100);
  * Following the Applesauce paradigm: EventStore as single source of truth
  */
 
-// Default relays for Redshift
-export const DEFAULT_RELAYS = [
-	'wss://relay.damus.io',
-	'wss://relay.primal.net',
-	'wss://nos.lol',
-	'wss://relay.nostr.band',
-];
+// Default relays for Redshift (from shared @redshift/crypto package)
+export const DEFAULT_RELAYS: string[] = [...CRYPTO_DEFAULT_RELAYS];
 
 // Managed relay for Cloud tier subscribers
 export const MANAGED_RELAY = 'wss://relay.redshiftapp.com';
@@ -139,13 +136,17 @@ export function clearPaymentCache(): void {
 }
 
 // Single EventStore instance for the entire app
-export const eventStore = new EventStore();
+// Using `let` so it can be replaced with a fresh instance on disconnect/logout
+export let eventStore = new EventStore();
 
 // Single RelayPool instance for the entire app
 export const relayPool = new RelayPool();
 
 // Track active subscriptions
 let activeSubscription: { unsubscribe: () => void } | null = null;
+
+// Track the latest event timestamp seen for incremental sync on reconnection
+let lastSeenTimestamp: number | null = null;
 
 // Relay connection status
 export type RelayStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -197,16 +198,32 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 	// 2. Redshift events (Kind 30078) for project metadata
 	// 3. Profile events (Kind 0) for displaying user info
 	const secretsFilter = getRedshiftSecretsFilter(pubkey);
+
+	// Build filters, adding `since` for incremental sync on reconnection
+	// Subtract 60 seconds as safety margin against clock skew between relays
+	const sinceTimestamp = lastSeenTimestamp ? lastSeenTimestamp - 60 : undefined;
+	const secretsFilterWithSince = sinceTimestamp
+		? { ...secretsFilter, since: sinceTimestamp }
+		: secretsFilter;
+	const redshiftFilter = sinceTimestamp
+		? { kinds: [REDSHIFT_KIND], authors: [pubkey], since: sinceTimestamp }
+		: { kinds: [REDSHIFT_KIND], authors: [pubkey] };
+	const profileFilter = sinceTimestamp
+		? { kinds: [0], authors: [pubkey], since: sinceTimestamp }
+		: { kinds: [0], authors: [pubkey] };
+
 	activeSubscription = relayPool
-		.subscription(relays, [
-			secretsFilter,
-			{ kinds: [REDSHIFT_KIND], authors: [pubkey] },
-			{ kinds: [0], authors: [pubkey] },
-		])
+		.subscription(relays, [secretsFilterWithSince, redshiftFilter, profileFilter])
 		.pipe(onlyEvents())
 		.subscribe({
 			next: (event: NostrEvent) => {
 				eventStore.add(event);
+
+				// Track the latest event timestamp for incremental sync
+				if (lastSeenTimestamp === null || event.created_at > lastSeenTimestamp) {
+					lastSeenTimestamp = event.created_at;
+				}
+
 				// Mark as connected once we receive any event
 				if (relayState.status !== 'connected') {
 					relayState = {
@@ -225,16 +242,19 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 			},
 		});
 
-	// Set connected after a short delay (relays are async)
+	// Fallback timeout: if no events are received within 10 seconds,
+	// mark the connection as errored rather than falsely claiming 'connected'.
+	// Normal connections will be marked 'connected' when the first event arrives
+	// (see the next() handler above).
 	setTimeout(() => {
 		if (relayState.status === 'connecting') {
 			relayState = {
 				...relayState,
-				status: 'connected',
-				connectedCount: relays.length,
+				status: 'error',
+				connectedCount: 0,
 			};
 		}
-	}, 2000);
+	}, 10000);
 }
 
 /**
@@ -252,6 +272,13 @@ export function disconnect(): void {
 		relays: [],
 		hasManagedAccess: false,
 	};
+	// Replace EventStore with a fresh instance to clear all cached events
+	// This prevents encrypted events from a previous user leaking to the next session
+	eventStore = new EventStore();
+	// Clear the decryption cache so decrypted secrets from the previous user are purged
+	clearDecryptionCache();
+	// Reset incremental sync timestamp so next session fetches all events
+	lastSeenTimestamp = null;
 	// Reset sync flag so next session will sync again
 	resetManagedRelaySync();
 }

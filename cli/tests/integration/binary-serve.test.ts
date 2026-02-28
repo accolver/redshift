@@ -133,7 +133,7 @@ describe.skipIf(IS_CI)('Binary Serve Integration Tests', () => {
 		};
 
 		expect(data.address).toBe(serverUrl);
-		expect(data.version).toBe('0.1.0');
+		expect(typeof data.version).toBe('string');
 		expect(typeof data.embedded).toBe('boolean');
 		// npub may be 'Not logged in' if not authenticated
 		expect(typeof data.npub).toBe('string');

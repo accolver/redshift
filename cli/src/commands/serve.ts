@@ -1,9 +1,3 @@
-/**
- * Serve Command - Start web administration UI
- *
- * L5: Journey-Validator - Web UI serving workflow
- */
-
 import { decodeContent, getEmbeddedFile, hasEmbeddedFiles } from '../lib/embedded-files';
 import { tryAuth } from './login';
 
@@ -11,6 +5,61 @@ export interface ServeOptions {
 	port?: number;
 	host?: string;
 	open?: boolean;
+}
+
+/**
+ * SECURITY: Add security headers to all HTTP responses from the embedded server.
+ *
+ * - X-Frame-Options: DENY — prevents clickjacking by disallowing iframe embedding
+ * - X-Content-Type-Options: nosniff — prevents MIME-type sniffing attacks
+ * - X-XSS-Protection: 1; mode=block — enables browser XSS filtering
+ * - Referrer-Policy: no-referrer — prevents leaking URLs to external sites
+ * - Content-Security-Policy — restricts resource loading to same origin,
+ *   allows inline styles (needed for embedded UI), and WebSocket connections
+ *   for relay communication
+ */
+function addSecurityHeaders(headers: Headers, isApiRoute: boolean): void {
+	headers.set('X-Frame-Options', 'DENY');
+	headers.set('X-Content-Type-Options', 'nosniff');
+	headers.set('X-XSS-Protection', '1; mode=block');
+	headers.set('Referrer-Policy', 'no-referrer');
+	headers.set(
+		'Content-Security-Policy',
+		"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:;",
+	);
+
+	// API routes should never be cached to prevent stale sensitive data
+	if (isApiRoute) {
+		headers.set('Cache-Control', 'no-store');
+	}
+}
+
+/**
+ * SECURITY: Validate that the request originates from localhost.
+ * Blocks requests from external origins to prevent CSRF and data exfiltration.
+ * Only allows requests from 127.0.0.1 and localhost origins.
+ */
+function isAllowedOrigin(req: Request, host: string, port: number): boolean {
+	const origin = req.headers.get('origin');
+	// No origin header means same-origin request (e.g., direct browser navigation)
+	if (!origin) return true;
+
+	const allowedOrigins = [
+		`http://127.0.0.1:${port}`,
+		`http://localhost:${port}`,
+		`http://${host}:${port}`,
+	];
+	return allowedOrigins.includes(origin);
+}
+
+/**
+ * SECURITY: Redact an npub to prevent full public key exposure on
+ * unauthenticated endpoints. Shows first 12 and last 4 characters.
+ * Example: "npub1abc12...wxyz"
+ */
+function redactNpub(npub: string): string {
+	if (npub.length <= 16) return npub;
+	return `${npub.slice(0, 12)}...${npub.slice(-4)}`;
 }
 
 // Fallback HTML when embedded files aren't available (dev mode)
@@ -149,6 +198,8 @@ const FALLBACK_HTML = `<!DOCTYPE html>
  * Starts a local web server for the admin UI.
  */
 export async function serveCommand(options: ServeOptions): Promise<void> {
+	// Lazy import to avoid module-level JSON import which can fail in some Bun versions
+	const { VERSION } = await import('../version');
 	const port = options.port || 3000;
 	const host = options.host || '127.0.0.1';
 
@@ -180,18 +231,34 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
 			const url = new URL(req.url);
 			const path = url.pathname;
 
+			// SECURITY: Reject requests from disallowed origins (CORS restriction)
+			if (!isAllowedOrigin(req, host, port)) {
+				const blockedHeaders = new Headers();
+				addSecurityHeaders(blockedHeaders, true);
+				return new Response('Forbidden', { status: 403, headers: blockedHeaders });
+			}
+
 			// API endpoints
 			if (path === '/api/info') {
-				return Response.json({
-					npub,
-					address,
-					version: '0.1.0',
-					embedded: hasEmbeds,
-				});
+				const responseHeaders = new Headers({ 'Content-Type': 'application/json' });
+				addSecurityHeaders(responseHeaders, true);
+				return new Response(
+					JSON.stringify({
+						// SECURITY: Redact npub to prevent full public key exposure
+						// on this unauthenticated endpoint
+						npub: redactNpub(npub),
+						address,
+						version: VERSION,
+						embedded: hasEmbeds,
+					}),
+					{ headers: responseHeaders },
+				);
 			}
 
 			if (path === '/api/health') {
-				return Response.json({ status: 'ok' });
+				const responseHeaders = new Headers({ 'Content-Type': 'application/json' });
+				addSecurityHeaders(responseHeaders, true);
+				return new Response(JSON.stringify({ status: 'ok' }), { headers: responseHeaders });
 			}
 
 			// If we have embedded files, serve them
@@ -206,26 +273,28 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
 
 				if (file) {
 					const content = decodeContent(file);
-					return new Response(content, {
-						headers: {
-							'Content-Type': file.contentType,
-							'Cache-Control': path.includes('/_app/immutable/')
-								? 'public, max-age=31536000, immutable'
-								: 'public, max-age=0, must-revalidate',
-						},
+					const responseHeaders = new Headers({
+						'Content-Type': file.contentType,
+						'Cache-Control': path.includes('/_app/immutable/')
+							? 'public, max-age=31536000, immutable'
+							: 'public, max-age=0, must-revalidate',
 					});
+					addSecurityHeaders(responseHeaders, false);
+					return new Response(content, { headers: responseHeaders });
 				}
 
 				// 404 for missing files
-				return new Response('Not Found', { status: 404 });
+				const notFoundHeaders = new Headers();
+				addSecurityHeaders(notFoundHeaders, false);
+				return new Response('Not Found', { status: 404, headers: notFoundHeaders });
 			}
 
 			// Fallback: serve placeholder HTML
-			return new Response(FALLBACK_HTML, {
-				headers: {
-					'Content-Type': 'text/html; charset=utf-8',
-				},
+			const fallbackHeaders = new Headers({
+				'Content-Type': 'text/html; charset=utf-8',
 			});
+			addSecurityHeaders(fallbackHeaders, false);
+			return new Response(FALLBACK_HTML, { headers: fallbackHeaders });
 		},
 	});
 

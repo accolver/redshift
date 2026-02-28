@@ -32,6 +32,26 @@ interface SecretEntry {
 }
 
 /**
+ * Cached decryption result keyed by event ID
+ */
+interface DecryptionCacheEntry {
+	dTag: string | null;
+	secrets: SecretBundle;
+	createdAt: number;
+}
+
+/**
+ * Short-lived cache for fetchAllSecrets Promise deduplication
+ */
+interface FetchAllCache {
+	promise: Promise<Map<string, SecretBundle>>;
+	expiresAt: number;
+}
+
+/** Cache TTL for fetchAllSecrets deduplication (5 seconds) */
+const FETCH_ALL_CACHE_TTL_MS = 5000;
+
+/**
  * SecretManager handles all secret-related operations including
  * encryption, relay communication, and state management.
  */
@@ -40,9 +60,24 @@ export class SecretManager {
 	private publicKey: string;
 	private pool: RelayPool | null = null;
 
+	/** Decryption cache keyed by event ID - avoids re-decrypting known events */
+	private decryptionCache = new Map<string, DecryptionCacheEntry | null>();
+
+	/** Short-lived cache for fetchAllSecrets Promise deduplication */
+	private fetchAllCache: FetchAllCache | null = null;
+
 	constructor(privateKey: Uint8Array) {
 		this.privateKey = privateKey;
 		this.publicKey = getPublicKey(privateKey);
+	}
+
+	/**
+	 * Clear the decryption cache.
+	 * Call this after publishing new secrets to ensure fresh data on next fetch.
+	 */
+	clearCache(): void {
+		this.decryptionCache.clear();
+		this.fetchAllCache = null;
 	}
 
 	/**
@@ -103,8 +138,45 @@ export class SecretManager {
 	/**
 	 * Fetch and unwrap all Gift Wrap events from relays.
 	 * Returns a map of d-tag to the latest secrets for that d-tag.
+	 *
+	 * Uses a decryption cache to avoid re-decrypting previously seen events,
+	 * and a short-lived Promise cache to deduplicate concurrent calls
+	 * (e.g., listProjects + listEnvironments called back-to-back).
 	 */
 	async fetchAllSecrets(): Promise<Map<string, SecretBundle>> {
+		// Return cached Promise if still valid (deduplicates concurrent calls)
+		if (this.fetchAllCache && Date.now() < this.fetchAllCache.expiresAt) {
+			return this.fetchAllCache.promise;
+		}
+
+		const promise = this._fetchAllSecretsInternal();
+
+		// Cache the Promise for short-lived deduplication
+		this.fetchAllCache = {
+			promise,
+			expiresAt: Date.now() + FETCH_ALL_CACHE_TTL_MS,
+		};
+
+		// Clear the Promise cache when it settles (success or failure)
+		promise.finally(() => {
+			// Only clear if this is still our cached promise
+			if (this.fetchAllCache?.promise === promise) {
+				// Keep it alive until expiry for deduplication, but mark for cleanup
+				setTimeout(() => {
+					if (this.fetchAllCache?.promise === promise) {
+						this.fetchAllCache = null;
+					}
+				}, FETCH_ALL_CACHE_TTL_MS);
+			}
+		});
+
+		return promise;
+	}
+
+	/**
+	 * Internal implementation of fetchAllSecrets with decryption caching.
+	 */
+	private async _fetchAllSecretsInternal(): Promise<Map<string, SecretBundle>> {
 		if (!this.pool) {
 			throw new NotConnectedError();
 		}
@@ -116,8 +188,32 @@ export class SecretManager {
 		const latestByDTag = new Map<string, SecretEntry>();
 
 		for (const gw of giftWraps) {
+			// Check decryption cache first
+			if (this.decryptionCache.has(gw.id)) {
+				const cached = this.decryptionCache.get(gw.id);
+				if (cached?.dTag) {
+					const existing = latestByDTag.get(cached.dTag);
+					if (!existing || cached.createdAt > existing.createdAt) {
+						latestByDTag.set(cached.dTag, {
+							secrets: cached.secrets,
+							dTag: cached.dTag,
+							createdAt: cached.createdAt,
+							eventId: gw.id,
+						});
+					}
+				}
+				continue; // Skip decryption (cached null means it failed before)
+			}
+
 			try {
 				const result = unwrapGiftWrap(gw, this.privateKey);
+
+				// Cache the successful decryption
+				this.decryptionCache.set(gw.id, {
+					dTag: result.dTag,
+					secrets: result.secrets,
+					createdAt: result.createdAt,
+				});
 
 				if (!result.dTag) {
 					continue; // Skip events without d-tag
@@ -133,7 +229,8 @@ export class SecretManager {
 					});
 				}
 			} catch {
-				// Skip events that fail to decrypt (not for us)
+				// Cache the failure so we don't re-attempt (event not for us)
+				this.decryptionCache.set(gw.id, null);
 			}
 		}
 
@@ -181,7 +278,8 @@ export class SecretManager {
 	}
 
 	/**
-	 * Fetch secrets for a specific project/environment
+	 * Fetch secrets for a specific project/environment.
+	 * Uses the decryption cache to avoid redundant decryption work.
 	 */
 	async fetchSecrets(projectId: string, environment: string): Promise<SecretBundle | null> {
 		if (!this.pool) {
@@ -197,8 +295,25 @@ export class SecretManager {
 		let latestTimestamp = 0;
 
 		for (const gw of giftWraps) {
+			// Check decryption cache first
+			if (this.decryptionCache.has(gw.id)) {
+				const cached = this.decryptionCache.get(gw.id);
+				if (cached?.dTag === targetDTag && cached.createdAt > latestTimestamp) {
+					latestTimestamp = cached.createdAt;
+					latestSecrets = cached.secrets;
+				}
+				continue; // Skip decryption (cached null means it failed before)
+			}
+
 			try {
 				const result = unwrapGiftWrap(gw, this.privateKey);
+
+				// Cache the successful decryption
+				this.decryptionCache.set(gw.id, {
+					dTag: result.dTag,
+					secrets: result.secrets,
+					createdAt: result.createdAt,
+				});
 
 				// Only consider events with matching d-tag
 				if (result.dTag !== targetDTag) {
@@ -210,7 +325,8 @@ export class SecretManager {
 					latestSecrets = result.secrets;
 				}
 			} catch {
-				// Skip events that fail to decrypt
+				// Cache the failure so we don't re-attempt
+				this.decryptionCache.set(gw.id, null);
 			}
 		}
 
@@ -218,7 +334,8 @@ export class SecretManager {
 	}
 
 	/**
-	 * Publish secrets to relays
+	 * Publish secrets to relays.
+	 * Clears the decryption cache to ensure subsequent fetches see fresh data.
 	 */
 	async publishSecrets(
 		projectId: string,
@@ -234,11 +351,15 @@ export class SecretManager {
 
 		await this.pool.publish(event);
 
+		// Invalidate caches so next fetch picks up the new event
+		this.clearCache();
+
 		return event;
 	}
 
 	/**
-	 * Delete secrets by publishing a tombstone (empty bundle)
+	 * Delete secrets by publishing a tombstone (empty bundle).
+	 * Clears the decryption cache to ensure subsequent fetches see fresh data.
 	 */
 	async deleteSecrets(projectId: string, environment: string): Promise<NostrEvent> {
 		if (!this.pool) {
@@ -249,6 +370,9 @@ export class SecretManager {
 		const { event } = createTombstone(this.privateKey, dTag);
 
 		await this.pool.publish(event);
+
+		// Invalidate caches so next fetch picks up the tombstone
+		this.clearCache();
 
 		return event;
 	}
@@ -270,7 +394,7 @@ export class SecretManager {
 
 /**
  * Inject secrets into an environment object.
- * Complex values (objects, arrays) are JSON.stringified.
+ * SecretBundle values are always strings (validated at unwrap time).
  *
  * @param baseEnv - The base environment (e.g., process.env)
  * @param secrets - The secrets to inject
@@ -289,14 +413,15 @@ export function injectSecrets(
 		}
 	}
 
-	// Inject secrets, converting to strings as needed
+	// Inject secrets — values should always be strings per SecretBundle type,
+	// but coerce defensively in case unvalidated data reaches this function
 	for (const [key, value] of Object.entries(secrets)) {
 		if (typeof value === 'string') {
 			result[key] = value;
-		} else if (typeof value === 'number' || typeof value === 'boolean') {
-			result[key] = String(value);
-		} else if (typeof value === 'object') {
+		} else if (typeof value === 'object' && value !== null) {
 			result[key] = JSON.stringify(value);
+		} else {
+			result[key] = String(value);
 		}
 	}
 

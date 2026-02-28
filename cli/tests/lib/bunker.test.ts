@@ -5,14 +5,19 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { isValidBunkerUrl, formatBunkerPointer } from '../../src/lib/bunker';
 import type { BunkerPointer } from 'nostr-tools/nip46';
+import { formatBunkerPointer, isValidBunkerUrl } from '../../src/lib/bunker';
 
 describe('Bunker Module', () => {
 	describe('isValidBunkerUrl', () => {
 		it('validates bunker:// URLs', () => {
-			expect(isValidBunkerUrl('bunker://abc123?relay=wss://relay.test')).toBe(true);
-			expect(isValidBunkerUrl('bunker://pubkey')).toBe(true);
+			expect(isValidBunkerUrl(`bunker://${'a'.padEnd(64, '0')}?relay=wss://relay.test`)).toBe(true);
+			expect(isValidBunkerUrl(`bunker://${'ab'.repeat(32)}`)).toBe(true);
+		});
+
+		it('rejects bunker:// URLs without valid hex pubkey', () => {
+			expect(isValidBunkerUrl('bunker://abc123?relay=wss://relay.test')).toBe(false);
+			expect(isValidBunkerUrl('bunker://pubkey')).toBe(false);
 		});
 
 		it('validates NIP-05 identifiers', () => {

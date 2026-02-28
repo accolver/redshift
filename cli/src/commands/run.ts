@@ -7,6 +7,7 @@
 import { spawn } from 'node:child_process';
 import { getRelays, loadProjectConfig } from '../lib/config';
 import { SecretManager, injectSecrets } from '../lib/secret-manager';
+import { redactValue } from '../lib/validation';
 import { requireAuth } from './login';
 
 export interface RunOptions {
@@ -18,6 +19,63 @@ export interface RunOptions {
 	environment?: string;
 	/** Preserve color output */
 	preserveColor?: boolean;
+}
+
+/**
+ * Parse command tokens from an array of strings, handling quoted substrings.
+ *
+ * When the user passes a single string like `"echo 'hello world'"`, we need to
+ * split it into `["echo", "hello world"]` rather than `["echo", "'hello", "world'"]`.
+ * Multiple tokens are joined first, then re-split respecting single and double quotes.
+ */
+function parseCommandTokens(parts: string[]): string[] {
+	const input = parts.join(' ');
+	const tokens: string[] = [];
+	let current = '';
+	let inSingle = false;
+	let inDouble = false;
+	let escaped = false;
+
+	for (let i = 0; i < input.length; i++) {
+		const ch = input[i];
+
+		if (escaped) {
+			current += ch;
+			escaped = false;
+			continue;
+		}
+
+		if (ch === '\\' && !inSingle) {
+			escaped = true;
+			continue;
+		}
+
+		if (ch === "'" && !inDouble) {
+			inSingle = !inSingle;
+			continue;
+		}
+
+		if (ch === '"' && !inSingle) {
+			inDouble = !inDouble;
+			continue;
+		}
+
+		if (ch === ' ' && !inSingle && !inDouble) {
+			if (current.length > 0) {
+				tokens.push(current);
+				current = '';
+			}
+			continue;
+		}
+
+		current += ch;
+	}
+
+	if (current.length > 0) {
+		tokens.push(current);
+	}
+
+	return tokens;
 }
 
 /**
@@ -66,7 +124,9 @@ export async function runCommand(options: RunOptions): Promise<void> {
 		const env = injectSecrets(process.env as Record<string, string>, secrets || {});
 
 		// Execute the command
-		const [cmd, ...args] = options.command;
+		// Parse command tokens, respecting quoted strings to avoid shell injection
+		const tokens = parseCommandTokens(options.command);
+		const [cmd, ...args] = tokens;
 
 		if (!cmd) {
 			console.error('Error: No command specified.');
@@ -78,22 +138,33 @@ export async function runCommand(options: RunOptions): Promise<void> {
 		const child = spawn(cmd, args, {
 			env,
 			stdio: 'inherit',
-			shell: true,
+			// Only use shell on Windows where it's needed for .cmd/.bat resolution
+			shell: process.platform === 'win32',
 		});
 
-		child.on('error', (err) => {
-			console.error(`Failed to start command: ${err.message}`);
-			process.exit(1);
+		// Wrap the child process in a Promise so we can await its completion
+		// before disconnecting from relays. Without this, manager.disconnect()
+		// in the finally block would fire while the child is still running.
+		const exitCode = await new Promise<number>((resolve, reject) => {
+			child.on('error', (err) => {
+				reject(new Error(`Failed to start command: ${err.message}`));
+			});
+
+			child.on('close', (code) => {
+				resolve(code ?? 0);
+			});
 		});
 
-		child.on('close', (code) => {
-			process.exit(code ?? 0);
-		});
-	} catch (error) {
-		console.error('Error fetching secrets:', error);
-		process.exit(1);
-	} finally {
 		manager.disconnect();
+		process.exit(exitCode);
+	} catch (error) {
+		manager.disconnect();
+		if (error instanceof Error && error.message.startsWith('Failed to start command:')) {
+			console.error(error.message);
+		} else {
+			console.error('Error fetching secrets:', error);
+		}
+		process.exit(1);
 	}
 }
 
@@ -131,14 +202,12 @@ export async function runDryCommand(options: RunOptions): Promise<void> {
 			console.log('  (no secrets configured)');
 		} else {
 			for (const [key, value] of Object.entries(secrets)) {
-				const displayValue =
-					typeof value === 'string' && value.length > 20
-						? `${value.substring(0, 20)}...`
-						: JSON.stringify(value);
-				console.log(`  ${key}=${displayValue}`);
+				console.log(`  ${key} = ${redactValue(value)}`);
 			}
 		}
 
+		console.log('');
+		console.log("Values redacted for security. Use 'secrets list' to view.");
 		console.log('');
 		console.log(`Would execute: ${options.command.join(' ')}`);
 	} finally {

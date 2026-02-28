@@ -7,7 +7,7 @@
  * connections to prevent abuse and handle transient failures gracefully.
  */
 
-import { backOff, type BackoffOptions } from 'exponential-backoff';
+import { type BackoffOptions, backOff } from 'exponential-backoff';
 
 /**
  * Default backoff configuration optimized for relay connections
@@ -19,8 +19,8 @@ export const DEFAULT_BACKOFF_OPTIONS: BackoffOptions = {
 	maxDelay: 30000, // Max 30 seconds between retries
 	jitter: 'full', // Randomize to prevent thundering herd
 	retry: (error: Error, attemptNumber: number) => {
-		// Log retry attempts for debugging
-		console.warn(`Relay operation failed (attempt ${attemptNumber}): ${error.message}`);
+		// Log retry attempts for debugging (console.debug is hidden in production browsers)
+		console.debug(`Relay operation failed (attempt ${attemptNumber}): ${error.message}`);
 		// Continue retrying unless it's a permanent error
 		return !isPermanentError(error);
 	},
@@ -36,7 +36,7 @@ export const PUBLISH_BACKOFF_OPTIONS: BackoffOptions = {
 	maxDelay: 5000, // Max 5 seconds
 	jitter: 'full',
 	retry: (error: Error, attemptNumber: number) => {
-		console.warn(`Publish failed (attempt ${attemptNumber}): ${error.message}`);
+		console.debug(`Publish failed (attempt ${attemptNumber}): ${error.message}`);
 		return !isPermanentError(error);
 	},
 };
@@ -51,7 +51,7 @@ export const QUERY_BACKOFF_OPTIONS: BackoffOptions = {
 	maxDelay: 60000, // Max 1 minute
 	jitter: 'full',
 	retry: (error: Error, attemptNumber: number) => {
-		console.warn(`Query failed (attempt ${attemptNumber}): ${error.message}`);
+		console.debug(`Query failed (attempt ${attemptNumber}): ${error.message}`);
 		return !isPermanentError(error);
 	},
 };
@@ -75,8 +75,9 @@ const PERMANENT_ERROR_PATTERNS = [
 /**
  * Check if an error is permanent and should not be retried
  */
-export function isPermanentError(error: Error): boolean {
-	const message = error.message.toLowerCase();
+export function isPermanentError(error: unknown): boolean {
+	if (!error || typeof error !== 'object' || !('message' in error)) return false;
+	const message = String((error as Error).message).toLowerCase();
 	return PERMANENT_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
 }
 
@@ -140,7 +141,9 @@ interface RateLimiterState {
 }
 
 /**
- * Simple rate limiter to prevent too many requests in a short time window
+ * Simple rate limiter to prevent too many requests in a short time window.
+ * Uses a promise-chain mutex to serialize concurrent waitForSlot() calls,
+ * preventing race conditions where multiple callers read stale state.
  */
 export class RateLimiter {
 	private state: RateLimiterState = {
@@ -149,6 +152,9 @@ export class RateLimiter {
 		windowStart: Date.now(),
 	};
 
+	/** Promise-chain mutex: serializes concurrent waitForSlot() calls */
+	private pending: Promise<void> = Promise.resolve();
+
 	constructor(
 		private readonly maxRequestsPerWindow: number = 10,
 		private readonly windowMs: number = 1000,
@@ -156,10 +162,21 @@ export class RateLimiter {
 	) {}
 
 	/**
-	 * Wait if necessary before making a request
-	 * Returns a promise that resolves when it's safe to proceed
+	 * Wait if necessary before making a request.
+	 * Serialized via promise-chain mutex to prevent concurrent callers
+	 * from reading stale state between async awaits.
 	 */
 	async waitForSlot(): Promise<void> {
+		const slot = this.pending.then(() => this._waitForSlotInternal());
+		this.pending = slot.catch(() => {}); // Don't let rejections block the chain
+		return slot;
+	}
+
+	/**
+	 * Internal implementation of waitForSlot rate limiting logic.
+	 * Only called serially via the promise-chain mutex.
+	 */
+	private async _waitForSlotInternal(): Promise<void> {
 		const now = Date.now();
 
 		// Reset window if expired
@@ -198,6 +215,7 @@ export class RateLimiter {
 			requestCount: 0,
 			windowStart: Date.now(),
 		};
+		this.pending = Promise.resolve();
 	}
 
 	private delay(ms: number): Promise<void> {

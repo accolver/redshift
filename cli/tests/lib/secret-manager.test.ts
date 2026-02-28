@@ -31,7 +31,7 @@ describe('SecretManager', () => {
 			const manager = new SecretManager(testPrivateKey);
 			const secrets: SecretBundle = {
 				API_KEY: 'sk_test_123',
-				DEBUG: true,
+				DEBUG: 'true',
 			};
 
 			const wrapped = await manager.wrapSecrets(secrets, 'proj|dev');
@@ -59,24 +59,27 @@ describe('injectSecrets', () => {
 	});
 
 	it('converts numbers to strings', () => {
-		const result = injectSecrets({}, { PORT: 3000, TIMEOUT: 5000 });
+		// Deliberately passing non-string values to test defensive coercion
+		const result = injectSecrets({}, { PORT: 3000, TIMEOUT: 5000 } as unknown as SecretBundle);
 
 		expect(result.PORT).toBe('3000');
 		expect(result.TIMEOUT).toBe('5000');
 	});
 
 	it('converts booleans to strings', () => {
-		const result = injectSecrets({}, { DEBUG: true, VERBOSE: false });
+		// Deliberately passing non-string values to test defensive coercion
+		const result = injectSecrets({}, { DEBUG: true, VERBOSE: false } as unknown as SecretBundle);
 
 		expect(result.DEBUG).toBe('true');
 		expect(result.VERBOSE).toBe('false');
 	});
 
 	it('JSON.stringifies objects and arrays', () => {
-		const secrets: SecretBundle = {
+		// Deliberately passing non-string values to test defensive coercion
+		const secrets = {
 			FEATURE_FLAGS: { new_ui: true, beta: false },
 			ALLOWED_ORIGINS: ['http://localhost', 'https://example.com'],
-		};
+		} as unknown as SecretBundle;
 
 		const result = injectSecrets({}, secrets);
 

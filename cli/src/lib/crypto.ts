@@ -7,7 +7,6 @@
  * L4: Integration-Contractor - NIP-59, NIP-09 protocol compliance
  */
 
-import type { Event as NostrToolsEvent } from 'nostr-tools/core';
 import { finalizeEvent } from 'nostr-tools/pure';
 
 // Re-export everything from shared crypto package
@@ -18,6 +17,7 @@ export {
 	createTombstone,
 	isRedshiftSecretsEvent,
 	getRedshiftSecretsFilter,
+	toNostrEvent,
 	validateNsec,
 	validateNpub,
 	decodeNsec,
@@ -36,24 +36,9 @@ export type {
 	UnwrapResult,
 } from '@redshift/crypto';
 
-// Import types for local use
+// Import for local use
+import { NostrKinds, toNostrEvent } from '@redshift/crypto';
 import type { NostrEvent } from '@redshift/crypto';
-import { NostrKinds } from '@redshift/crypto';
-
-/**
- * Convert nostr-tools Event to our NostrEvent type
- */
-function toNostrEvent(event: NostrToolsEvent): NostrEvent {
-	return {
-		id: event.id,
-		pubkey: event.pubkey,
-		created_at: event.created_at,
-		kind: event.kind,
-		tags: event.tags,
-		content: event.content,
-		sig: event.sig,
-	};
-}
 
 /**
  * Create a NIP-09 deletion event for Gift Wrap events.

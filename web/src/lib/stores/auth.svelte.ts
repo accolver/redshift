@@ -1,14 +1,15 @@
-import type { AuthState, ProfileMetadata, NostrEvent, SignedEvent } from '$lib/types/nostr';
-import { SimplePool } from 'nostr-tools/pool';
-import {
-	secureStore,
-	secureRetrieve,
-	secureRemove,
-	isSecureStorageAvailable,
-} from './secure-storage';
-import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
-import { nip19, getPublicKey } from 'nostr-tools';
+import type { AuthState, EventTemplate, ProfileMetadata, SignedEvent } from '$lib/types/nostr';
+import { getPublicKey, nip19 } from 'nostr-tools';
 import { BunkerSigner, parseBunkerInput } from 'nostr-tools/nip46';
+import { SimplePool } from 'nostr-tools/pool';
+import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
+import { DEFAULT_RELAYS } from './nostr.svelte';
+import {
+	isSecureStorageAvailable,
+	secureRemove,
+	secureRetrieve,
+	secureStore,
+} from './secure-storage';
 
 /**
  * Authentication store using Svelte 5 Runes
@@ -26,13 +27,8 @@ const BUNKER_URI_KEY = 'bunker_uri';
 // Active bunker signer instance (kept in memory, not serializable)
 let activeBunkerSigner: BunkerSigner | null = null;
 
-// Default relays for fetching profile metadata
-const DEFAULT_RELAYS = [
-	'wss://relay.damus.io',
-	'wss://relay.primal.net',
-	'wss://nos.lol',
-	'wss://relay.nostr.band',
-];
+// Active bunker pool instance (for cleanup on disconnect or error)
+let activeBunkerPool: SimplePool | null = null;
 
 // Auth state using $state rune
 let authState = $state<AuthState>({
@@ -193,34 +189,41 @@ export async function connectWithBunker(bunkerUri: string): Promise<boolean> {
 
 		// Create the bunker signer instance
 		const pool = new SimplePool();
-		const bunker = BunkerSigner.fromBunker(localSecretKey, bunkerPointer, { pool });
+		let bunker: BunkerSigner;
+		try {
+			bunker = BunkerSigner.fromBunker(localSecretKey, bunkerPointer, { pool });
 
-		// Connect to the bunker (this may prompt user approval in the bunker app)
-		await bunker.connect();
+			// Connect to the bunker (this may prompt user approval in the bunker app)
+			await bunker.connect();
 
-		// Get the user's pubkey from the bunker
-		const pubkey = await bunker.getPublicKey();
+			// Get the user's pubkey from the bunker
+			const pubkey = await bunker.getPublicKey();
 
-		// Store the bunker instance and URI
-		activeBunkerSigner = bunker;
-		if (isSecureStorageAvailable()) {
-			await secureStore(BUNKER_URI_KEY, bunkerUri);
+			// Store the bunker instance, pool, and URI for later cleanup
+			activeBunkerSigner = bunker;
+			activeBunkerPool = pool;
+			if (isSecureStorageAvailable()) {
+				await secureStore(BUNKER_URI_KEY, bunkerUri);
+			}
+
+			authState = {
+				method: 'bunker',
+				pubkey,
+				isConnected: true,
+				error: null,
+				profile: null,
+			};
+
+			// Fetch profile in background
+			fetchProfile(pubkey).then((profile) => {
+				if (profile) authState.profile = profile;
+			});
+
+			return true;
+		} catch (error) {
+			pool.close(bunkerPointer.relays);
+			throw error;
 		}
-
-		authState = {
-			method: 'bunker',
-			pubkey,
-			isConnected: true,
-			error: null,
-			profile: null,
-		};
-
-		// Fetch profile in background
-		fetchProfile(pubkey).then((profile) => {
-			if (profile) authState.profile = profile;
-		});
-
-		return true;
 	} catch (err) {
 		const message = err instanceof Error ? err.message : 'Failed to connect to bunker';
 		authState.error = message;
@@ -240,6 +243,16 @@ export async function disconnect(): Promise<void> {
 			// Ignore errors during cleanup
 		}
 		activeBunkerSigner = null;
+	}
+
+	// Clean up bunker pool if active
+	if (activeBunkerPool) {
+		try {
+			activeBunkerPool.close([]);
+		} catch {
+			// Ignore errors during cleanup
+		}
+		activeBunkerPool = null;
 	}
 
 	// Remove stored credentials
@@ -401,7 +414,7 @@ export function getDecryptFn(): ((pubkey: string, ciphertext: string) => Promise
  * @param event - The unsigned event to sign (must have kind, tags, content)
  * @returns The signed event with id, pubkey, created_at, and sig
  */
-export async function signEvent(event: NostrEvent): Promise<SignedEvent> {
+export async function signEvent(event: EventTemplate): Promise<SignedEvent> {
 	if (!authState.isConnected || !authState.pubkey) {
 		throw new Error('Not authenticated');
 	}

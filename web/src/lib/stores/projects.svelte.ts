@@ -1,16 +1,17 @@
-import type { Project, ProjectsState, Environment } from '$lib/types/nostr';
-import type { Subscription } from 'rxjs';
-import { eventStore, publishEvent, REDSHIFT_KIND, getProjectDTag } from './nostr.svelte';
+import { NostrKinds } from '$lib/crypto';
 import {
 	ProjectsModel,
+	createEnvironment,
 	createProjectContent,
 	generateProjectId,
-	createEnvironment,
+	normalizeSlug,
 	removeEnvironmentFromProject,
 	validateSlug,
-	normalizeSlug,
 } from '$lib/models/project';
+import type { Environment, Project, ProjectsState } from '$lib/types/nostr';
+import type { Subscription } from 'rxjs';
 import { getAuthState, signEvent } from './auth.svelte';
+import { REDSHIFT_KIND, eventStore, getProjectDTag, publishEvent } from './nostr.svelte';
 
 /**
  * Projects store using Svelte 5 Runes + Applesauce EventStore
@@ -152,7 +153,8 @@ export async function createProject(slug: string, displayName: string): Promise<
 
 /**
  * Delete a project
- * This publishes a deletion event (NIP-09) and a tombstone event
+ * This publishes a NIP-09 deletion event and a tombstone (empty replaceable event)
+ * to ensure the project is removed from relays and doesn't reappear on sync.
  */
 export async function deleteProject(id: string): Promise<void> {
 	const project = getProjectById(id);
@@ -166,11 +168,40 @@ export async function deleteProject(id: string): Promise<void> {
 		throw new Error('Must be connected to delete a project');
 	}
 
-	// For now, we'll just remove from local state
-	// Full implementation would publish NIP-09 deletion + tombstone
-	// TODO: Implement proper Nostr deletion
+	const dTag = getProjectDTag(id);
 
-	// Remove from local state (temporary until full Nostr implementation)
+	// Step 1: Publish a tombstone - an empty replaceable event to the same d-tag.
+	// This overwrites the existing project event on relays that support NIP-33
+	// (parameterized replaceable events), effectively clearing the project data.
+	const tombstoneEvent = {
+		kind: REDSHIFT_KIND,
+		created_at: Math.floor(Date.now() / 1000),
+		tags: [
+			['d', dTag],
+			['deleted', 'true'],
+		],
+		content: JSON.stringify({ type: 'project', deleted: true }),
+	};
+
+	const signedTombstone = await signEvent(tombstoneEvent);
+	await publishEvent(signedTombstone);
+
+	// Step 2: Publish a NIP-09 deletion event (kind 5) referencing the project's
+	// address tag. This signals to relays that the event should be deleted.
+	const deletionEvent = {
+		kind: NostrKinds.DELETION,
+		created_at: Math.floor(Date.now() / 1000),
+		tags: [
+			['a', `${REDSHIFT_KIND}:${auth.pubkey}:${dTag}`],
+			['k', String(REDSHIFT_KIND)],
+		],
+		content: 'Project deleted',
+	};
+
+	const signedDeletion = await signEvent(deletionEvent);
+	await publishEvent(signedDeletion);
+
+	// Step 3: Remove from local state
 	projectsState.projects = projectsState.projects.filter((p) => p.id !== id);
 }
 

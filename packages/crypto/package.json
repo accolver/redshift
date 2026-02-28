@@ -14,11 +14,11 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"nostr-tools": "^2.18.2"
+		"nostr-tools": "^2.23.2"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",
-		"typescript": "^5.0.0"
+		"typescript": "^5.9.3"
 	},
 	"peerDependencies": {
 		"nostr-tools": "^2.18.2"

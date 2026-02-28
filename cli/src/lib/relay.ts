@@ -10,9 +10,9 @@
 import type { Filter } from 'nostr-tools/filter';
 import { SimplePool } from 'nostr-tools/pool';
 import { RelayError } from './errors';
+import { RateLimiter, withPublishBackoff, withQueryBackoff } from './rate-limiter';
 import type { NostrEvent, UnsignedEvent } from './types';
 import { NostrKinds, REDSHIFT_TYPE_TAG } from './types';
-import { RateLimiter, withPublishBackoff, withQueryBackoff } from './rate-limiter';
 
 /**
  * Default rate limiter configuration for relay operations
@@ -107,7 +107,7 @@ export function createRelayPool(relayUrls: string[], options: RelayPoolOptions =
 			}
 		},
 
-		async query(filter, timeout = 10000) {
+		async query(filter, timeout = 5000) {
 			const queryOperation = async (): Promise<NostrEvent[]> => {
 				// Rate limit before querying
 				if (enableRateLimiting) {

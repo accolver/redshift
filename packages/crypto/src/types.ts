@@ -78,3 +78,14 @@ export const NostrKinds = {
  * Tag used to identify Redshift secret events
  */
 export const REDSHIFT_TYPE_TAG = 'redshift-secrets';
+
+/**
+ * Default public relays used by both CLI and Web.
+ * Centralized here to prevent drift between packages.
+ */
+export const DEFAULT_RELAYS = [
+	'wss://relay.damus.io',
+	'wss://relay.primal.net',
+	'wss://nos.lol',
+	'wss://relay.nostr.band',
+] as const;
