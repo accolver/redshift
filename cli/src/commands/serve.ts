@@ -341,6 +341,7 @@ function getNetworkAddress(): string {
  * Open the default browser to a URL.
  */
 function openBrowser(url: string): void {
+	const { exec } = require('node:child_process');
 	const platform = process.platform;
 
 	let cmd: string;
