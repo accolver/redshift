@@ -1,7 +1,6 @@
 <script lang="ts">
-import { Copy, Check } from '@lucide/svelte';
-import { onMount } from 'svelte';
 import Prism from 'prismjs';
+import { onMount } from 'svelte';
 // Import additional languages
 import 'prismjs/components/prism-bash';
 import 'prismjs/components/prism-json';
@@ -15,7 +14,7 @@ interface Props {
 	filename?: string;
 }
 
-let { code, language = 'bash', copyable = true, filename }: Props = $props();
+const { code, language = 'bash', copyable = true, filename }: Props = $props();
 
 let copied = $state(false);
 let highlightedCode = $state('');
@@ -62,6 +61,15 @@ async function copyCode() {
 		</div>
 	{/if}
 	<div class="relative {filename ? 'rounded-b-lg rounded-t-none' : 'rounded-lg'}">
+		<!-- SECURITY: {@html highlightedCode} is safe because:
+		     1. PrismJS HTML-encodes all input code characters (via Prism.highlight)
+		        before wrapping tokens in <span> tags for syntax coloring
+		     2. The escapeHtml() fallback (used for plaintext or unknown grammars)
+		        explicitly escapes &, <, >, ", and ' characters
+		     3. The `code` prop is developer-provided source code, not user input
+		     INVARIANT: If `code` ever comes from untrusted user input AND a custom
+		     highlighter is used that does NOT escape HTML, this becomes an XSS vector.
+		     PrismJS's built-in escaping makes this safe for all supported languages. -->
 		<pre class="{filename ? 'rounded-b-lg rounded-t-none' : 'rounded-lg'} border border-[#3b4261] bg-[#1a1b26] p-4 text-sm leading-relaxed"><code class="language-{prismLanguage}">{#if highlightedCode}{@html highlightedCode}{:else}{code}{/if}</code></pre>
 		{#if copyable}
 			<button

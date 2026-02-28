@@ -7,6 +7,8 @@
  * failure modes and enable appropriate error recovery.
  */
 
+import { isPermanentError } from './rate-limiter';
+
 /**
  * Base class for all Redshift errors
  */
@@ -83,6 +85,16 @@ export class ConfigError extends RedshiftError {
 }
 
 /**
+ * Validation errors (invalid input data)
+ */
+export class ValidationError extends RedshiftError {
+	constructor(message: string) {
+		super(message, 'VALIDATION_ERROR');
+		this.name = 'ValidationError';
+	}
+}
+
+/**
  * Connection state error (operation requires connection)
  */
 export class NotConnectedError extends RedshiftError {
@@ -110,7 +122,12 @@ export function formatError(error: unknown): string {
  */
 export function isRetryableError(error: unknown): boolean {
 	if (error instanceof RelayError) {
-		// Network errors are generally retryable
+		// Check if the underlying error is permanent (invalid signature, banned, etc.)
+		// Permanent errors should never be retried regardless of operation type
+		if (error.originalError && isPermanentError(error.originalError)) return false;
+		// Also check the RelayError message itself for permanent error patterns
+		if (isPermanentError(error)) return false;
+		// Transient network errors on query/publish are retryable
 		return error.operation === 'query' || error.operation === 'publish';
 	}
 	if (error instanceof Error) {
@@ -134,7 +151,9 @@ export function wrapError(error: unknown, defaultMessage: string): RedshiftError
 		return error;
 	}
 	if (error instanceof Error) {
-		return new RedshiftError(`${defaultMessage}: ${error.message}`, 'UNKNOWN_ERROR');
+		const wrapped = new RedshiftError(`${defaultMessage}: ${error.message}`, 'UNKNOWN_ERROR');
+		wrapped.cause = error;
+		return wrapped;
 	}
 	return new RedshiftError(`${defaultMessage}: ${String(error)}`, 'UNKNOWN_ERROR');
 }

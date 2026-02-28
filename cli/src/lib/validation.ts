@@ -7,6 +7,8 @@
  * to prevent invalid data from reaching the relay or causing errors.
  */
 
+import { ValidationError } from './errors';
+
 /**
  * Validation result with optional error message
  */
@@ -219,6 +221,17 @@ export function validateRelayUrl(url: string): ValidationResult {
 }
 
 /**
+ * Redact a secret value for safe display.
+ * Always returns a consistent 4-asterisk mask regardless of input.
+ *
+ * @param _value - The secret value to redact (unused, mask is constant)
+ * @returns Redacted string '****'
+ */
+export function redactValue(_value: string): string {
+	return '****';
+}
+
+/**
  * Format validation errors for display.
  *
  * @param field - The field name that failed validation
@@ -241,7 +254,7 @@ export function validateAll(
 	for (const [field, value, validator] of validations) {
 		const result = validator(value);
 		if (!result.valid) {
-			throw new Error(formatValidationError(field, result));
+			throw new ValidationError(formatValidationError(field, result));
 		}
 	}
 }

@@ -9,10 +9,16 @@
  * for efficient relay filtering while keeping content encrypted.
  */
 
+import { nip44 } from 'nostr-tools';
 import type { Event as NostrToolsEvent } from 'nostr-tools/core';
 import { createRumor, createSeal, unwrapEvent } from 'nostr-tools/nip59';
-import { nip44 } from 'nostr-tools';
-import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
+import {
+	finalizeEvent,
+	generateSecretKey,
+	getEventHash,
+	getPublicKey,
+	verifyEvent,
+} from 'nostr-tools/pure';
 import type { GiftWrapResult, NostrEvent, SecretBundle, UnwrapResult } from './types.js';
 import { NostrKinds, REDSHIFT_TYPE_TAG } from './types.js';
 
@@ -25,7 +31,7 @@ const randomNow = () => Math.round(Date.now() / 1000 - Math.random() * TWO_DAYS)
 /**
  * Convert nostr-tools Event to our NostrEvent type
  */
-function toNostrEvent(event: NostrToolsEvent): NostrEvent {
+export function toNostrEvent(event: NostrToolsEvent): NostrEvent {
 	return {
 		id: event.id,
 		pubkey: event.pubkey,
@@ -123,6 +129,15 @@ export function unwrapSecrets(giftWrap: NostrEvent, privateKey: Uint8Array): Sec
  * @throws Error if event cannot be unwrapped or content is invalid
  */
 export function unwrapGiftWrap(giftWrap: NostrEvent, privateKey: Uint8Array): UnwrapResult {
+	// Verify the gift wrap event's signature before decryption
+	if (!giftWrap.id || !giftWrap.pubkey || !giftWrap.sig) {
+		throw new Error('Invalid gift wrap event: missing id, pubkey, or sig');
+	}
+
+	if (!verifyEvent(giftWrap as NostrToolsEvent)) {
+		throw new Error('Invalid gift wrap event: signature verification failed');
+	}
+
 	// Unwrap the gift wrap to get the rumor
 	const rumor = unwrapEvent(giftWrap as NostrToolsEvent, privateKey);
 
@@ -137,6 +152,15 @@ export function unwrapGiftWrap(giftWrap: NostrEvent, privateKey: Uint8Array): Un
 	// Validate the parsed content is an object (SecretBundle)
 	if (secrets === null || typeof secrets !== 'object' || Array.isArray(secrets)) {
 		throw new Error('Invalid secret bundle: expected an object');
+	}
+
+	// Validate all values are strings (SecretBundle requires string values)
+	for (const [key, val] of Object.entries(secrets as Record<string, unknown>)) {
+		if (typeof val !== 'string') {
+			throw new Error(
+				`Invalid secret bundle: value for "${key}" is not a string (got ${typeof val})`,
+			);
+		}
 	}
 
 	// Extract d-tag from rumor
@@ -169,6 +193,26 @@ export function createTombstone(privateKey: Uint8Array, dTag: string): GiftWrapR
 export type EncryptFn = (pubkey: string, plaintext: string) => Promise<string>;
 
 /**
+ * Sign function type for signer-based Gift Wrap.
+ * Takes an unsigned event template and returns a fully signed event.
+ * This matches the signature of NIP-07 signEvent and NIP-46 signer.signEvent.
+ */
+export type SignFn = (event: {
+	kind: number;
+	created_at: number;
+	tags: string[][];
+	content: string;
+}) => Promise<{
+	id: string;
+	pubkey: string;
+	created_at: number;
+	kind: number;
+	tags: string[][];
+	content: string;
+	sig: string;
+}>;
+
+/**
  * Async result type for signer-based Gift Wrap
  */
 export interface AsyncGiftWrapResult {
@@ -183,21 +227,25 @@ export interface AsyncGiftWrapResult {
 }
 
 /**
- * Wrap secrets using NIP-07/NIP-46 signer for encryption.
+ * Wrap secrets using NIP-07/NIP-46 signer for encryption and signing.
  *
  * This function works with browser extensions (NIP-07) and remote signers (NIP-46)
- * by delegating the Seal encryption to the provided encrypt function, while using
+ * by delegating the Seal encryption and signing to the provided functions, while using
  * a locally-generated ephemeral key for the outer Gift Wrap layer.
  *
  * Flow:
  * 1. Create Rumor (unsigned event with secrets)
  * 2. Create Seal by encrypting Rumor to self using signer's nip44.encrypt
- * 3. Create Gift Wrap by encrypting Seal with local ephemeral key
+ * 3. Sign the Seal using the signer (NIP-59 requires signed seals)
+ * 4. Create Gift Wrap by encrypting the signed Seal with local ephemeral key
  *
  * @param secrets - The secret bundle to wrap
  * @param pubkey - The user's public key (hex)
  * @param dTag - The d-tag identifier (format: "projectId|environment")
  * @param encryptFn - NIP-44 encrypt function from signer (pubkey, plaintext) => ciphertext
+ * @param signFn - Optional sign function from signer. If not provided, the seal will be
+ *   signed by computing the event hash locally (id) but will lack a cryptographic signature.
+ *   For full NIP-59 compliance, always provide a signFn.
  * @returns The wrapped event and original rumor
  */
 export async function wrapSecretsWithSigner(
@@ -205,6 +253,7 @@ export async function wrapSecretsWithSigner(
 	pubkey: string,
 	dTag: string,
 	encryptFn: EncryptFn,
+	signFn?: SignFn,
 ): Promise<AsyncGiftWrapResult> {
 	// Create the rumor (unsigned event) with kind 30078 (parameterized replaceable)
 	// Note: We manually construct this since we don't have a private key for createRumor
@@ -220,13 +269,33 @@ export async function wrapSecretsWithSigner(
 	// The seal content is the rumor encrypted with NIP-44 to our own pubkey
 	const sealContent = await encryptFn(pubkey, JSON.stringify(rumor));
 
-	const seal = {
-		pubkey: pubkey,
+	const sealTemplate = {
 		created_at: randomNow(), // Randomized for privacy
-		kind: 13, // Seal kind
-		tags: [],
+		kind: 13 as const, // Seal kind
+		tags: [] as string[][],
 		content: sealContent,
 	};
+
+	// NIP-59 requires the seal to be a properly signed event with id and sig.
+	// Use the signer's signEvent to produce a fully signed seal.
+	let seal: {
+		id: string;
+		pubkey: string;
+		created_at: number;
+		kind: number;
+		tags: string[][];
+		content: string;
+		sig: string;
+	};
+	if (signFn) {
+		seal = await signFn(sealTemplate);
+	} else {
+		// Fallback: compute event hash for id but cannot produce a real signature
+		// without a signer. This is a degraded mode - callers should provide signFn.
+		const unsignedSeal = { ...sealTemplate, pubkey };
+		const id = getEventHash(unsignedSeal);
+		seal = { ...unsignedSeal, id, sig: '' };
+	}
 
 	// Create the gift wrap (kind 1059) - encrypts the seal with ephemeral key
 	// This layer uses a locally-generated key (doesn't need signer)
@@ -304,6 +373,15 @@ export async function unwrapGiftWrapWithSigner(
 
 	if (secrets === null || typeof secrets !== 'object' || Array.isArray(secrets)) {
 		throw new Error('Invalid secret bundle: expected an object');
+	}
+
+	// Validate all values are strings (SecretBundle requires string values)
+	for (const [key, val] of Object.entries(secrets as Record<string, unknown>)) {
+		if (typeof val !== 'string') {
+			throw new Error(
+				`Invalid secret bundle: value for "${key}" is not a string (got ${typeof val})`,
+			);
+		}
 	}
 
 	// Extract d-tag from rumor

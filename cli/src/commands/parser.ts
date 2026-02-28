@@ -1,4 +1,10 @@
 /**
+ * @deprecated This parser is superseded by cli.ts (src/lib/cli.ts). Do not add new commands here.
+ * This file is kept for reference only and should be removed in a future release.
+ *
+ * The active CLI parsing framework is in src/lib/cli.ts, which is used by main.ts.
+ *
+ * Original description:
  * CLI argument parser for Redshift
  * Uses Bun's native util.parseArgs
  *
@@ -8,6 +14,7 @@
 
 import { parseArgs } from 'node:util';
 import type { CommandName, ParsedCommand, SecretBundle } from '../lib/types';
+import { redactValue } from '../lib/validation';
 
 /**
  * Parse command line arguments into a structured command.
@@ -205,8 +212,7 @@ export function formatSecrets(secrets: SecretBundle, showValues = false): string
 		} else {
 			// Mask the value
 			const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
-			const masked = valueStr.length > 4 ? `${valueStr.slice(0, 2)}${'*'.repeat(6)}` : '****';
-			lines.push(`${key}=${masked}`);
+			lines.push(`${key}=${redactValue(valueStr)}`);
 		}
 	}
 

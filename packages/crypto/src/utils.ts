@@ -74,6 +74,12 @@ export function decodeNpub(npub: string): string {
  * @returns Formatted d-tag string
  */
 export function createDTag(projectId: string, environment: string): string {
+	if (!projectId || !environment) {
+		throw new Error('Project ID and environment must be non-empty strings');
+	}
+	if (projectId.includes('|') || environment.includes('|')) {
+		throw new Error('Project ID and environment name must not contain "|" character');
+	}
 	return `${projectId}|${environment}`;
 }
 

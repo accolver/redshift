@@ -3,7 +3,17 @@
  * @see https://github.com/nostr-protocol/nips/blob/master/07.md
  */
 
-export interface NostrEvent {
+// Re-export the canonical NostrEvent from @redshift/crypto (all fields required).
+// This is the single source of truth for a fully signed Nostr event.
+export type { NostrEvent } from '@redshift/crypto';
+import type { NostrEvent } from '@redshift/crypto';
+
+/**
+ * An unsigned event template used for NIP-07 signing.
+ * Fields like id, pubkey, created_at, and sig are optional because
+ * they are filled in by the signer (browser extension, bunker, etc.).
+ */
+export interface EventTemplate {
 	id?: string;
 	pubkey?: string;
 	created_at?: number;
@@ -13,16 +23,15 @@ export interface NostrEvent {
 	sig?: string;
 }
 
-export interface SignedEvent extends NostrEvent {
-	id: string;
-	pubkey: string;
-	created_at: number;
-	sig: string;
-}
+/**
+ * A fully signed Nostr event. Identical to NostrEvent from @redshift/crypto.
+ * Kept as an alias for backward compatibility with existing web code.
+ */
+export type SignedEvent = NostrEvent;
 
 export interface Nip07Nostr {
 	getPublicKey(): Promise<string>;
-	signEvent(event: NostrEvent): Promise<SignedEvent>;
+	signEvent(event: EventTemplate): Promise<SignedEvent>;
 	getRelays?(): Promise<Record<string, { read: boolean; write: boolean }>>;
 	nip04?: {
 		encrypt(pubkey: string, plaintext: string): Promise<string>;

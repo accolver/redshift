@@ -260,10 +260,20 @@ export class BunkerSecretManager {
 }
 
 /**
- * Validate a bunker URL format
+ * Validate a bunker URL format.
+ *
+ * Accepts:
+ * - bunker://<64-char-hex-pubkey>... (NIP-46 bunker URI)
+ * - user@domain.tld (NIP-05 format with NIP-46 support)
  */
 export function isValidBunkerUrl(input: string): boolean {
-	return input.startsWith('bunker://') || input.includes('@');
+	if (input.startsWith('bunker://')) {
+		// Must have a 64-char hex pubkey after bunker://
+		const afterScheme = input.slice('bunker://'.length);
+		return /^[0-9a-f]{64}/.test(afterScheme);
+	}
+	// NIP-05 format: user@domain.tld
+	return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(input);
 }
 
 /**

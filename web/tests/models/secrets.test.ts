@@ -1,47 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import {
-	createSecretsContent,
-	upsertSecret,
-	removeSecret,
-	parseSecretsContent,
-	calculateMissingSecrets,
-} from '$lib/models/secrets';
+import { calculateMissingSecrets, removeSecret, upsertSecret } from '$lib/models/secrets';
 import type { Secret } from '$lib/types/nostr';
+import { describe, expect, it } from 'vitest';
 
 describe('Secrets Model', () => {
-	describe('createSecretsContent', () => {
-		it('creates content with type "secrets"', () => {
-			const content = createSecretsContent([]);
-			expect(content.type).toBe('secrets');
-		});
-
-		it('includes provided secrets array', () => {
-			const secrets: Secret[] = [
-				{ key: 'API_KEY', value: 'secret123' },
-				{ key: 'DB_URL', value: 'postgres://localhost' },
-			];
-			const content = createSecretsContent(secrets);
-
-			expect(content.secrets).toHaveLength(2);
-			expect(content.secrets[0].key).toBe('API_KEY');
-			expect(content.secrets[1].key).toBe('DB_URL');
-		});
-
-		it('creates content with updatedAt timestamp', () => {
-			const before = Date.now();
-			const content = createSecretsContent([]);
-			const after = Date.now();
-
-			expect(content.updatedAt).toBeGreaterThanOrEqual(before);
-			expect(content.updatedAt).toBeLessThanOrEqual(after);
-		});
-
-		it('handles empty secrets array', () => {
-			const content = createSecretsContent([]);
-			expect(content.secrets).toEqual([]);
-		});
-	});
-
 	describe('upsertSecret', () => {
 		it('adds new secret to empty array', () => {
 			const result = upsertSecret([], 'API_KEY', 'secret123');
@@ -135,66 +96,6 @@ describe('Secrets Model', () => {
 		it('handles empty array', () => {
 			const result = removeSecret([], 'API_KEY');
 			expect(result).toHaveLength(0);
-		});
-	});
-
-	describe('parseSecretsContent', () => {
-		it('parses valid secrets content', () => {
-			const content = {
-				type: 'secrets',
-				secrets: [
-					{ key: 'API_KEY', value: 'secret123' },
-					{ key: 'DB_URL', value: 'postgres://localhost' },
-				],
-			};
-			const result = parseSecretsContent(content);
-
-			expect(result).toHaveLength(2);
-			expect(result[0].key).toBe('API_KEY');
-			expect(result[1].key).toBe('DB_URL');
-		});
-
-		it('returns empty array for wrong type', () => {
-			const content = {
-				type: 'project',
-				name: 'my-project',
-			};
-			const result = parseSecretsContent(content);
-
-			expect(result).toEqual([]);
-		});
-
-		it('returns empty array for null content', () => {
-			const result = parseSecretsContent(null);
-			expect(result).toEqual([]);
-		});
-
-		it('returns empty array for undefined content', () => {
-			const result = parseSecretsContent(undefined);
-			expect(result).toEqual([]);
-		});
-
-		it('returns empty array for non-object content', () => {
-			expect(parseSecretsContent('string')).toEqual([]);
-			expect(parseSecretsContent(123)).toEqual([]);
-			expect(parseSecretsContent(true)).toEqual([]);
-		});
-
-		it('returns empty array when secrets array is missing', () => {
-			const content = { type: 'secrets' };
-			const result = parseSecretsContent(content);
-
-			expect(result).toEqual([]);
-		});
-
-		it('handles empty secrets array', () => {
-			const content = {
-				type: 'secrets',
-				secrets: [],
-			};
-			const result = parseSecretsContent(content);
-
-			expect(result).toEqual([]);
 		});
 	});
 

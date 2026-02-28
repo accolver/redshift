@@ -1,6 +1,9 @@
 /**
  * CLI Framework - Doppler-compatible command structure
  *
+ * This is the AUTHORITATIVE CLI parser used by main.ts.
+ * It supersedes the legacy parser in src/commands/parser.ts.
+ *
  * Provides a declarative way to define commands with:
  * - Global flags that apply to all commands
  * - Command-specific flags
@@ -521,9 +524,7 @@ export class CLI {
 /**
  * Extract global flags from parsed values
  */
-function extractGlobalFlags(
-	values: Record<string, string | boolean | undefined>,
-): GlobalFlags {
+function extractGlobalFlags(values: Record<string, string | boolean | undefined>): GlobalFlags {
 	return {
 		help: values.help === true,
 		version: values.version === true,
@@ -710,10 +711,7 @@ function createSetupCommand(): CommandDef {
 	return {
 		name: 'setup',
 		description: 'Setup the Redshift CLI for managing secrets',
-		examples: [
-			'redshift setup',
-			'redshift setup --project backend --config dev',
-		],
+		examples: ['redshift setup', 'redshift setup --project backend --config dev'],
 		flags: {
 			project: {
 				type: 'string',
@@ -781,8 +779,7 @@ function createRunCommand(): CommandDef {
 			},
 			mount: {
 				type: 'string',
-				description:
-					'write secrets to an ephemeral file, accessible at REDSHIFT_CLI_SECRETS_PATH',
+				description: 'write secrets to an ephemeral file, accessible at REDSHIFT_CLI_SECRETS_PATH',
 				placeholder: 'path',
 			},
 			'mount-format': {
@@ -880,10 +877,7 @@ function createSecretsCommand(): CommandDef {
 			get: {
 				name: 'get',
 				description: 'Get the value of one or more secrets',
-				examples: [
-					'redshift secrets get API_KEY',
-					'redshift secrets get API_KEY CRYPTO_KEY',
-				],
+				examples: ['redshift secrets get API_KEY', 'redshift secrets get API_KEY CRYPTO_KEY'],
 				positionals: [
 					{
 						name: 'secrets',
@@ -1101,11 +1095,7 @@ function createUpgradeCommand(): CommandDef {
 		name: 'upgrade',
 		description: 'Update the Redshift CLI',
 		aliases: ['update'],
-		examples: [
-			'redshift upgrade',
-			'redshift upgrade --force',
-			'redshift upgrade --tag v0.3.0',
-		],
+		examples: ['redshift upgrade', 'redshift upgrade --force', 'redshift upgrade --tag v0.3.0'],
 		flags: {
 			force: {
 				type: 'boolean',

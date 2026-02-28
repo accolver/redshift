@@ -184,7 +184,7 @@ describe('injectSecrets', () => {
 
 	it('converts numbers to strings', () => {
 		const env: NodeJS.ProcessEnv = {};
-		const secrets: SecretBundle = { PORT: 3000, TIMEOUT: 5000 };
+		const secrets = { PORT: 3000, TIMEOUT: 5000 } as unknown as SecretBundle;
 
 		const result = injectSecrets(env, secrets);
 
@@ -194,7 +194,7 @@ describe('injectSecrets', () => {
 
 	it('converts booleans to strings', () => {
 		const env: NodeJS.ProcessEnv = {};
-		const secrets: SecretBundle = { DEBUG: true, VERBOSE: false };
+		const secrets = { DEBUG: true, VERBOSE: false } as unknown as SecretBundle;
 
 		const result = injectSecrets(env, secrets);
 
@@ -204,9 +204,9 @@ describe('injectSecrets', () => {
 
 	it('JSON stringifies complex objects', () => {
 		const env: NodeJS.ProcessEnv = {};
-		const secrets: SecretBundle = {
+		const secrets = {
 			CONFIG: { nested: true, values: [1, 2, 3] },
-		};
+		} as unknown as SecretBundle;
 
 		const result = injectSecrets(env, secrets);
 
@@ -215,9 +215,9 @@ describe('injectSecrets', () => {
 
 	it('JSON stringifies arrays', () => {
 		const env: NodeJS.ProcessEnv = {};
-		const secrets: SecretBundle = {
+		const secrets = {
 			ALLOWED_HOSTS: ['localhost', '127.0.0.1'],
-		};
+		} as unknown as SecretBundle;
 
 		const result = injectSecrets(env, secrets);
 
@@ -253,7 +253,7 @@ describe('formatSecrets', () => {
 
 		const result = formatSecrets(secrets);
 
-		expect(result).toContain('API_KEY=sk******');
+		expect(result).toContain('API_KEY=****');
 		expect(result).toContain('SHORT=****');
 	});
 
@@ -268,9 +268,9 @@ describe('formatSecrets', () => {
 	});
 
 	it('handles complex values', () => {
-		const secrets: SecretBundle = {
+		const secrets = {
 			CONFIG: { key: 'value' },
-		};
+		} as unknown as SecretBundle;
 
 		const result = formatSecrets(secrets, true);
 

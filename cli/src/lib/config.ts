@@ -5,9 +5,11 @@
  * L4: Integration-Contractor - File system contracts
  */
 
-import { existsSync, mkdirSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { DEFAULT_RELAYS } from '@redshift/crypto';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { ConfigError } from './errors';
 import { deleteNsecFromKeychain, getNsecFromKeychain } from './keychain';
 import type { AuthMethod, BunkerAuth, RedshiftConfig } from './types';
 
@@ -63,22 +65,37 @@ export function getConfigDir(): string {
 }
 
 /**
- * Ensure the config directory exists.
+ * Ensure the config directory exists with restrictive permissions.
+ *
+ * SECURITY: The config directory may contain sensitive credentials (nsec)
+ * when the system keychain is unavailable. Directory permissions are set
+ * to 0o700 (owner-only access) to prevent other users from listing or
+ * accessing config files.
  */
 function ensureConfigDir(): void {
 	const configDir = getConfigDir();
 	if (!existsSync(configDir)) {
-		mkdirSync(configDir, { recursive: true });
+		mkdirSync(configDir, { recursive: true, mode: 0o700 });
 	}
+	// Ensure permissions are correct even if directory already existed
+	chmodSync(configDir, 0o700);
 }
 
 /**
  * Save global config to ~/.redshift/config.json
+ *
+ * SECURITY: File permissions are set to 0o600 (owner read/write only)
+ * because the config file may contain the user's nsec private key in
+ * plaintext when the system keychain is unavailable. Without restrictive
+ * permissions, other users on the system could read the private key.
  */
 export async function saveConfig(config: Config): Promise<void> {
 	ensureConfigDir();
 	const configPath = join(getConfigDir(), CONFIG_FILE);
 	await Bun.write(configPath, JSON.stringify(config, null, 2));
+	// Set file permissions to owner read/write only (0o600)
+	// This prevents other system users from reading the nsec private key
+	chmodSync(configPath, 0o600);
 }
 
 /**
@@ -94,7 +111,11 @@ export async function loadConfig(): Promise<Config> {
 
 	const file = Bun.file(configPath);
 	const content = await file.text();
-	return JSON.parse(content) as Config;
+	const parsed = JSON.parse(content);
+	if (typeof parsed !== 'object' || parsed === null) {
+		throw new ConfigError('Invalid config: expected an object', configPath);
+	}
+	return parsed as Config;
 }
 
 /**
@@ -147,7 +168,24 @@ export async function loadProjectConfig(projectDir: string): Promise<RedshiftCon
 
 	const file = Bun.file(configPath);
 	const content = await file.text();
-	return parseYaml(content) as RedshiftConfig;
+	const parsed = parseYaml(content);
+	if (typeof parsed !== 'object' || parsed === null) {
+		throw new ConfigError('Invalid project config: expected an object', configPath);
+	}
+	const config = parsed as Record<string, unknown>;
+	if (typeof config.project !== 'string' || !config.project) {
+		throw new ConfigError(
+			'Invalid project config: "project" must be a non-empty string',
+			configPath,
+		);
+	}
+	if (typeof config.environment !== 'string' || !config.environment) {
+		throw new ConfigError(
+			'Invalid project config: "environment" must be a non-empty string',
+			configPath,
+		);
+	}
+	return parsed as RedshiftConfig;
 }
 
 /**
@@ -161,8 +199,8 @@ export async function getRelays(): Promise<string[]> {
 		return config.relays;
 	}
 
-	// Default public relays
-	return ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.nostr.band'];
+	// Default public relays (from shared @redshift/crypto package)
+	return [...DEFAULT_RELAYS];
 }
 
 /**
