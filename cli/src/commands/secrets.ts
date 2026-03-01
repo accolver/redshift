@@ -373,7 +373,7 @@ async function uploadSecrets(
  *
  * Note: All values are stored as strings since environment variables are always strings.
  */
-function parseEnvFile(content: string): Record<string, string> {
+export function parseEnvFile(content: string): Record<string, string> {
 	const secrets: Record<string, string> = {};
 	const lines = content.split('\n');
 
@@ -411,7 +411,7 @@ function parseEnvFile(content: string): Record<string, string> {
 /**
  * Parse a .env value, handling quotes and escapes.
  */
-function parseEnvValue(input: string): string {
+export function parseEnvValue(input: string): string {
 	let result = input.trim();
 
 	// Handle double-quoted strings
