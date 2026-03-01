@@ -1,74 +1,20 @@
 <script lang="ts">
 import { page } from '$app/state';
 import { onMount, untrack } from 'svelte';
-import { slide, fade } from 'svelte/transition';
-import { flip } from 'svelte/animate';
-import { Motion } from 'svelte-motion';
-import { Button } from '$lib/components/ui/button';
-import { Input } from '$lib/components/ui/input';
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-	DropdownMenuSeparator,
-} from '$lib/components/ui/dropdown-menu';
 
-import { getProjectsState, deleteProject, deleteEnvironment } from '$lib/stores/projects.svelte';
+import { goto } from '$app/navigation';
+import { getAuthState, supportsEncryption } from '$lib/stores/auth.svelte';
+import { deleteEnvironment, deleteProject, getProjectsState } from '$lib/stores/projects.svelte';
 import {
-	getSecretsState,
-	getSecretsContext,
+	deleteSecret,
 	getMissingSecretsState,
-	subscribeToSecrets,
-	unsubscribeFromSecrets,
+	getSecretsState,
 	setSecret,
 	setSecretToMultipleEnvs,
-	deleteSecret,
-	clearSaveError,
+	subscribeToSecrets,
+	unsubscribeFromSecrets,
 } from '$lib/stores/secrets.svelte';
-import {
-	getAuthState,
-	supportsEncryption,
-	isAuthRestorationAttempted,
-} from '$lib/stores/auth.svelte';
-import {
-	ChevronDown,
-	Plus,
-	Eye,
-	EyeOff,
-	Ellipsis,
-	Search,
-	Trash2,
-	Clipboard,
-	LoaderCircle,
-	GitBranch,
-	ArrowUpDown,
-	Check,
-	ArrowUpAZ,
-	ArrowDownAZ,
-	Clock,
-	Circle,
-	CircleDot,
-	CircleCheck,
-	Download,
-	Upload,
-	TriangleAlert,
-} from '@lucide/svelte';
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from '$lib/components/ui/dialog';
 import type { Environment } from '$lib/types/nostr';
-import AddEnvironmentModal from '$lib/components/AddEnvironmentModal.svelte';
-import CreateProjectModal from '$lib/components/CreateProjectModal.svelte';
-import ExportSecretsModal from '$lib/components/ExportSecretsModal.svelte';
-import ImportSecretsModal from '$lib/components/ImportSecretsModal.svelte';
-import MultiEnvSaveModal from '$lib/components/MultiEnvSaveModal.svelte';
-import { goto } from '$app/navigation';
 import { fuzzyMatch } from '$lib/utils/search';
 
 // Get project slug and environment from route params
@@ -101,11 +47,11 @@ $effect(() => {
 });
 
 // UI State
-let searchQuery = $state('');
-let showAddEnvModal = $state(false);
-let showCreateProjectModal = $state(false);
-let showExportModal = $state(false);
-let showImportModal = $state(false);
+const searchQuery = $state('');
+const showAddEnvModal = $state(false);
+const showCreateProjectModal = $state(false);
+const showExportModal = $state(false);
+const showImportModal = $state(false);
 let showMultiEnvSaveModal = $state(false);
 let showDeleteProjectDialog = $state(false);
 let showDeleteEnvDialog = $state(false);
@@ -129,7 +75,7 @@ let isGlobalSaveMode = $state(false);
 
 // Sorting state
 type SortOption = 'asc' | 'desc' | 'newest' | 'oldest';
-let sortBy = $state<SortOption>('asc');
+const sortBy = $state<SortOption>('asc');
 
 // Visibility toggle for secrets
 let visibleSecrets = $state<Set<string>>(new Set());
@@ -151,7 +97,7 @@ let copiedKey = $state<string | null>(null);
 let highlightedKey = $state<string | null>(null);
 
 // Reference to the new secret key input for autofocus
-let newSecretKeyInput = $state<HTMLInputElement | null>(null);
+const newSecretKeyInput = $state<HTMLInputElement | null>(null);
 
 // Read highlight from URL query param and clear after a delay
 // Track if we've already processed a highlight to avoid re-triggering
@@ -546,6 +492,10 @@ async function handleDeleteSecret(key: string) {
 function copyToClipboard(key: string, value: string) {
 	navigator.clipboard.writeText(value);
 	copiedKey = key;
+	// Auto-clear clipboard after 30 seconds for security
+	setTimeout(() => {
+		navigator.clipboard.writeText('').catch(() => {});
+	}, 30000);
 	setTimeout(() => {
 		copiedKey = null;
 	}, 2000);

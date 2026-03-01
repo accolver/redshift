@@ -6,7 +6,6 @@
  * L5: Journey-Validator - Seamless upgrade experience
  */
 
-import { execSync } from 'node:child_process';
 import { chmodSync, copyFileSync, renameSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -40,7 +39,8 @@ function getCurrentBinaryPath(): string {
 	if (binaryPath && !binaryPath.includes('node_modules') && !binaryPath.endsWith('.ts')) {
 		// Try to resolve the actual binary location
 		try {
-			const which = execSync(`which ${BINARY_NAME}`, { encoding: 'utf-8' }).trim();
+			const result = Bun.spawnSync(['which', BINARY_NAME]);
+			const which = result.stdout.toString().trim();
 			if (which) return which;
 		} catch {
 			// Fall through
@@ -55,7 +55,7 @@ function getCurrentBinaryPath(): string {
 /**
  * Detect the current OS.
  */
-function detectOS(): string {
+export function detectOS(): string {
 	switch (process.platform) {
 		case 'darwin':
 			return 'darwin';
@@ -71,7 +71,7 @@ function detectOS(): string {
 /**
  * Detect the current architecture.
  */
-function detectArch(): string {
+export function detectArch(): string {
 	switch (process.arch) {
 		case 'x64':
 			return 'x64';
@@ -133,10 +133,10 @@ function getCurrentVersion(): string {
  * Extract version number from a tag name.
  * Handles formats like: "v0.3.0", "redshift-v0.3.0", "vredshift-v0.3.0"
  */
-function extractVersion(tagName: string): string {
+export function extractVersion(tagName: string): string {
 	// Match version pattern: digits.digits.digits (with optional v prefix anywhere)
 	const match = tagName.match(/v?(\d+\.\d+\.\d+)/);
-	if (match && match[1]) {
+	if (match?.[1]) {
 		return match[1];
 	}
 	return tagName.replace(/^v/, '');
@@ -189,10 +189,41 @@ export async function upgradeCommand(options: UpgradeOptions): Promise<void> {
 			process.exit(1);
 		}
 
-		// Download to temp location
-		const tempPath = join(tmpdir(), `${BINARY_NAME}-${latestVersion}-${Date.now()}`);
+		// Download to temp location (use crypto.randomUUID to prevent TOCTOU race)
+		const tempPath = join(tmpdir(), `${BINARY_NAME}-${latestVersion}-${crypto.randomUUID()}`);
 		console.log(`\nDownloading v${latestVersion}...`);
 		await downloadFile(asset.browser_download_url, tempPath);
+
+		// Verify checksum if checksums.txt is available in the release
+		const checksumsAsset = release.assets.find((a) => a.name === 'checksums.txt');
+		if (checksumsAsset) {
+			const checksumsResponse = await fetch(checksumsAsset.browser_download_url);
+			if (checksumsResponse.ok) {
+				const checksumsText = await checksumsResponse.text();
+				// Parse checksums file (format: "sha256  filename")
+				const expectedHash = checksumsText
+					.split('\n')
+					.find((line) => line.includes(assetName))
+					?.split(/\s+/)[0];
+
+				if (expectedHash) {
+					// Verify the downloaded file
+					const fileBuffer = await Bun.file(tempPath).arrayBuffer();
+					const hashBuffer = new Bun.CryptoHasher('sha256').update(fileBuffer).digest('hex');
+					if (hashBuffer !== expectedHash) {
+						unlinkSync(tempPath);
+						throw new Error(
+							`Checksum verification failed. Expected: ${expectedHash}, Got: ${hashBuffer}`,
+						);
+					}
+					console.log('Checksum verified.');
+				} else {
+					console.log('Warning: No checksum found for this binary. Skipping verification.');
+				}
+			}
+		} else {
+			console.log('Warning: No checksums.txt in release. Skipping verification.');
+		}
 
 		// Make executable
 		if (os !== 'windows') {
@@ -253,7 +284,7 @@ export async function upgradeCommand(options: UpgradeOptions): Promise<void> {
  * Compare two semver version strings.
  * Returns: -1 if a < b, 0 if a === b, 1 if a > b
  */
-function compareVersions(a: string, b: string): number {
+export function compareVersions(a: string, b: string): number {
 	const partsA = a.split('.').map(Number);
 	const partsB = b.split('.').map(Number);
 

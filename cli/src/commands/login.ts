@@ -56,6 +56,10 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
 	} else if (options.connect) {
 		await loginWithNostrConnect();
 	} else if (options.nsec) {
+		console.log('Warning: Passing nsec via command-line flag is visible in process listings.');
+		console.log(
+			'Consider using REDSHIFT_NSEC environment variable or interactive login instead.\n',
+		);
 		await loginWithNsec(options.nsec);
 	} else {
 		// Interactive - ask user which method
@@ -149,6 +153,7 @@ async function loginWithBunker(bunkerUrl: string): Promise<void> {
 		const bunkerAuth: BunkerAuth = {
 			bunkerPubkey: connection.bunkerPointer.pubkey,
 			relays: connection.bunkerPointer.relays,
+			// SECURITY: clientSecretKey stored in config file. Future: move to system keychain.
 			clientSecretKey: Buffer.from(connection.clientSecretKey).toString('hex'),
 		};
 		if (connection.bunkerPointer.secret) {
@@ -189,6 +194,7 @@ async function loginWithNostrConnect(): Promise<void> {
 		const bunkerAuth: BunkerAuth = {
 			bunkerPubkey: connection.bunkerPointer.pubkey,
 			relays: connection.bunkerPointer.relays,
+			// SECURITY: clientSecretKey stored in config file. Future: move to system keychain.
 			clientSecretKey: Buffer.from(connection.clientSecretKey).toString('hex'),
 		};
 		if (connection.bunkerPointer.secret) {
