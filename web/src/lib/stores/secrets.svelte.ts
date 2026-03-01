@@ -17,7 +17,12 @@ import {
 	clearDecryptionCache,
 	createSharedDecryptionPipeline,
 } from '$lib/models/gift-wrap-secrets';
-import { type MissingSecret, calculateMissingSecrets } from '$lib/models/secrets';
+import {
+	type MissingSecret,
+	calculateMissingSecrets,
+	removeSecret as modelRemoveSecret,
+	upsertSecret as modelUpsertSecret,
+} from '$lib/models/secrets';
 import type { Secret, SecretsState } from '$lib/types/nostr';
 import type { Subscription } from 'rxjs';
 import {
@@ -98,6 +103,10 @@ function invalidateStaleCachedCredentials(): void {
 		cachedAuthPubkey !== null &&
 		(auth.pubkey !== cachedAuthPubkey || auth.method !== cachedAuthMethod)
 	) {
+		// Zero key material before releasing references
+		if (cachedPrivateKey) {
+			cachedPrivateKey.fill(0);
+		}
 		cachedDecryptor = null;
 		cachedEncryptFn = null;
 		cachedPrivateKey = null;
@@ -155,118 +164,79 @@ function secretsToBundle(secrets: Secret[]): Record<string, string> {
 }
 
 /**
- * Subscribe to secrets for a specific project/environment.
- * Uses NIP-59 Gift Wrap for encrypted storage.
- *
- * @param projectSlug - The immutable project slug used in d-tags (e.g., "keyfate")
- * @param environmentSlug - The environment slug
- * @param allEnvironmentSlugs - All environment slugs in the project (for missing secrets calculation)
+ * Build a decryptor from the current auth method's encryption capabilities.
+ * Returns null if no decryption method is available.
  */
-export async function subscribeToSecrets(
-	projectSlug: string,
-	environmentSlug: string,
-	allEnvironmentSlugs?: string[],
-): Promise<void> {
-	const auth = getAuthState();
-
-	if (!auth.isConnected || !auth.pubkey) {
-		secretsState.secrets = [];
-		secretsState.error = 'Not authenticated';
-		return;
-	}
-
-	// Check if encryption is supported
-	if (!supportsEncryption()) {
-		secretsState.secrets = [];
-		secretsState.error =
-			'Secrets management requires NIP-44 encryption support. Please use nsec login, a NIP-07 extension with NIP-44 support (like Alby), or a NIP-46 bunker.';
-		return;
-	}
-
-	// Get encryption capabilities based on auth method
+async function buildDecryptor(): Promise<Decryptor | null> {
 	const privateKey = await getPrivateKey();
-	const encryptFn = getEncryptFn();
 	const decryptFn = getDecryptFn();
 
-	// Build the decryptor
-	let decryptor: Decryptor | null = null;
 	if (privateKey) {
-		decryptor = { type: 'privateKey', key: privateKey };
-	} else if (decryptFn) {
-		decryptor = { type: 'decryptFn', fn: decryptFn };
+		return { type: 'privateKey', key: privateKey };
 	}
-
-	if (!decryptor) {
-		secretsState.secrets = [];
-		secretsState.error = 'Could not initialize encryption. Please re-authenticate.';
-		return;
+	if (decryptFn) {
+		return { type: 'decryptFn', fn: decryptFn };
 	}
+	return null;
+}
 
-	// Cache credentials for publishing and decryption, along with the auth identity
-	cachedDecryptor = decryptor;
-	cachedPrivateKey = privateKey;
-	cachedEncryptFn = encryptFn;
-	cachedAuthPubkey = auth.pubkey;
-	cachedAuthMethod = auth.method;
+/**
+ * Switch to a different environment within the same project using cached data.
+ * Updates state from cache immediately, then resubscribes for live updates.
+ */
+function switchEnvironmentFromCache(
+	projectSlug: string,
+	environmentSlug: string,
+	decryptor: Decryptor,
+): void {
+	const cachedSecrets = allEnvSecretsState.get(environmentSlug) ?? [];
+	secretsState.secrets = cachedSecrets;
+	secretsState.isLoading = false;
+	secretsState.error = null;
+	missingSecretsState.missing = calculateMissingSecrets(allEnvSecretsState, environmentSlug);
 
-	// Skip if already subscribed to the same project/environment
-	if (
-		currentProjectSlug === projectSlug &&
-		currentEnvironmentSlug === environmentSlug &&
-		subscription !== null
-	) {
-		return;
+	// Update current environment context
+	currentEnvironmentSlug = environmentSlug;
+
+	// Still need to update the single-env subscription for reactivity to new events
+	if (subscription) {
+		subscription.unsubscribe();
 	}
+	subscription = GiftWrapSecretsModel(
+		eventStore,
+		decryptor,
+		projectSlug,
+		environmentSlug,
+	).subscribe({
+		next: (secrets) => {
+			secretsState.secrets = secrets;
+			secretsState.isLoading = false;
+			secretsState.error = null;
 
-	// Check if we're just switching environments within the same project
-	// and we already have cached data for all environments
-	const isSameProject = currentProjectSlug === projectSlug;
-	const hasCachedEnvData = isSameProject && allEnvSecretsState.size > 0;
+			// Recalculate missing secrets when current env secrets change
+			if (allEnvSecretsState.size > 0) {
+				missingSecretsState.missing = calculateMissingSecrets(allEnvSecretsState, environmentSlug);
+			}
+		},
+		error: (err) => {
+			secretsState.error = err instanceof Error ? err.message : 'Failed to load secrets';
+			secretsState.isLoading = false;
+		},
+	});
+}
 
-	// If switching environments within the same project and we have cached data,
-	// immediately update from cache (no loading state needed)
-	if (hasCachedEnvData && allEnvSecretsState.has(environmentSlug)) {
-		const cachedSecrets = allEnvSecretsState.get(environmentSlug) ?? [];
-		secretsState.secrets = cachedSecrets;
-		secretsState.isLoading = false;
-		secretsState.error = null;
-		missingSecretsState.missing = calculateMissingSecrets(allEnvSecretsState, environmentSlug);
-
-		// Update current environment context
-		currentEnvironmentSlug = environmentSlug;
-
-		// Still need to update the single-env subscription for reactivity to new events
-		if (subscription) {
-			subscription.unsubscribe();
-		}
-		subscription = GiftWrapSecretsModel(
-			eventStore,
-			decryptor,
-			projectSlug,
-			environmentSlug,
-		).subscribe({
-			next: (secrets) => {
-				secretsState.secrets = secrets;
-				secretsState.isLoading = false;
-				secretsState.error = null;
-
-				// Recalculate missing secrets when current env secrets change
-				if (allEnvSecretsState.size > 0) {
-					missingSecretsState.missing = calculateMissingSecrets(
-						allEnvSecretsState,
-						environmentSlug,
-					);
-				}
-			},
-			error: (err) => {
-				secretsState.error = err instanceof Error ? err.message : 'Failed to load secrets';
-				secretsState.isLoading = false;
-			},
-		});
-
-		return;
-	}
-
+/**
+ * Set up fresh subscriptions for a project/environment.
+ * Cleans up existing subscriptions, creates a shared decryption pipeline,
+ * and subscribes to both single-env and all-env models.
+ */
+function setupFreshSubscriptions(
+	projectSlug: string,
+	environmentSlug: string,
+	allEnvironmentSlugs: string[],
+	decryptor: Decryptor,
+	hasCachedEnvData: boolean,
+): void {
 	// Clean up existing subscriptions
 	if (subscription) {
 		subscription.unsubscribe();
@@ -280,7 +250,7 @@ export async function subscribeToSecrets(
 	// Update context
 	currentProjectSlug = projectSlug;
 	currentEnvironmentSlug = environmentSlug;
-	currentEnvironmentSlugs = allEnvironmentSlugs ?? [environmentSlug];
+	currentEnvironmentSlugs = allEnvironmentSlugs;
 
 	// Only show loading if we don't have cached data
 	secretsState.isLoading = !hasCachedEnvData;
@@ -346,6 +316,85 @@ export async function subscribeToSecrets(
 }
 
 /**
+ * Subscribe to secrets for a specific project/environment.
+ * Uses NIP-59 Gift Wrap for encrypted storage.
+ *
+ * Orchestrates auth checks, decryptor building, credential caching,
+ * and delegates to either cached environment switching or fresh subscriptions.
+ *
+ * @param projectSlug - The immutable project slug used in d-tags (e.g., "keyfate")
+ * @param environmentSlug - The environment slug
+ * @param allEnvironmentSlugs - All environment slugs in the project (for missing secrets calculation)
+ */
+export async function subscribeToSecrets(
+	projectSlug: string,
+	environmentSlug: string,
+	allEnvironmentSlugs?: string[],
+): Promise<void> {
+	const auth = getAuthState();
+
+	if (!auth.isConnected || !auth.pubkey) {
+		secretsState.secrets = [];
+		secretsState.error = 'Not authenticated';
+		return;
+	}
+
+	// Check if encryption is supported
+	if (!supportsEncryption()) {
+		secretsState.secrets = [];
+		secretsState.error =
+			'Secrets management requires NIP-44 encryption support. Please use nsec login, a NIP-07 extension with NIP-44 support (like Alby), or a NIP-46 bunker.';
+		return;
+	}
+
+	// Build the decryptor from auth method
+	const decryptor = await buildDecryptor();
+
+	if (!decryptor) {
+		secretsState.secrets = [];
+		secretsState.error = 'Could not initialize encryption. Please re-authenticate.';
+		return;
+	}
+
+	// Cache credentials for publishing and decryption, along with the auth identity
+	cachedDecryptor = decryptor;
+	cachedPrivateKey = await getPrivateKey();
+	cachedEncryptFn = getEncryptFn();
+	cachedAuthPubkey = auth.pubkey;
+	cachedAuthMethod = auth.method;
+
+	// Skip if already subscribed to the same project/environment
+	if (
+		currentProjectSlug === projectSlug &&
+		currentEnvironmentSlug === environmentSlug &&
+		subscription !== null
+	) {
+		return;
+	}
+
+	// Check if we're just switching environments within the same project
+	// and we already have cached data for all environments
+	const isSameProject = currentProjectSlug === projectSlug;
+	const hasCachedEnvData = isSameProject && allEnvSecretsState.size > 0;
+
+	// If switching environments within the same project and we have cached data,
+	// immediately update from cache (no loading state needed)
+	if (hasCachedEnvData && allEnvSecretsState.has(environmentSlug)) {
+		switchEnvironmentFromCache(projectSlug, environmentSlug, decryptor);
+		return;
+	}
+
+	// Set up fresh subscriptions for a new project or first load
+	setupFreshSubscriptions(
+		projectSlug,
+		environmentSlug,
+		allEnvironmentSlugs ?? [environmentSlug],
+		decryptor,
+		hasCachedEnvData,
+	);
+}
+
+/**
  * Unsubscribe from secrets
  */
 export function unsubscribeFromSecrets(): void {
@@ -360,6 +409,10 @@ export function unsubscribeFromSecrets(): void {
 	currentProjectSlug = null;
 	currentEnvironmentSlug = null;
 	currentEnvironmentSlugs = [];
+	// Zero key material before releasing references
+	if (cachedPrivateKey) {
+		cachedPrivateKey.fill(0);
+	}
 	cachedDecryptor = null;
 	cachedEncryptFn = null;
 	cachedPrivateKey = null;
@@ -368,24 +421,6 @@ export function unsubscribeFromSecrets(): void {
 
 	// Clear the decryption cache when switching users/sessions
 	clearDecryptionCache();
-}
-
-/**
- * Add or update a secret in the array
- */
-function upsertSecret(secrets: Secret[], key: string, value: string): Secret[] {
-	const existing = secrets.findIndex((s) => s.key === key);
-	if (existing >= 0) {
-		return secrets.map((s, i) => (i === existing ? { key, value } : s));
-	}
-	return [...secrets, { key, value }];
-}
-
-/**
- * Remove a secret from the array
- */
-function removeSecretFromArray(secrets: Secret[], key: string): Secret[] {
-	return secrets.filter((s) => s.key !== key);
 }
 
 /**
@@ -464,7 +499,7 @@ export async function setSecret(key: string, value: string): Promise<void> {
 
 	try {
 		// Update secrets array
-		const updatedSecrets = upsertSecret(secretsState.secrets, trimmedKey, value);
+		const updatedSecrets = modelUpsertSecret(secretsState.secrets, trimmedKey, value);
 
 		// Convert to bundle format and wrap with NIP-59
 		const bundle = secretsToBundle(updatedSecrets);
@@ -518,7 +553,7 @@ export async function setSecretToMultipleEnvs(
 		const preparedEvents = await Promise.all(
 			environmentSlugs.map(async (envSlug) => {
 				const currentSecrets = allEnvSecretsState.get(envSlug) ?? [];
-				const updatedSecrets = upsertSecret(currentSecrets, trimmedKey, value);
+				const updatedSecrets = modelUpsertSecret(currentSecrets, trimmedKey, value);
 				const bundle = secretsToBundle(updatedSecrets);
 				const dTag = createDTag(projectSlug, envSlug);
 				const event = await wrapSecretsForPublish(bundle, dTag);
@@ -575,7 +610,7 @@ export async function deleteSecret(key: string): Promise<void> {
 
 	try {
 		// Remove secret from array
-		const updatedSecrets = removeSecretFromArray(secretsState.secrets, key);
+		const updatedSecrets = modelRemoveSecret(secretsState.secrets, key);
 
 		// Convert to bundle format and wrap with NIP-59
 		const bundle = secretsToBundle(updatedSecrets);

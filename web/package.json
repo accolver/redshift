@@ -16,7 +16,6 @@
 	},
 	"devDependencies": {
 		"@internationalized/date": "^3.11.0",
-		"@sveltejs/adapter-auto": "^7.0.1",
 		"@sveltejs/adapter-cloudflare": "^7.2.8",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.53.4",
@@ -40,12 +39,11 @@
 	"dependencies": {
 		"@lucide/svelte": "^0.544.0",
 		"@redshift/crypto": "file:../packages/crypto",
+		"@redshift/rate-limiter": "file:../packages/rate-limiter",
 		"applesauce-core": "^4.4.2",
-		"applesauce-factory": "^4.0.0",
 		"applesauce-relay": "^4.4.2",
 		"bits-ui": "^2.16.2",
 		"clsx": "^2.1.1",
-		"exponential-backoff": "^3.1.3",
 		"nostr-tools": "^2.23.2",
 		"prismjs": "^1.30.0",
 		"rxjs": "^7.8.2",

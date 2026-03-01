@@ -450,19 +450,3 @@ export function extractProjects(dTags: string[]): string[] {
 
 	return Array.from(projects);
 }
-
-/**
- * Extract environments for a specific project from d-tags.
- */
-export function extractEnvironments(dTags: string[], projectId: string): string[] {
-	const environments: string[] = [];
-
-	for (const dTag of dTags) {
-		const parsed = parseDTag(dTag);
-		if (parsed && parsed.projectId === projectId) {
-			environments.push(parsed.environment);
-		}
-	}
-
-	return environments;
-}
