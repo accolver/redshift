@@ -25,7 +25,7 @@ function addSecurityHeaders(headers: Headers, isApiRoute: boolean): void {
 	headers.set('Referrer-Policy', 'no-referrer');
 	headers.set(
 		'Content-Security-Policy',
-		"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss: ws:;",
+		"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss://*.damus.io wss://*.primal.net wss://*.nostr.band wss://nos.lol wss://relay.redshiftapp.com;",
 	);
 
 	// API routes should never be cached to prevent stale sensitive data
@@ -41,6 +41,17 @@ function addSecurityHeaders(headers: Headers, isApiRoute: boolean): void {
  */
 function isAllowedOrigin(req: Request, host: string, port: number): boolean {
 	const origin = req.headers.get('origin');
+	const path = new URL(req.url).pathname;
+
+	// Exempt safe read-only API endpoints from origin checks (health/info monitoring)
+	const SAFE_API_PATHS = new Set(['/api/health', '/api/info']);
+
+	// API routes (except safe endpoints) require valid Origin or X-Redshift-Client header
+	if (!origin && path.startsWith('/api/') && !SAFE_API_PATHS.has(path)) {
+		// Allow requests with X-Redshift-Client header (for non-browser clients)
+		return req.headers.has('x-redshift-client');
+	}
+
 	// No origin header means same-origin request (e.g., direct browser navigation)
 	if (!origin) return true;
 
@@ -341,21 +352,25 @@ function getNetworkAddress(): string {
  * Open the default browser to a URL.
  */
 function openBrowser(url: string): void {
-	const { exec } = require('node:child_process');
+	const { spawn } = require('node:child_process');
 	const platform = process.platform;
 
 	let cmd: string;
+	let args: string[];
 	if (platform === 'darwin') {
-		cmd = `open "${url}"`;
+		cmd = 'open';
+		args = [url];
 	} else if (platform === 'win32') {
-		cmd = `start "${url}"`;
+		cmd = 'cmd';
+		args = ['/c', 'start', url];
 	} else {
-		cmd = `xdg-open "${url}"`;
+		cmd = 'xdg-open';
+		args = [url];
 	}
 
-	exec(cmd, (err: Error | null) => {
-		if (err) {
-			console.log(`Could not open browser automatically. Visit: ${url}`);
-		}
+	const child = spawn(cmd, args, { stdio: 'ignore', detached: true });
+	child.unref();
+	child.on('error', () => {
+		console.log(`Could not open browser automatically. Visit: ${url}`);
 	});
 }

@@ -9,13 +9,13 @@
  * L9: Telos-Guardian - User sovereignty through decentralization
  */
 
-import { createCLI, type ParsedArgs } from './lib/cli';
+import { type ParsedArgs, createCLI } from './lib/cli';
 import { VERSION } from './version';
 
 // Import command handlers
 import { loginCommand, logoutCommand } from './commands/login';
 import { runCommand } from './commands/run';
-import { secretsCommand, type SecretsSubcommand } from './commands/secrets';
+import { type SecretsSubcommand, secretsCommand } from './commands/secrets';
 import { serveCommand } from './commands/serve';
 import { setupCommand } from './commands/setup';
 import { upgradeCommand } from './commands/upgrade';
@@ -85,161 +85,164 @@ async function main(): Promise<void> {
  * Execute a command based on parsed arguments
  */
 async function executeCommand(parsed: ParsedArgs): Promise<void> {
-	const { command, subcommand, positionals, flags, globalFlags } = parsed;
-
-	switch (command) {
-		case 'login': {
-			if (subcommand === 'revoke') {
-				// Revoke is essentially logout
-				await logoutCommand();
-				return;
-			}
-			await loginCommand({
-				nsec: typeof flags.nsec === 'string' ? flags.nsec : undefined,
-				bunker: typeof flags.bunker === 'string' ? flags.bunker : undefined,
-				connect: flags.connect === true,
-				force: flags.overwrite === true,
-			});
-			break;
-		}
-
-		case 'logout': {
-			await logoutCommand();
-			break;
-		}
-
-		case 'setup': {
-			await setupCommand({
-				project: typeof flags.project === 'string' ? flags.project : undefined,
-				// Map 'config' to 'environment' for Doppler compatibility
-				environment: typeof flags.config === 'string' ? flags.config : undefined,
-				force: flags['no-interactive'] !== true,
-			});
-			break;
-		}
-
-		case 'run': {
-			// Handle --command flag or -- separator
-			let commandToRun: string[] = [];
-			
-			if (typeof flags.command === 'string') {
-				// --command "echo hi" style
-				commandToRun = flags.command.split(' ');
-			} else if (positionals.length > 0) {
-				// -- echo hi style
-				commandToRun = positionals;
-			}
-
-			if (commandToRun.length === 0 && subcommand !== 'clean') {
-				console.error('Error: No command specified after --');
-				console.error('Usage: redshift run -- <command>');
-				console.error('   or: redshift run --command "your command"');
-				process.exit(1);
-			}
-
-			if (subcommand === 'clean') {
-				// TODO: Implement run clean
-				console.log('Cleaning old fallback files...');
-				console.log('Done.');
-				return;
-			}
-
-			await runCommand({
-				command: commandToRun,
-				project: typeof flags.project === 'string' ? flags.project : undefined,
-				environment: typeof flags.config === 'string' ? flags.config : undefined,
-			});
-			break;
-		}
-
-		case 'secrets': {
-			// Default to listing if no subcommand
-			const secretsSubcommand = (subcommand || 'list') as SecretsSubcommand;
-
-			// Build options based on subcommand
-			const secretsOpts: Parameters<typeof secretsCommand>[0] = {
-				subcommand: secretsSubcommand,
-				raw: flags.raw === true,
-				project: typeof flags.project === 'string' ? flags.project : undefined,
-				environment: typeof flags.config === 'string' ? flags.config : undefined,
-				format: globalFlags.json ? 'json' : undefined,
-			};
-
-			// Handle positionals based on subcommand
-			switch (secretsSubcommand) {
-				case 'get':
-					// First positional is the key
-					if (positionals[0]) {
-						secretsOpts.key = positionals[0];
-					}
-					break;
-				case 'set':
-					// Support both "set KEY VALUE" and "set KEY=VALUE"
-					if (positionals.length >= 2) {
-						secretsOpts.key = positionals[0];
-						secretsOpts.value = positionals[1];
-					} else if (positionals[0]?.includes('=')) {
-						const [key, ...valueParts] = positionals[0].split('=');
-						secretsOpts.key = key;
-						secretsOpts.value = valueParts.join('=');
-					} else if (positionals[0]) {
-						secretsOpts.key = positionals[0];
-						// Value might be provided interactively
-					}
-					break;
-				case 'delete':
-					if (positionals[0]) {
-						secretsOpts.key = positionals[0];
-					}
-					break;
-				case 'download':
-				case 'upload':
-					if (positionals[0]) {
-						secretsOpts.key = positionals[0]; // filepath
-					}
-					break;
-			}
-
-			await secretsCommand(secretsOpts);
-			break;
-		}
-
-		case 'serve': {
-			const port =
-				typeof flags.port === 'string'
-					? Number.parseInt(flags.port, 10)
-					: 3000;
-
-			await serveCommand({
-				port,
-				host: typeof flags.host === 'string' ? flags.host : '127.0.0.1',
-				open: flags.open === true,
-			});
-			break;
-		}
-
-		case 'configure': {
-			await handleConfigureCommand(subcommand, positionals, flags);
-			break;
-		}
-
-		case 'me': {
-			await handleMeCommand(globalFlags);
-			break;
-		}
-
-		case 'upgrade': {
-			await upgradeCommand({
-				force: flags.force === true,
-				version: typeof flags.tag === 'string' ? flags.tag : undefined,
-			});
-			break;
-		}
-
+	switch (parsed.command) {
+		case 'login':
+			return handleLoginCommand(parsed);
+		case 'logout':
+			return logoutCommand();
+		case 'setup':
+			return handleSetupCommand(parsed);
+		case 'run':
+			return handleRunCommand(parsed);
+		case 'secrets':
+			return handleSecretsCommand(parsed);
+		case 'serve':
+			return handleServeCommand(parsed);
+		case 'configure':
+			return handleConfigureCommand(parsed.subcommand, parsed.positionals, parsed.flags);
+		case 'me':
+			return handleMeCommand(parsed.globalFlags);
+		case 'upgrade':
+			return handleUpgradeCommand(parsed);
 		default:
-			console.error(`Unknown command: ${command}`);
+			console.error(`Unknown command: ${parsed.command}`);
 			process.exit(1);
 	}
+}
+
+/**
+ * Handle the login command
+ */
+async function handleLoginCommand(parsed: ParsedArgs): Promise<void> {
+	if (parsed.subcommand === 'revoke') {
+		// Revoke is essentially logout
+		await logoutCommand();
+		return;
+	}
+	await loginCommand({
+		nsec: typeof parsed.flags.nsec === 'string' ? parsed.flags.nsec : undefined,
+		bunker: typeof parsed.flags.bunker === 'string' ? parsed.flags.bunker : undefined,
+		connect: parsed.flags.connect === true,
+		force: parsed.flags.overwrite === true,
+	});
+}
+
+/**
+ * Handle the setup command
+ */
+async function handleSetupCommand(parsed: ParsedArgs): Promise<void> {
+	await setupCommand({
+		project: typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined,
+		// Map 'config' to 'environment' for Doppler compatibility
+		environment: typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined,
+		force: parsed.flags['no-interactive'] !== true,
+	});
+}
+
+/**
+ * Handle the run command
+ */
+async function handleRunCommand(parsed: ParsedArgs): Promise<void> {
+	let commandToRun: string[] = [];
+
+	if (typeof parsed.flags.command === 'string') {
+		// Treat as shell command - wrap in sh -c for proper parsing
+		commandToRun = ['sh', '-c', parsed.flags.command];
+	} else if (parsed.positionals.length > 0) {
+		// -- echo hi style
+		commandToRun = parsed.positionals;
+	}
+
+	if (commandToRun.length === 0) {
+		console.error('Error: No command specified after --');
+		console.error('Usage: redshift run -- <command>');
+		console.error('   or: redshift run --command "your command"');
+		process.exit(1);
+	}
+
+	await runCommand({
+		command: commandToRun,
+		project: typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined,
+		environment: typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined,
+	});
+}
+
+/**
+ * Handle the secrets command
+ */
+async function handleSecretsCommand(parsed: ParsedArgs): Promise<void> {
+	// Default to listing if no subcommand
+	const secretsSubcommand = (parsed.subcommand || 'list') as SecretsSubcommand;
+
+	// Build options based on subcommand
+	const secretsOpts: Parameters<typeof secretsCommand>[0] = {
+		subcommand: secretsSubcommand,
+		raw: parsed.flags.raw === true,
+		project: typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined,
+		environment: typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined,
+		format: parsed.globalFlags.json ? 'json' : undefined,
+	};
+
+	// Handle positionals based on subcommand
+	switch (secretsSubcommand) {
+		case 'get':
+			// First positional is the key
+			if (parsed.positionals[0]) {
+				secretsOpts.key = parsed.positionals[0];
+			}
+			break;
+		case 'set':
+			// Support both "set KEY VALUE" and "set KEY=VALUE"
+			if (parsed.positionals.length >= 2) {
+				secretsOpts.key = parsed.positionals[0];
+				secretsOpts.value = parsed.positionals[1];
+			} else if (parsed.positionals[0]?.includes('=')) {
+				const [key, ...valueParts] = parsed.positionals[0].split('=');
+				secretsOpts.key = key;
+				secretsOpts.value = valueParts.join('=');
+			} else if (parsed.positionals[0]) {
+				secretsOpts.key = parsed.positionals[0];
+				// Value might be provided interactively
+			}
+			break;
+		case 'delete':
+			if (parsed.positionals[0]) {
+				secretsOpts.key = parsed.positionals[0];
+			}
+			break;
+		case 'download':
+		case 'upload':
+			if (parsed.positionals[0]) {
+				secretsOpts.key = parsed.positionals[0]; // filepath
+			}
+			break;
+	}
+
+	await secretsCommand(secretsOpts);
+}
+
+/**
+ * Handle the serve command
+ */
+async function handleServeCommand(parsed: ParsedArgs): Promise<void> {
+	const port =
+		typeof parsed.flags.port === 'string' ? Number.parseInt(parsed.flags.port, 10) : 3000;
+
+	await serveCommand({
+		port,
+		host: typeof parsed.flags.host === 'string' ? parsed.flags.host : '127.0.0.1',
+		open: parsed.flags.open === true,
+	});
+}
+
+/**
+ * Handle the upgrade command
+ */
+async function handleUpgradeCommand(parsed: ParsedArgs): Promise<void> {
+	await upgradeCommand({
+		force: parsed.flags.force === true,
+		version: typeof parsed.flags.tag === 'string' ? parsed.flags.tag : undefined,
+	});
 }
 
 /**
@@ -273,10 +276,22 @@ async function handleConfigureCommand(
 		}
 
 		case 'set': {
+			const ALLOWED_CONFIG_KEYS = new Set(['relays', 'defaultProject', 'defaultEnvironment']);
+			const SENSITIVE_KEYS = new Set(['nsec', 'bunker', 'authMethod', 'clientSecretKey']);
 			const config = await loadConfig();
 			for (const arg of positionals) {
 				const [key, ...valueParts] = arg.split('=');
 				if (key && valueParts.length > 0) {
+					if (SENSITIVE_KEYS.has(key)) {
+						console.error(`Cannot set '${key}' via configure. Use 'redshift login' instead.`);
+						continue;
+					}
+					if (!ALLOWED_CONFIG_KEYS.has(key)) {
+						console.error(
+							`Unknown config key '${key}'. Allowed: ${[...ALLOWED_CONFIG_KEYS].join(', ')}`,
+						);
+						continue;
+					}
 					const value = valueParts.join('=');
 					// Try to parse as JSON, fall back to string
 					try {
@@ -317,7 +332,7 @@ async function handleConfigureCommand(
 			// Show current config
 			const configDir = getConfigDir();
 			const config = await loadConfig();
-			
+
 			if (flags.all === true) {
 				console.log(`Config directory: ${configDir}`);
 				console.log('');
@@ -344,9 +359,7 @@ async function handleConfigureCommand(
 /**
  * Handle the me/whoami command
  */
-async function handleMeCommand(
-	globalFlags: { json: boolean; silent: boolean },
-): Promise<void> {
+async function handleMeCommand(globalFlags: { json: boolean; silent: boolean }): Promise<void> {
 	const { getAuth } = await import('./lib/config');
 	const { decodeNsec } = await import('./lib/crypto');
 	const { getPublicKey } = await import('nostr-tools/pure');

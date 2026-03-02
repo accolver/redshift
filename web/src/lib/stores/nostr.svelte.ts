@@ -8,7 +8,7 @@ import { RelayPool, onlyEvents } from 'applesauce-relay';
 import type { NostrEvent } from 'nostr-tools';
 
 // Re-export constants for backward compatibility with existing imports
-export { REDSHIFT_KIND, getSecretsDTag, getProjectDTag, parseDTag } from '$lib/constants';
+export { REDSHIFT_KIND, getProjectDTag } from '$lib/constants';
 
 /**
  * Rate limiter instance for relay operations
@@ -50,7 +50,9 @@ export async function checkManagedRelayAccess(pubkey: string): Promise<boolean> 
 	}
 
 	try {
-		const response = await fetch(`${MANAGED_RELAY_API}/api/check-payment?pubkey=${pubkey}`);
+		const response = await fetch(
+			`${MANAGED_RELAY_API}/api/check-payment?pubkey=${encodeURIComponent(pubkey)}`,
+		);
 		if (!response.ok) return false;
 
 		const data = await response.json();
@@ -86,7 +88,7 @@ export async function getRelaysForUser(pubkey: string): Promise<string[]> {
  */
 export async function syncSecretsToManagedRelay(): Promise<{ synced: number; errors: number }> {
 	if (hasSyncedToManagedRelay) {
-		console.log('Already synced to managed relay this session');
+		console.debug('Already synced to managed relay this session');
 		return { synced: 0, errors: 0 };
 	}
 
@@ -101,7 +103,7 @@ export async function syncSecretsToManagedRelay(): Promise<{ synced: number; err
 		(event) => event.kind === 1059 || event.kind === REDSHIFT_KIND,
 	);
 
-	console.log(`Syncing ${secretEvents.length} events to managed relay...`);
+	console.debug(`Syncing ${secretEvents.length} events to managed relay...`);
 
 	// Publish each event to the managed relay
 	for (const event of secretEvents) {
@@ -116,7 +118,7 @@ export async function syncSecretsToManagedRelay(): Promise<{ synced: number; err
 	}
 
 	hasSyncedToManagedRelay = true;
-	console.log(`Synced ${synced} events to managed relay (${errors} errors)`);
+	console.debug(`Synced ${synced} events to managed relay (${errors} errors)`);
 
 	return { synced, errors };
 }
@@ -229,7 +231,7 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 					relayState = {
 						...relayState,
 						status: 'connected',
-						connectedCount: relays.length, // Simplified - assume all connected if we get events
+						connectedCount: 1, // At least one relay delivered an event
 					};
 				}
 			},
@@ -243,14 +245,17 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 		});
 
 	// Fallback timeout: if no events are received within 10 seconds,
-	// mark the connection as errored rather than falsely claiming 'connected'.
+	// mark as connected with no data rather than error.
+	// New users with zero events will hit this, and it's not an error.
 	// Normal connections will be marked 'connected' when the first event arrives
 	// (see the next() handler above).
 	setTimeout(() => {
 		if (relayState.status === 'connecting') {
 			relayState = {
 				...relayState,
-				status: 'error',
+				// Mark as connected but with no data, not as error
+				// New users with zero events will hit this, and it's not an error
+				status: 'connected',
 				connectedCount: 0,
 			};
 		}

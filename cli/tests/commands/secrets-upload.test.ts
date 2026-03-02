@@ -5,81 +5,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-
-// Import the parsing functions by re-implementing them here for testing
-// (The actual functions are private in secrets.ts)
-
-/**
- * Parse a .env file content into a secrets object.
- */
-function parseEnvFile(content: string): Record<string, string | number | boolean> {
-	const secrets: Record<string, string | number | boolean> = {};
-	const lines = content.split('\n');
-
-	for (const line of lines) {
-		const trimmed = line.trim();
-		if (!trimmed || trimmed.startsWith('#')) {
-			continue;
-		}
-
-		const eqIndex = trimmed.indexOf('=');
-		if (eqIndex === -1) {
-			continue;
-		}
-
-		const key = trimmed.slice(0, eqIndex).trim();
-		let value = trimmed.slice(eqIndex + 1);
-
-		if (!key || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-			continue;
-		}
-
-		value = parseEnvValue(value);
-
-		try {
-			const parsed = JSON.parse(value);
-			if (typeof parsed === 'number' || typeof parsed === 'boolean') {
-				secrets[key] = parsed;
-				continue;
-			}
-		} catch {
-			// Not JSON, keep as string
-		}
-
-		secrets[key] = value;
-	}
-
-	return secrets;
-}
-
-/**
- * Parse a .env value, handling quotes and escapes.
- */
-function parseEnvValue(value: string): string {
-	value = value.trim();
-
-	if (value.startsWith('"') && value.endsWith('"')) {
-		value = value.slice(1, -1);
-		value = value
-			.replace(/\\n/g, '\n')
-			.replace(/\\r/g, '\r')
-			.replace(/\\t/g, '\t')
-			.replace(/\\"/g, '"')
-			.replace(/\\\\/g, '\\');
-		return value;
-	}
-
-	if (value.startsWith("'") && value.endsWith("'")) {
-		return value.slice(1, -1);
-	}
-
-	const commentIndex = value.indexOf(' #');
-	if (commentIndex !== -1) {
-		value = value.slice(0, commentIndex).trim();
-	}
-
-	return value;
-}
+import { parseEnvFile } from '../../src/commands/secrets';
 
 describe('parseEnvFile', () => {
 	test('parses simple key=value pairs', () => {
@@ -89,10 +15,11 @@ DEBUG=true
 PORT=3000
 `;
 		const result = parseEnvFile(content);
+		// All values are strings (environment variables are always strings)
 		expect(result).toEqual({
 			API_KEY: 'sk_live_xxx',
-			DEBUG: true,
-			PORT: 3000,
+			DEBUG: 'true',
+			PORT: '3000',
 		});
 	});
 
@@ -142,7 +69,7 @@ DEBUG=true
 		const result = parseEnvFile(content);
 		expect(result).toEqual({
 			API_KEY: 'value',
-			DEBUG: true,
+			DEBUG: 'true',
 		});
 	});
 
@@ -169,7 +96,7 @@ DEBUG=true
 		const result = parseEnvFile(content);
 		expect(result).toEqual({
 			API_KEY: 'value',
-			DEBUG: true,
+			DEBUG: 'true',
 		});
 	});
 
@@ -234,16 +161,17 @@ EMPTY=
 SPECIAL_CHARS="!@#$%^&*()"
 `;
 		const result = parseEnvFile(content);
+		// All values are strings (environment variables are always strings)
 		expect(result).toEqual({
 			DATABASE_URL: 'postgres://user:pass@localhost:5432/mydb',
 			REDIS_URL: 'redis://localhost:6379',
-			DEBUG: true,
-			VERBOSE: false,
+			DEBUG: 'true',
+			VERBOSE: 'false',
 			STRIPE_KEY: 'sk_live_xxx',
 			OPENAI_API_KEY: 'sk-proj-xxx',
-			PORT: 3000,
-			MAX_CONNECTIONS: 100,
-			TIMEOUT: 30.5,
+			PORT: '3000',
+			MAX_CONNECTIONS: '100',
+			TIMEOUT: '30.5',
 			EMPTY: '',
 			SPECIAL_CHARS: '!@#$%^&*()',
 		});

@@ -116,8 +116,19 @@ function parseNsec(nsec: string): Uint8Array {
 		}
 		return decoded.data;
 	}
-	// Assume hex format
-	return Uint8Array.from(Buffer.from(nsec, 'hex'));
+	// Hex format - use Web API instead of Node.js Buffer
+	if (nsec.length % 2 !== 0) {
+		throw new Error('Invalid hex string: odd length');
+	}
+	const bytes = new Uint8Array(nsec.length / 2);
+	for (let i = 0; i < bytes.length; i++) {
+		const byte = Number.parseInt(nsec.substring(i * 2, i * 2 + 2), 16);
+		if (Number.isNaN(byte)) {
+			throw new Error('Invalid hex string: contains non-hex characters');
+		}
+		bytes[i] = byte;
+	}
+	return bytes;
 }
 
 /**

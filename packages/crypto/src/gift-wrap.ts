@@ -12,21 +12,36 @@
 import { nip44 } from 'nostr-tools';
 import type { Event as NostrToolsEvent } from 'nostr-tools/core';
 import { createRumor, createSeal, unwrapEvent } from 'nostr-tools/nip59';
-import {
-	finalizeEvent,
-	generateSecretKey,
-	getEventHash,
-	getPublicKey,
-	verifyEvent,
-} from 'nostr-tools/pure';
+import { finalizeEvent, generateSecretKey, getPublicKey, verifyEvent } from 'nostr-tools/pure';
 import type { GiftWrapResult, NostrEvent, SecretBundle, UnwrapResult } from './types.js';
 import { NostrKinds, REDSHIFT_TYPE_TAG } from './types.js';
+import { parseDTag } from './utils.js';
 
 /**
  * Random timestamp within the last 2 days (for metadata protection)
  */
 const TWO_DAYS = 2 * 24 * 60 * 60;
-const randomNow = () => Math.round(Date.now() / 1000 - Math.random() * TWO_DAYS);
+const randomNow = () => {
+	// Use generateSecretKey (CSPRNG) for random offset instead of Math.random()
+	const randomBytes = generateSecretKey(); // 32 cryptographically random bytes
+	const view = new DataView(randomBytes.buffer, randomBytes.byteOffset, randomBytes.byteLength);
+	const offset = view.getUint32(0);
+	return Math.round(Date.now() / 1000 - (offset % TWO_DAYS));
+};
+
+/**
+ * Validate that a private key is a 32-byte Uint8Array.
+ */
+function validatePrivateKey(key: Uint8Array): void {
+	if (!(key instanceof Uint8Array) || key.length !== 32) {
+		throw new Error('Private key must be a 32-byte Uint8Array');
+	}
+}
+
+/**
+ * Keys that must not appear in parsed secret bundles (prototype pollution protection).
+ */
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 /**
  * Convert nostr-tools Event to our NostrEvent type
@@ -59,6 +74,12 @@ export function wrapSecrets(
 	privateKey: Uint8Array,
 	dTag: string,
 ): GiftWrapResult {
+	validatePrivateKey(privateKey);
+
+	if (!dTag || !parseDTag(dTag)) {
+		throw new Error('Invalid d-tag: must be in format "projectId|environment"');
+	}
+
 	// Get the public key from private key (we wrap to ourselves)
 	const publicKey = getPublicKey(privateKey);
 
@@ -129,6 +150,8 @@ export function unwrapSecrets(giftWrap: NostrEvent, privateKey: Uint8Array): Sec
  * @throws Error if event cannot be unwrapped or content is invalid
  */
 export function unwrapGiftWrap(giftWrap: NostrEvent, privateKey: Uint8Array): UnwrapResult {
+	validatePrivateKey(privateKey);
+
 	// Verify the gift wrap event's signature before decryption
 	if (!giftWrap.id || !giftWrap.pubkey || !giftWrap.sig) {
 		throw new Error('Invalid gift wrap event: missing id, pubkey, or sig');
@@ -140,6 +163,13 @@ export function unwrapGiftWrap(giftWrap: NostrEvent, privateKey: Uint8Array): Un
 
 	// Unwrap the gift wrap to get the rumor
 	const rumor = unwrapEvent(giftWrap as NostrToolsEvent, privateKey);
+
+	// Verify the rumor kind matches expected secret bundle kind
+	if (rumor.kind !== NostrKinds.SECRET_BUNDLE) {
+		throw new Error(
+			`Unexpected rumor kind: expected ${NostrKinds.SECRET_BUNDLE}, got ${rumor.kind}`,
+		);
+	}
 
 	// Parse the content as JSON to get the secrets
 	let secrets: unknown;
@@ -154,12 +184,13 @@ export function unwrapGiftWrap(giftWrap: NostrEvent, privateKey: Uint8Array): Un
 		throw new Error('Invalid secret bundle: expected an object');
 	}
 
-	// Validate all values are strings (SecretBundle requires string values)
-	for (const [key, val] of Object.entries(secrets as Record<string, unknown>)) {
-		if (typeof val !== 'string') {
-			throw new Error(
-				`Invalid secret bundle: value for "${key}" is not a string (got ${typeof val})`,
-			);
+	// Validate all values are strings and check for prototype pollution
+	for (const key of Object.keys(secrets as Record<string, unknown>)) {
+		if (DANGEROUS_KEYS.has(key)) {
+			throw new Error(`Invalid secret bundle: forbidden key "${key}"`);
+		}
+		if (typeof (secrets as Record<string, unknown>)[key] !== 'string') {
+			throw new Error('Invalid secret bundle: all values must be strings');
 		}
 	}
 
@@ -183,6 +214,7 @@ export function unwrapGiftWrap(giftWrap: NostrEvent, privateKey: Uint8Array): Un
  * @returns The wrapped tombstone event
  */
 export function createTombstone(privateKey: Uint8Array, dTag: string): GiftWrapResult {
+	validatePrivateKey(privateKey);
 	return wrapSecrets({}, privateKey, dTag);
 }
 
@@ -243,9 +275,7 @@ export interface AsyncGiftWrapResult {
  * @param pubkey - The user's public key (hex)
  * @param dTag - The d-tag identifier (format: "projectId|environment")
  * @param encryptFn - NIP-44 encrypt function from signer (pubkey, plaintext) => ciphertext
- * @param signFn - Optional sign function from signer. If not provided, the seal will be
- *   signed by computing the event hash locally (id) but will lack a cryptographic signature.
- *   For full NIP-59 compliance, always provide a signFn.
+ * @param signFn - Sign function from signer. Required for NIP-59 compliance (seals must be signed).
  * @returns The wrapped event and original rumor
  */
 export async function wrapSecretsWithSigner(
@@ -253,8 +283,12 @@ export async function wrapSecretsWithSigner(
 	pubkey: string,
 	dTag: string,
 	encryptFn: EncryptFn,
-	signFn?: SignFn,
+	signFn: SignFn,
 ): Promise<AsyncGiftWrapResult> {
+	if (!dTag || !parseDTag(dTag)) {
+		throw new Error('Invalid d-tag: must be in format "projectId|environment"');
+	}
+
 	// Create the rumor (unsigned event) with kind 30078 (parameterized replaceable)
 	// Note: We manually construct this since we don't have a private key for createRumor
 	const rumor = {
@@ -278,24 +312,7 @@ export async function wrapSecretsWithSigner(
 
 	// NIP-59 requires the seal to be a properly signed event with id and sig.
 	// Use the signer's signEvent to produce a fully signed seal.
-	let seal: {
-		id: string;
-		pubkey: string;
-		created_at: number;
-		kind: number;
-		tags: string[][];
-		content: string;
-		sig: string;
-	};
-	if (signFn) {
-		seal = await signFn(sealTemplate);
-	} else {
-		// Fallback: compute event hash for id but cannot produce a real signature
-		// without a signer. This is a degraded mode - callers should provide signFn.
-		const unsignedSeal = { ...sealTemplate, pubkey };
-		const id = getEventHash(unsignedSeal);
-		seal = { ...unsignedSeal, id, sig: '' };
-	}
+	const seal = await signFn(sealTemplate);
 
 	// Create the gift wrap (kind 1059) - encrypts the seal with ephemeral key
 	// This layer uses a locally-generated key (doesn't need signer)
@@ -344,24 +361,50 @@ export async function unwrapGiftWrapWithSigner(
 	giftWrap: NostrEvent,
 	decryptFn: DecryptFn,
 ): Promise<UnwrapResult> {
+	// Verify the gift wrap event's signature before decryption
+	if (!giftWrap.id || !giftWrap.pubkey || !giftWrap.sig) {
+		throw new Error('Invalid gift wrap event: missing id, pubkey, or sig');
+	}
+
+	if (!verifyEvent(giftWrap as NostrToolsEvent)) {
+		throw new Error('Invalid gift wrap event: signature verification failed');
+	}
+
 	// Get the ephemeral pubkey from the gift wrap event
 	const ephemeralPubkey = giftWrap.pubkey;
 
 	// Decrypt the outer layer (Gift Wrap -> Seal)
 	// This uses the signer because we need our private key to decrypt from ephemeral
 	const sealJson = await decryptFn(ephemeralPubkey, giftWrap.content);
-	const seal = JSON.parse(sealJson) as { pubkey: string; content: string };
+	let seal: { pubkey: string; content: string };
+	try {
+		seal = JSON.parse(sealJson);
+	} catch {
+		throw new Error('Failed to decrypt seal: invalid JSON content');
+	}
 
 	// Decrypt the inner layer (Seal -> Rumor)
 	// The seal was encrypted to ourselves, so decrypt from seal's pubkey
 	const rumorJson = await decryptFn(seal.pubkey, seal.content);
-	const rumor = JSON.parse(rumorJson) as {
+	let rumor: {
 		pubkey: string;
 		created_at: number;
 		kind: number;
 		tags: string[][];
 		content: string;
 	};
+	try {
+		rumor = JSON.parse(rumorJson);
+	} catch {
+		throw new Error('Failed to decrypt rumor: invalid JSON content');
+	}
+
+	// Verify the rumor kind matches expected secret bundle kind
+	if (rumor.kind !== NostrKinds.SECRET_BUNDLE) {
+		throw new Error(
+			`Unexpected rumor kind: expected ${NostrKinds.SECRET_BUNDLE}, got ${rumor.kind}`,
+		);
+	}
 
 	// Parse the rumor content as secrets
 	let secrets: unknown;
@@ -375,12 +418,13 @@ export async function unwrapGiftWrapWithSigner(
 		throw new Error('Invalid secret bundle: expected an object');
 	}
 
-	// Validate all values are strings (SecretBundle requires string values)
-	for (const [key, val] of Object.entries(secrets as Record<string, unknown>)) {
-		if (typeof val !== 'string') {
-			throw new Error(
-				`Invalid secret bundle: value for "${key}" is not a string (got ${typeof val})`,
-			);
+	// Validate all values are strings and check for prototype pollution
+	for (const key of Object.keys(secrets as Record<string, unknown>)) {
+		if (DANGEROUS_KEYS.has(key)) {
+			throw new Error(`Invalid secret bundle: forbidden key "${key}"`);
+		}
+		if (typeof (secrets as Record<string, unknown>)[key] !== 'string') {
+			throw new Error('Invalid secret bundle: all values must be strings');
 		}
 	}
 
