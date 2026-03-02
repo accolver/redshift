@@ -1,14 +1,18 @@
 <!-- OPENSPEC:START -->
+
 # OpenSpec Instructions
 
 These instructions are for AI assistants working in this project.
 
 Always open `@/openspec/AGENTS.md` when the request:
+
 - Mentions planning or proposals (words like proposal, spec, change, plan)
-- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
+- Introduces new capabilities, breaking changes, architecture shifts, or big
+  performance/security work
 - Sounds ambiguous and you need the authoritative spec before coding
 
 Use `@/openspec/AGENTS.md` to learn:
+
 - How to create and apply change proposals
 - Spec format and conventions
 - Project structure and guidelines
@@ -194,6 +198,40 @@ traceable back to the ultimate goal. This creates:
 
 For more information, see
 [Telos Framework documentation](https://github.com/telos-framework/init).
+
+---
+
+## Pre-Commit Verification (REQUIRED)
+
+Before ANY `git commit`, you MUST run the build and tests and confirm they pass.
+Do NOT commit if either fails. Fix the issue first, then re-verify.
+
+### Verification commands
+
+```bash
+# 1. Web build (from repo root)
+bun run build:web
+
+# 2. CLI build (from repo root)
+bun run build:cli
+
+# 3. Tests — run from each workspace that has changes
+cd web && bun test    # Svelte / Vitest
+cd cli && bun test    # CLI / Bun test
+```
+
+### Rules
+
+- **All three checks must pass** before committing. A warning-only build
+  (exit 0) is acceptable; a non-zero exit code is not.
+- If a test or build failure is **pre-existing on `main`** and unrelated to your
+  changes, note it explicitly in your commit message and proceed — but verify by
+  stashing your changes and confirming the same failure exists on a clean
+  checkout.
+- **Never skip tests** with `--no-verify`, `--bail`, or by commenting out
+  failing tests unless the user explicitly asks you to.
+- If you delegate work to a sub-agent, **re-run verification yourself** after
+  the agent completes — do not trust the agent's claim that tests pass.
 
 ---
 
