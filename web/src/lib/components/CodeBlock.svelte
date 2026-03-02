@@ -1,15 +1,17 @@
 <script lang="ts">
 import Prism from 'prismjs';
 import { onMount } from 'svelte';
+import { Check, Copy } from '@lucide/svelte';
 // Import additional languages
 import 'prismjs/components/prism-bash';
 import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-typescript';
 import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-yaml';
 
 interface Props {
 	code: string;
-	language?: 'bash' | 'json' | 'typescript' | 'javascript' | 'shell' | 'text';
+	language?: 'bash' | 'json' | 'typescript' | 'javascript' | 'shell' | 'text' | 'yaml';
 	copyable?: boolean;
 	filename?: string;
 }

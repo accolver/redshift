@@ -98,7 +98,7 @@ Private key (nsec): nsec1secret...key
 					</tr>
 					<tr>
 						<td class="px-4 py-3 font-medium">Event kinds</td>
-						<td class="px-4 py-3 text-muted-foreground">Redshift uses Kind 30078 (parameterized replaceable events)</td>
+						<td class="px-4 py-3 text-muted-foreground">Redshift uses NIP-59 Gift Wrap (Kind 1059) for metadata-protected encrypted storage</td>
 					</tr>
 				</tbody>
 			</table>
@@ -109,12 +109,12 @@ Private key (nsec): nsec1secret...key
 			Your secrets are <strong>encrypted before leaving your device</strong>. Relay operators can see that you have data, but cannot read its contents. Only someone with your private key can decrypt your secrets.
 		</p>
 
-		<CodeBlock code={`# What relay operators see:
+		<CodeBlock code={`# What relay operators see (NIP-59 Gift Wrap):
 {
-  "kind": 30078,
-  "pubkey": "your_npub",
+  "kind": 1059,
+  "pubkey": "random_throwaway_key",
   "content": "encrypted_blob_they_cannot_read",
-  "tags": [["d", "project-id"]]
+  "tags": [["t", "redshift-secrets"]]
 }`} language="json" />
 
 		<ProseHeading level={2} id="nips">NIPs: Nostr Implementation Possibilities</ProseHeading>
