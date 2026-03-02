@@ -47,11 +47,11 @@ $effect(() => {
 });
 
 // UI State
-const searchQuery = $state('');
-const showAddEnvModal = $state(false);
-const showCreateProjectModal = $state(false);
-const showExportModal = $state(false);
-const showImportModal = $state(false);
+let searchQuery = $state('');
+let showAddEnvModal = $state(false);
+let showCreateProjectModal = $state(false);
+let showExportModal = $state(false);
+let showImportModal = $state(false);
 let showMultiEnvSaveModal = $state(false);
 let showDeleteProjectDialog = $state(false);
 let showDeleteEnvDialog = $state(false);
@@ -75,7 +75,7 @@ let isGlobalSaveMode = $state(false);
 
 // Sorting state
 type SortOption = 'asc' | 'desc' | 'newest' | 'oldest';
-const sortBy = $state<SortOption>('asc');
+let sortBy = $state<SortOption>('asc');
 
 // Visibility toggle for secrets
 let visibleSecrets = $state<Set<string>>(new Set());
@@ -97,7 +97,7 @@ let copiedKey = $state<string | null>(null);
 let highlightedKey = $state<string | null>(null);
 
 // Reference to the new secret key input for autofocus
-const newSecretKeyInput = $state<HTMLInputElement | null>(null);
+let newSecretKeyInput = $state<HTMLInputElement | null>(null);
 
 // Read highlight from URL query param and clear after a delay
 // Track if we've already processed a highlight to avoid re-triggering
