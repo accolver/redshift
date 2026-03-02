@@ -11,7 +11,6 @@ import {
 	ChevronRight,
 	Home,
 	Menu,
-	Puzzle,
 	Bot,
 } from '@lucide/svelte';
 import * as Sheet from '$lib/components/ui/sheet';
@@ -51,7 +50,7 @@ const navSections = [
 	{
 		title: 'Integrations',
 		items: [
-			{ href: '/docs/integrations/openclaw', label: 'OpenClaw', icon: Bot },
+			{ href: '/docs/integrations/ai-skills', label: 'AI Agent Skills', icon: Bot },
 		],
 	},
 	{
