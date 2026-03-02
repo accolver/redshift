@@ -33,59 +33,46 @@ export const posts: BlogPost[] = [
 
 			<h2>The Problem with Centralized Secret Management</h2>
 			<p>
-				Traditional secret managers like Doppler, HashiCorp Vault, and AWS Secrets Manager have made managing secrets easier. But they've also created a fundamental problem: <strong>you don't own your secrets</strong>.
+				Tools like Doppler, HashiCorp Vault, and AWS Secrets Manager have genuinely made secrets easier to manage. That part's great. The problem is what you give up in return: <strong>you don't actually own your secrets anymore</strong>.
 			</p>
 			<p>
-				When you store secrets with these providers, you're trusting them with the keys to your kingdom. They can:
+				Think about it. When your secrets live on someone else's servers, that someone else can revoke your access whenever they want. They can be compelled to hand your data over to authorities. They can get breached. They can jack up prices once you're too deep to migrate easily. Or they can just... shut down. It's happened before.
 			</p>
-			<ul>
-				<li>Revoke your access at any time</li>
-				<li>Be compelled to hand over your data to authorities</li>
-				<li>Suffer breaches that expose your credentials</li>
-				<li>Change pricing or terms of service</li>
-				<li>Shut down entirely, leaving you scrambling</li>
-			</ul>
 
 			<h2>What is Secret Sovereignty?</h2>
 			<p>
 				Secret sovereignty means you have complete, unconditional control over your credentials. No third party can access, revoke, or compromise your secrets without your explicit consent.
 			</p>
 			<p>
-				This isn't just a philosophical ideal—it's a practical necessity for:
+				That matters a lot in practice, not just in principle. Open source projects can't afford to depend on a single company's goodwill. Privacy-focused apps need guarantees, not promises. If you're a developer in a restrictive jurisdiction, censorship-resistant infrastructure isn't a nice-to-have. And honestly, even if none of that applies to you today, picking a tool that can't rug-pull you is just good engineering.
 			</p>
-			<ul>
-				<li><strong>Open source projects</strong> that need to operate independently of any company</li>
-				<li><strong>Privacy-focused applications</strong> where data protection is paramount</li>
-				<li><strong>Developers in restrictive jurisdictions</strong> who need censorship-resistant infrastructure</li>
-				<li><strong>Anyone who values long-term reliability</strong> over vendor convenience</li>
-			</ul>
 
 			<h2>How Redshift Enables Sovereignty</h2>
 			<p>
-				Redshift is built on three principles that guarantee sovereignty:
+				Redshift is built around three ideas that make sovereignty the default, not an upgrade tier.
 			</p>
 
 			<h3>1. Client-Side Encryption</h3>
 			<p>
-				Your secrets never leave your device unencrypted. We use NIP-59 Gift Wrap encryption, meaning even the relays that store your data can't read it. There's no server-side key, no admin backdoor, no way for anyone to access your plaintext secrets.
+				Your secrets never leave your device unencrypted. Redshift uses NIP-59 Gift Wrap encryption, so even the relays storing your data can't read it. There's no server-side key. No admin backdoor. If we wanted to peek at your secrets, we literally couldn't.
 			</p>
 
 			<h3>2. Decentralized Storage</h3>
 			<p>
-				Instead of storing secrets on a single company's servers, Redshift uses the Nostr protocol to distribute your encrypted data across multiple independent relays. There's no single point of failure—if one relay goes down, your secrets are still accessible from others.
+				Instead of one company's servers, Redshift uses the Nostr protocol to distribute your encrypted data across multiple independent relays. If one relay goes down, your secrets are still available from the others. No single point of failure.
 			</p>
 
 			<h3>3. Your Keys, Your Data</h3>
 			<p>
-				Redshift uses your Nostr identity for authentication. You own your private key, which means you own your secrets. No account required, no vendor lock-in, no permission needed. Export your data anytime using standard Nostr protocols.
+				Authentication is just your Nostr identity. You hold the private key, so you hold the secrets. There's no account to create, no vendor that can lock you out, and you can export everything anytime using standard Nostr protocols. If Redshift disappeared tomorrow, your data wouldn't go with it.
 			</p>
 
-			<h2>The Future is Sovereign</h2>
+			<h2>Where This is Heading</h2>
 			<p>
-				The trend toward decentralization isn't slowing down. As developers increasingly recognize the risks of centralized infrastructure, tools like Redshift will become the standard for security-conscious teams.
+				More developers are waking up to the risks of centralizing their most sensitive data with third parties. We think sovereign secret management will become the norm, not the exception. But we're biased, obviously.
 			</p>
 			<p>
-				Ready to own your secrets? <a href="/admin">Get started for free</a>—no credit card, no account, just sovereignty.
+				If you want to try it, <a href="/admin">get started for free</a>. No credit card, no account creation.
 			</p>
 		`,
 	},
@@ -100,76 +87,76 @@ export const posts: BlogPost[] = [
 		tags: ['nostr', 'protocol', 'development'],
 		content: `
 			<p class="lead">
-				Most developers know Nostr as "that decentralized Twitter thing." But the protocol's potential extends far beyond social media—and it's already being used to build the next generation of developer infrastructure.
+				Most developers know Nostr as "that decentralized Twitter thing." Fair enough, that's where the hype started. But if you stop there, you're missing what makes the protocol genuinely interesting for building tools and infrastructure.
 			</p>
 
 			<h2>What is Nostr, Really?</h2>
 			<p>
-				At its core, Nostr (Notes and Other Stuff Transmitted by Relays) is a simple, open protocol for creating censorship-resistant global networks. It consists of:
+				Nostr stands for "Notes and Other Stuff Transmitted by Relays," which is a deliberately vague name because the protocol is deliberately general. The whole thing boils down to three concepts:
 			</p>
 			<ul>
-				<li><strong>Clients</strong>: Applications that create and display content</li>
-				<li><strong>Relays</strong>: Servers that store and forward messages</li>
-				<li><strong>Events</strong>: Signed JSON objects representing any kind of data</li>
+				<li><strong>Clients</strong> are apps that create and display content</li>
+				<li><strong>Relays</strong> are servers that store and forward messages</li>
+				<li>Everything is an <strong>Event</strong> -- a signed JSON object that can represent basically anything</li>
 			</ul>
 			<p>
-				The genius of Nostr is its simplicity. Events are just JSON. Signing uses standard secp256k1 cryptography. Relays are dumb pipes that store and query events. This simplicity makes it incredibly versatile.
+				That's really it. Events are just JSON. Signing uses standard secp256k1 (same as Bitcoin). Relays are dumb pipes. There's no consensus mechanism, no blockchain, no token. This radical simplicity is the whole point, and it's what makes the protocol useful for things nobody originally anticipated.
 			</p>
 
 			<h2>Why Nostr for Developer Tools?</h2>
 			<p>
-				Several properties make Nostr ideal for developer infrastructure:
+				We started building Redshift on Nostr because a few of its properties lined up almost too well with what we needed. Here's what stood out:
 			</p>
 
 			<h3>Identity Without Registration</h3>
 			<p>
-				Your Nostr identity is a public/private keypair. No email verification, no phone number, no "sign up" flow. Generate a keypair and you're done. This is perfect for CLI tools that need authentication without the overhead of OAuth flows.
+				Your Nostr identity is a keypair. That's it. No email verification, no OAuth dance, no "sign up" page. Generate a key and you exist. If you've ever tried to bolt authentication onto a CLI tool, you know how appealing this is -- you skip the entire account system.
 			</p>
 
 			<h3>Built-in Encryption</h3>
 			<p>
-				Nostr includes NIP-04 (direct messages) and NIP-59 (gift wrap) for encrypted communication. This means you can build end-to-end encrypted applications without implementing your own crypto.
+				The protocol already has specs for encrypted communication: NIP-04 for direct messages and NIP-59 for gift wrap (which is what we use). You get end-to-end encryption without rolling your own crypto, which, as we all know, you should never do.
 			</p>
 
 			<h3>Decentralized by Default</h3>
 			<p>
-				Data is replicated across multiple relays automatically. There's no need to set up replication, handle failover, or worry about a single provider going down.
+				Your data gets replicated across whatever relays you publish to. No replication config, no failover logic, no single provider to worry about. One relay goes down and your data is still sitting on the others. We didn't have to build any of that -- the protocol just does it.
 			</p>
 
 			<h3>Interoperability</h3>
 			<p>
-				Any Nostr client can read any Nostr event. This means your data isn't locked into one application—you can switch tools, build custom integrations, or migrate entirely without losing anything.
+				Any Nostr client can read any Nostr event. Your data isn't locked into one app. You could build a completely different tool that reads the same events Redshift writes, and it would just work. Try doing that with Vault.
 			</p>
 
 			<h2>What Developers Are Building</h2>
 			<p>
-				Beyond social media, Nostr is powering:
+				The non-social-media side of Nostr is more active than most people realize:
 			</p>
 			<ul>
-				<li><strong>Redshift</strong>: Decentralized secret management (that's us!)</li>
-				<li><strong>Nostr Git</strong>: Git hosting on Nostr relays</li>
-				<li><strong>Stemstr</strong>: Music collaboration and sharing</li>
-				<li><strong>Npub.cash</strong>: Bitcoin Lightning wallets tied to Nostr identity</li>
-				<li><strong>Highlighter</strong>: Decentralized annotations and highlights</li>
+				<li><strong>Redshift</strong> -- decentralized secret management (hi, that's us)</li>
+				<li><strong>Nostr Git</strong> -- git hosting backed by Nostr relays, no GitHub required</li>
+				<li>Stemstr is doing music collaboration on the protocol</li>
+				<li>Npub.cash ties Bitcoin Lightning wallets to Nostr identities</li>
+				<li>Highlighter built decentralized annotations -- think Hypothesis but on Nostr</li>
 			</ul>
 
 			<h2>Getting Started with Nostr Development</h2>
 			<p>
-				If you want to build on Nostr, here's where to start:
+				If you want to build something on Nostr, the barrier to entry is genuinely low:
 			</p>
 			<ol>
-				<li><strong>Read the NIPs</strong>: <a href="https://github.com/nostr-protocol/nips" target="_blank" rel="noopener">Nostr Implementation Possibilities</a> define the protocol</li>
-				<li><strong>Use nostr-tools</strong>: The de facto JavaScript library for Nostr development</li>
-				<li><strong>Run a local relay</strong>: Try nostream or strfry for local development</li>
-				<li><strong>Get a NIP-07 extension</strong>: Alby or nos2x for browser-based signing</li>
+				<li>Start with the <a href="https://github.com/nostr-protocol/nips" target="_blank" rel="noopener">NIPs</a> (Nostr Implementation Possibilities). They define the protocol and they're readable -- most are a single page.</li>
+				<li>Grab <strong>nostr-tools</strong> if you're in JS/TS land. It's the de facto library and covers most of what you'll need.</li>
+				<li>Run a local relay for development. strfry is fast, nostream is full-featured. Either works.</li>
+				<li>Install a NIP-07 browser extension (Alby or nos2x) so you can test signing without hardcoding keys.</li>
 			</ol>
 
-			<h2>The Nostr Ecosystem is Growing</h2>
+			<h2>Worth Paying Attention To</h2>
 			<p>
-				Nostr is still young, but it's growing fast. The protocol's simplicity means new use cases are emerging constantly. Whether you're building a CLI tool, a web app, or something entirely new, Nostr provides a solid foundation for decentralized, censorship-resistant infrastructure.
+				Nostr is still early. Some parts of the ecosystem are rough. Relay implementations vary in quality, NIP adoption is uneven, and the tooling has gaps. But the protocol's simplicity means the design space is wide open. People keep finding new things to build with it that the original creators never planned for -- which, honestly, is usually the sign of a good protocol.
 			</p>
 			<p>
-				Ready to see Nostr in action? <a href="/docs/what-is-nostr">Read our Nostr explainer</a> or <a href="/admin">try Redshift</a>—it's built entirely on Nostr.
+				If you want to see what building on Nostr actually looks like in practice, <a href="/docs/what-is-nostr">read our Nostr explainer</a> or just <a href="/admin">try Redshift</a> -- the whole thing runs on Nostr under the hood.
 			</p>
 		`,
 	},
@@ -184,12 +171,12 @@ export const posts: BlogPost[] = [
 		tags: ['migration', 'doppler', 'tutorial'],
 		content: `
 			<p class="lead">
-				Redshift's CLI is designed to be Doppler-compatible. If you're using <code>doppler run</code> in your scripts, you can switch to <code>redshift run</code> with minimal changes.
+				We built the Redshift CLI to feel familiar if you're coming from Doppler. Most of the commands map one-to-one, so the actual migration is less work than you'd expect. I did it on a side project in about ten minutes, and most of that was waiting for <code>doppler secrets download</code> to finish.
 			</p>
 
 			<h2>Before You Begin</h2>
 			<p>
-				Make sure you have:
+				You'll need three things ready:
 			</p>
 			<ul>
 				<li>Redshift CLI installed (<code>curl -fsSL https://redshiftapp.com/install | sh</code>)</li>
@@ -199,43 +186,43 @@ export const posts: BlogPost[] = [
 
 			<h2>Step 1: Export Secrets from Doppler</h2>
 			<p>
-				First, export your secrets from Doppler in JSON format:
+				Grab everything out of Doppler as JSON. Make sure you're in the right project/environment first -- Doppler uses whatever you last configured with <code>doppler setup</code>.
 			</p>
 			<pre><code>doppler secrets download --no-file --format json > secrets.json</code></pre>
 			<p>
-				This creates a JSON file with all your secrets for the current environment.
+				This dumps all your secrets for the current environment into a single file. Worth a quick <code>cat secrets.json</code> to sanity-check that it looks right before moving on.
 			</p>
 
 			<h2>Step 2: Authenticate with Redshift</h2>
 			<p>
-				Log in to Redshift using your preferred authentication method:
+				This is the part most people overthink. Just run:
 			</p>
 			<pre><code>redshift login</code></pre>
 			<p>
-				Select NIP-07 browser extension (recommended) or enter your nsec manually.
+				It'll ask you to pick between a NIP-07 browser extension or pasting your nsec directly. If you already have Alby or nos2x set up, the extension route is easiest. If not, nsec works fine -- Redshift stores it in your system keychain, not in a plaintext file somewhere.
 			</p>
 
 			<h2>Step 3: Create a Project</h2>
 			<p>
-				Create a new Redshift project to match your Doppler project:
+				Now set up a project to hold your secrets. The setup wizard asks a few questions -- project name, which environments you want -- and creates everything for you.
 			</p>
 			<pre><code>redshift setup</code></pre>
 			<p>
-				This interactive wizard will guide you through project and environment creation.
+				I'd recommend matching your Doppler project name so you don't confuse yourself later. If you have multiple environments in Doppler (dev, staging, production), create them all here. You can always add more later.
 			</p>
 
 			<h2>Step 4: Upload Your Secrets</h2>
 			<p>
-				Upload the secrets you exported from Doppler:
+				Point Redshift at the JSON file you exported earlier:
 			</p>
-			<pre><code>redshift secrets upload secrets.json</code></pre>
+			<pre><code>redshift secrets upload secrets.json -e production</code></pre>
 			<p>
-				Your secrets are now encrypted with your Nostr identity and stored on decentralized relays.
+				That's the whole thing. Redshift encrypts each secret with your Nostr identity client-side, then publishes them to your configured relays. If you exported multiple environments from Doppler, repeat this step with each file and the matching <code>-e</code> flag.
 			</p>
 
 			<h2>Step 5: Update Your Scripts</h2>
 			<p>
-				Replace <code>doppler run</code> with <code>redshift run</code> in your scripts:
+				Here's the payoff for the Doppler-compatible CLI: anywhere you have <code>doppler run</code>, swap in <code>redshift run</code>. Same syntax, same <code>--</code> separator.
 			</p>
 			<pre><code># Before
 doppler run -- npm start
@@ -243,20 +230,23 @@ doppler run -- npm start
 # After
 redshift run -- npm start</code></pre>
 			<p>
-				That's it. The command syntax is identical.
+				If you have a dozen scripts or CI configs that reference Doppler, a find-and-replace gets you most of the way there. I'd test one locally before going on a bulk-replace spree, though.
 			</p>
 
 			<h2>Step 6: Clean Up</h2>
 			<p>
-				Once you've verified everything works:
+				Once you've confirmed everything runs correctly with Redshift:
 			</p>
 			<ol>
-				<li>Delete the <code>secrets.json</code> file (it contains plaintext secrets!)</li>
+				<li>Delete the <code>secrets.json</code> file -- seriously, it's sitting there in plaintext</li>
 				<li>Update your CI/CD pipelines to use <code>redshift</code></li>
-				<li>Optionally, revoke your Doppler secrets</li>
+				<li>Optionally, revoke your Doppler secrets (maybe give it a week first, just in case)</li>
 			</ol>
 
 			<h2>Command Compatibility Reference</h2>
+			<p>
+				For quick reference, here's how the main commands line up. If you've been using Doppler for a while, you'll barely notice the difference.
+			</p>
 			<table>
 				<thead>
 					<tr>
@@ -280,9 +270,9 @@ redshift run -- npm start</code></pre>
 				</tbody>
 			</table>
 
-			<h2>Need Help?</h2>
+			<h2>Stuck on Something?</h2>
 			<p>
-				Check out our <a href="/docs/cli">CLI documentation</a> or <a href="https://github.com/accolver/redshift" target="_blank" rel="noopener">open an issue on GitHub</a>.
+				The <a href="/docs/cli">CLI docs</a> cover all the flags and options in detail. If you hit something weird during migration, <a href="https://github.com/accolver/redshift" target="_blank" rel="noopener">open an issue</a> -- we've seen most of the edge cases by now and can usually point you in the right direction quickly.
 			</p>
 		`,
 	},
@@ -297,30 +287,25 @@ redshift run -- npm start</code></pre>
 		tags: ['encryption', 'nostr', 'security', 'technical'],
 		content: `
 			<p class="lead">
-				Redshift stores your secrets on public Nostr relays, yet no one can read them except you. The magic behind this is NIP-59 Gift Wrap—a sophisticated encryption scheme that provides metadata protection beyond simple message encryption.
+				Redshift stores your secrets on public Nostr relays, yet no one can read them except you. This post walks through how NIP-59 Gift Wrap actually works under the hood, why simple encryption isn't enough, and what the three-layer scheme buys you in practice.
 			</p>
 
 			<h2>The Problem: Metadata Leaks</h2>
 			<p>
-				Traditional encrypted messaging has a fundamental problem: even when the message content is encrypted, the metadata is often exposed. This includes:
+				Encrypting message content is table stakes. The harder problem is metadata. Even with encrypted payloads, a standard Nostr event leaks the sender's public key, the timestamp, and the recipient's public key in the <code>p</code> tag. That's enough for an observer to build a graph of who's talking to whom and when.
 			</p>
-			<ul>
-				<li><strong>Who sent the message</strong> (the public key of the sender)</li>
-				<li><strong>When it was sent</strong> (the timestamp)</li>
-				<li><strong>Who can decrypt it</strong> (the recipient's public key)</li>
-			</ul>
 			<p>
-				For secret management, this metadata exposure is dangerous. An attacker could determine which projects you're working on, when you last updated credentials, and potentially correlate your identity across services.
+				For secret management this is worse than it sounds. An attacker watching relay traffic could correlate your identity across projects, figure out when you last rotated credentials, and infer which services you depend on. None of that requires breaking any encryption.
 			</p>
 
 			<h2>How NIP-59 Gift Wrap Works</h2>
 			<p>
-				NIP-59 solves metadata leakage with a three-layer encryption scheme. Think of it like putting a letter inside an envelope, inside another envelope, with a random return address.
+				NIP-59 addresses metadata leakage with three nested layers. Each layer hides a different piece of information. Let's walk through them bottom-up.
 			</p>
 
 			<h3>Layer 1: The Rumor (Unsigned Event)</h3>
 			<p>
-				The actual content (your secrets) is placed in an unsigned Nostr event called a "rumor." This event has no cryptographic signature, so it can't be attributed to anyone just by looking at it.
+				Your actual content goes into an unsigned Nostr event called a "rumor." Because it has no signature, there's no cryptographic link back to any identity.
 			</p>
 			<pre><code>{
   "kind": 30078,
@@ -331,7 +316,7 @@ redshift run -- npm start</code></pre>
 
 			<h3>Layer 2: The Seal (Encrypted Rumor)</h3>
 			<p>
-				The rumor is encrypted to the recipient using NIP-44 encryption and wrapped in a "seal" event. The seal is signed by the sender, but this signature is about to be hidden.
+				The rumor gets NIP-44 encrypted to the recipient and placed in a kind <code>13</code> "seal" event. The sender signs the seal with their real key, which proves authorship. But nobody's going to see this signature directly.
 			</p>
 			<pre><code>{
   "kind": 13,
@@ -342,7 +327,7 @@ redshift run -- npm start</code></pre>
 
 			<h3>Layer 3: The Gift Wrap (Hidden Sender)</h3>
 			<p>
-				Here's the clever part: the seal is encrypted again and placed in a "gift wrap" event signed by a <strong>random, one-time keypair</strong>. The timestamp is also randomized within a window.
+				This is where it gets interesting. The seal is encrypted <em>again</em> and wrapped in a kind <code>1059</code> event signed by a <strong>random, one-time keypair</strong> generated just for this message. The timestamp is also randomized within a 48-hour window.
 			</p>
 			<pre><code>{
   "kind": 1059,
@@ -353,65 +338,66 @@ redshift run -- npm start</code></pre>
   "sig": "[random key signature]"
 }</code></pre>
 			<p>
-				To anyone observing the relay, this event appears to come from a random, unknown sender. The real sender's identity is hidden inside the encrypted layers.
+				From the relay's perspective, this event came from some pubkey it's never seen before and will never see again. The real sender is buried two encryption layers deep.
 			</p>
 
 			<h2>Why This Matters for Secret Management</h2>
 			<p>
-				With NIP-59, Redshift achieves true confidentiality:
+				The net effect is that Redshift gets four properties out of a single protocol mechanism:
 			</p>
 			<ul>
-				<li><strong>Content protection</strong>: Your secrets are encrypted with NIP-44</li>
-				<li><strong>Sender anonymity</strong>: No one knows which Nostr identity stored the secrets</li>
-				<li><strong>Timing obfuscation</strong>: Randomized timestamps prevent activity correlation</li>
-				<li><strong>Relay blindness</strong>: Relays store encrypted blobs with no idea what's inside</li>
+				<li>Content is NIP-44 encrypted. Relays see ciphertext.</li>
+				<li>Sender identity is hidden behind a throwaway key. No attribution without decryption.</li>
+				<li>Timestamps are randomized, so you can't correlate activity patterns.</li>
+				<li>Relays have no way to distinguish secret storage events from any other Gift Wrap traffic.</li>
 			</ul>
 
-			<h2>The Encryption Under the Hood</h2>
+			<h2>NIP-44 Encryption Details</h2>
 			<p>
-				NIP-44, used for the actual encryption, provides:
+				NIP-44 handles the actual cryptographic operations inside the seal and gift wrap layers. The construction looks like this:
 			</p>
-			<ul>
-				<li><strong>ChaCha20 with HMAC-SHA256</strong>: Modern authenticated encryption</li>
-				<li><strong>secp256k1 ECDH</strong>: Key agreement using Nostr keypairs</li>
-				<li><strong>HKDF key derivation</strong>: Secure key expansion</li>
-				<li><strong>Padding</strong>: Message length obfuscation</li>
-			</ul>
 			<p>
-				The combination means that even if an attacker compromises a relay and captures all traffic, they learn nothing about your secrets—not the content, not the sender, not even the approximate time they were stored.
+				Key agreement uses secp256k1 ECDH between the sender and recipient Nostr keypairs, producing a shared secret. That shared secret is expanded via HKDF into the actual encryption key and nonce. The payload is encrypted with XChaCha20 and authenticated with HMAC-SHA256. Messages are also padded to fixed lengths to prevent content-length analysis.
+			</p>
+			<p>
+				This is a solid, modern construction. If an attacker compromises a relay and dumps everything, they get a pile of padded, authenticated ciphertext with no useful metadata attached. They'd need the recipient's private key to make any progress.
 			</p>
 
 			<h2>Decryption Flow</h2>
 			<p>
-				When you fetch secrets with Redshift, the decryption happens in reverse:
+				When Redshift fetches your secrets, it peels the layers off in reverse:
 			</p>
 			<ol>
-				<li>Query relays for Gift Wrap events tagged with your public key</li>
-				<li>Decrypt the gift wrap to reveal the seal</li>
-				<li>Verify the seal's signature matches your own public key (self-sent secrets)</li>
-				<li>Decrypt the seal to reveal the rumor</li>
-				<li>Parse the rumor to extract your secrets</li>
+				<li>Query relays for kind <code>1059</code> events with a <code>p</code> tag matching your pubkey</li>
+				<li>NIP-44 decrypt the gift wrap content using the throwaway pubkey + your private key, revealing the seal</li>
+				<li>Verify the seal's <code>pubkey</code> matches your own (for self-stored secrets) or a trusted sender</li>
+				<li>NIP-44 decrypt the seal content, revealing the unsigned rumor</li>
+				<li>Parse the rumor's content and tags to extract the actual secret values</li>
 			</ol>
 			<p>
-				All of this happens client-side. The relays never see your private key, and the decrypted secrets never leave your device.
+				Everything happens client-side. Your private key never leaves your device, and plaintext secrets exist only in memory during the session.
 			</p>
 
 			<h2>Security Considerations</h2>
 			<p>
-				NIP-59 is secure, but it's not magic. Keep these points in mind:
+				A few things to keep in mind when reasoning about this threat model:
 			</p>
-			<ul>
-				<li><strong>Key management is critical</strong>: If someone gets your nsec, they get your secrets</li>
-				<li><strong>Relay availability matters</strong>: Use multiple relays for redundancy</li>
-				<li><strong>Forward secrecy is limited</strong>: Old secrets encrypted with a compromised key are exposed</li>
-			</ul>
+			<p>
+				<strong>Key compromise is total.</strong> If someone gets your nsec, they can decrypt every secret ever encrypted to your pubkey. There's no forward secrecy here; NIP-59 uses static ECDH, not a ratcheting protocol. Rotate secrets if you suspect key compromise.
+			</p>
+			<p>
+				<strong>Relay availability is your responsibility.</strong> Relays can go offline, purge old events, or refuse to store your data. Use multiple relays. Redshift publishes to several by default, but you should verify your relay list periodically.
+			</p>
+			<p>
+				<strong>The throwaway key is per-event.</strong> Reusing it across messages would re-link them. Redshift generates a fresh keypair for every Gift Wrap, which is the correct behavior per the spec.
+			</p>
 
-			<h2>Try It Yourself</h2>
+			<h2>Further Reading</h2>
 			<p>
-				Want to see NIP-59 in action? <a href="/admin">Create a Redshift project</a> and inspect the network traffic—you'll see encrypted Gift Wrap events with no identifiable sender. Your secrets are truly sovereign.
+				You can inspect this in practice by <a href="/admin">creating a Redshift project</a> and watching the network tab. The kind <code>1059</code> events will have random pubkeys and no readable content.
 			</p>
 			<p>
-				For more technical details, read <a href="https://github.com/nostr-protocol/nips/blob/master/59.md" target="_blank" rel="noopener">NIP-59 on GitHub</a> or explore our <a href="/docs/security">security documentation</a>.
+				For the full spec, see <a href="https://github.com/nostr-protocol/nips/blob/master/59.md" target="_blank" rel="noopener">NIP-59 on GitHub</a>. Our <a href="/docs/security">security docs</a> cover Redshift's specific implementation choices.
 			</p>
 		`,
 	},
@@ -426,103 +412,63 @@ redshift run -- npm start</code></pre>
 		tags: ['security', 'sovereignty', 'philosophy'],
 		content: `
 			<p class="lead">
-				When evaluating secret management tools, most teams focus on pricing, features, and ease of use. But the most significant costs of centralized providers aren't on the pricing page—they're hidden in the fine print, the architecture, and the long-term implications of giving up control.
+				I spent a weekend migrating off a secret manager last year. Not because it was bad software, but because the vendor got acquired and the new owners tripled the price on our tier. Two days of my life, rewriting CI pipelines and rotating credentials, because someone else controlled where our secrets lived. That experience got me thinking about all the ways centralized secret management costs you beyond the monthly bill.
 			</p>
 
-			<h2>Cost #1: Vendor Lock-in</h2>
+			<h2>You can check in, but you can't check out</h2>
 			<p>
-				Every secret manager has its own API, CLI syntax, and data format. The deeper you integrate, the harder it becomes to leave. This creates leverage that vendors exploit:
+				Every secret manager has its own API, its own CLI syntax, its own way of organizing data. That's fine on day one. By month six, you've got it wired into your CI/CD, your deployment scripts reference it by name, your onboarding docs all assume it exists. You're locked in, and the vendor knows it.
 			</p>
-			<ul>
-				<li><strong>Price increases</strong>: Once you're locked in, vendors can raise prices knowing migration is painful</li>
-				<li><strong>Feature bundling</strong>: Essential features get moved to higher tiers</li>
-				<li><strong>Acquisition risk</strong>: When your vendor gets acquired, priorities change—often not in your favor</li>
-			</ul>
 			<p>
-				We've seen this play out repeatedly. HashiCorp's license change to BSL. Heroku's free tier elimination. Docker's rate limiting. The pattern is predictable: grow users with generous terms, then tighten the screws.
+				We've watched this play out over and over. HashiCorp changed Vault's license to BSL and teams that had built their entire infrastructure around it suddenly had to consult lawyers. Heroku killed its free tier overnight. Docker slapped rate limits on pulls that had been free for years. The playbook is always the same: get developers hooked with generous terms, wait until switching costs are high, then change the deal.
+			</p>
+			<p>
+				The worst part is that migration isn't just "point at a new API." It's re-auditing access controls, re-testing every integration, and hoping nothing breaks in production at 2am. Most teams just eat the price increase because the alternative is worse.
 			</p>
 
-			<h2>Cost #2: Compliance Complexity</h2>
+			<h2>Compliance gets weird fast</h2>
 			<p>
-				Storing secrets with a third party introduces compliance headaches:
+				If you work in a regulated industry, try answering these questions about your secret manager: Where are your secrets physically stored right now? Which employees at the vendor have access to the underlying infrastructure? What jurisdiction are those servers in, and whose subpoena power applies to them?
 			</p>
-			<ul>
-				<li><strong>Data residency</strong>: Where are your secrets physically stored? Can you prove it?</li>
-				<li><strong>Audit trails</strong>: Who at the vendor has accessed your data?</li>
-				<li><strong>Subpoena risk</strong>: Your secrets are subject to the vendor's legal jurisdiction</li>
-				<li><strong>Breach notification</strong>: If the vendor is breached, you may be the last to know</li>
-			</ul>
 			<p>
-				For regulated industries, these aren't theoretical concerns—they're audit findings waiting to happen.
+				Most teams can't answer any of those confidently. And it gets worse during audits. Your auditor asks where your production database credentials live, and the honest answer is "on servers we don't control, in a region we think is us-east-1, managed by people we've never met." That's not a great answer. If the vendor gets breached, you might find out from a news article before their incident response team gets around to notifying you.
 			</p>
 
-			<h2>Cost #3: Single Point of Failure</h2>
+			<h2>When the service goes down, you go down</h2>
 			<p>
-				Centralized services fail. When they do, your entire deployment pipeline stops:
+				Every major cloud provider has outages. This isn't controversial, it's just reality. But when your secret manager is down, it's not like a CDN outage where pages load a bit slower. You literally cannot deploy. You can't rotate credentials. You can't onboard a new service. You're stuck.
 			</p>
-			<ul>
-				<li><strong>Outages</strong>: AWS has outages. Azure has outages. Everyone has outages.</li>
-				<li><strong>Rate limiting</strong>: Hit API limits during a critical deployment? Too bad.</li>
-				<li><strong>Account suspension</strong>: Billing issues, ToS disputes, or mistakes can lock you out instantly</li>
-			</ul>
 			<p>
-				In 2023 alone, major cloud providers experienced dozens of significant outages. Each one represents developers unable to deploy, unable to access credentials, unable to work.
+				I've seen teams hit API rate limits during an incident response, right when they needed to rotate a compromised key. And account suspensions happen too, sometimes over something as dumb as a billing dispute or an expired credit card. Imagine explaining to your CTO that production is down because your corporate card got flagged for fraud and the vault provider auto-suspended the account.
 			</p>
 
-			<h2>Cost #4: The Trust Tax</h2>
+			<h2>Trust is a liability</h2>
 			<p>
-				Every centralized provider requires you to trust them with your most sensitive data:
+				This is the one that bothers me most. When you use a centralized provider, you're trusting their employees won't go rogue, their security practices are actually as good as their marketing claims, and that the company will still exist and care about your use case in three years. You can't audit their implementation. You can't verify their access logs. You just... trust.
 			</p>
-			<ul>
-				<li><strong>Trust their employees</strong>: Insider threats are real and documented</li>
-				<li><strong>Trust their security</strong>: You can't audit their actual implementation</li>
-				<li><strong>Trust their longevity</strong>: Startups fail, get acquired, or pivot</li>
-				<li><strong>Trust their ethics</strong>: Will they sell your data? Cooperate with surveillance?</li>
-			</ul>
 			<p>
-				This isn't paranoia—it's risk assessment. Every additional trust relationship is a potential failure point.
+				That's a lot of trust to extend to an organization you have zero visibility into. And every additional trust relationship is another surface area for things to go wrong. This isn't paranoia. It's the same risk calculus you'd apply to any other dependency in your stack.
 			</p>
 
-			<h2>Cost #5: Loss of Sovereignty</h2>
+			<h2>Who actually owns your secrets?</h2>
 			<p>
-				The most insidious cost is philosophical: when you store secrets with a third party, they're not really <em>your</em> secrets anymore. The provider can:
-			</p>
-			<ul>
-				<li>Revoke your access at any time</li>
-				<li>Change how your data is stored or processed</li>
-				<li>Be compelled by governments to hand over your data</li>
-				<li>Shut down entirely, with limited notice</li>
-			</ul>
-			<p>
-				This loss of sovereignty has real consequences for open-source projects, activists, journalists, and anyone operating outside mainstream approval.
+				Here's what keeps me up at night: if a provider can revoke your access to your own secrets, are they really yours? They can change their ToS. They can be compelled by a government to hand over your data. They can shut down with 30 days notice and a "thanks for being a customer" email. For most commercial SaaS teams this is an acceptable risk. But for open-source projects, independent developers, journalists, or anyone operating in a politically sensitive context, this is a non-starter. Your secrets should survive your relationship with any single vendor.
 			</p>
 
-			<h2>The Alternative: Decentralized Sovereignty</h2>
+			<h2>What we built instead</h2>
 			<p>
-				Redshift eliminates these hidden costs by design:
+				Redshift sidesteps all of this. Your data uses standard Nostr protocols, so there's no proprietary format locking you in. Secrets replicate across independent relays, so no single outage takes you down. Everything is encrypted client-side before it ever leaves your machine, so there's no trust required in relay operators. Your keys, your data, full stop.
 			</p>
-			<ul>
-				<li><strong>No lock-in</strong>: Your data uses standard Nostr protocols—export anytime</li>
-				<li><strong>No single point of failure</strong>: Secrets are replicated across independent relays</li>
-				<li><strong>No trust required</strong>: Client-side encryption means we can't read your secrets</li>
-				<li><strong>True ownership</strong>: Your keys, your data, your rules</li>
-			</ul>
 			<p>
-				The upfront learning curve of a new tool is nothing compared to the compounding costs of centralized dependency.
+				Yeah, there's a learning curve. But it's a one-time cost, not a compounding one. Every month you spend on a centralized provider, the switching costs get higher and your leverage gets lower.
 			</p>
 
-			<h2>Calculate Your Real Cost</h2>
+			<h2>Questions worth asking</h2>
 			<p>
-				Next time you evaluate a secret manager, ask yourself:
+				Before you sign up for (or renew) any secret management service, sit with these for a minute: What does it actually look like to leave this vendor? Not in theory, in practice, with your current integrations. What happens to your deployments if they have a bad day? And what happens to your data if they get acquired by someone who doesn't care about your use case?
 			</p>
-			<ol>
-				<li>What happens if I need to leave this vendor in 2 years?</li>
-				<li>What happens if they have a major breach?</li>
-				<li>What happens if they're acquired by a competitor?</li>
-				<li>What happens if they're subpoenaed for my data?</li>
-			</ol>
 			<p>
-				If the answers make you uncomfortable, it might be time to consider a sovereign alternative. <a href="/admin">Try Redshift free</a>—and own your secrets for real.
+				If you don't like the answers, <a href="/admin">give Redshift a look</a>. It's free, it's open, and your secrets stay yours.
 			</p>
 		`,
 	},
@@ -537,35 +483,26 @@ redshift run -- npm start</code></pre>
 		tags: ['open-source', 'tutorial', 'best-practices'],
 		content: `
 			<p class="lead">
-				Open source projects need secrets too—API keys for CI/CD, tokens for publishing packages, credentials for test infrastructure. But most secret management solutions assume you have a corporate credit card and a procurement process. Here's how to manage secrets when you're building in the open.
+				Your open source project has secrets. Here's how to manage them without a corporate account or a budget.
 			</p>
 
 			<h2>The Open Source Secret Challenge</h2>
 			<p>
-				Open source maintainers face unique constraints:
+				If you maintain an open source project, you've dealt with this: you need API keys for CI, tokens for publishing, maybe credentials for test infrastructure. But the tools that manage secrets all seem to assume you're a company with a procurement department.
 			</p>
-			<ul>
-				<li><strong>No budget</strong>: Many projects run on volunteer time with zero funding</li>
-				<li><strong>Rotating contributors</strong>: People come and go; access management is crucial</li>
-				<li><strong>Public repositories</strong>: One accidental commit can expose credentials</li>
-				<li><strong>CI/CD complexity</strong>: Secrets need to be available in automated workflows</li>
-				<li><strong>Bus factor</strong>: What happens if the primary maintainer is unavailable?</li>
-			</ul>
 			<p>
-				Traditional solutions either cost money, require corporate accounts, or introduce dependencies that outlive the project.
+				Meanwhile, you're juggling contributors who come and go, public repos where one bad commit exposes everything, and the nagging worry about what happens if you step away for a month. Traditional solutions either cost money or introduce dependencies that'll outlive your interest in the project.
 			</p>
 
 			<h2>Pattern 1: Environment Separation</h2>
 			<p>
-				Keep development secrets completely separate from production:
+				This sounds obvious, but I've seen plenty of projects where the same NPM token gets used for local dev, CI, and production releases. Don't do that.
 			</p>
-			<ul>
-				<li><strong>Development</strong>: Use local-only credentials, mock services, or public test APIs</li>
-				<li><strong>CI/CD</strong>: Dedicated secrets with minimal permissions, rotated regularly</li>
-				<li><strong>Production</strong>: Tightly controlled, accessed only by release automation</li>
-			</ul>
 			<p>
-				With Redshift, each environment is a separate namespace. Contributors can have access to development secrets without ever seeing production credentials.
+				Keep your environments isolated. Use local-only credentials for development, dedicated CI tokens with minimal permissions, and production secrets that only the release automation touches. If a contributor's laptop gets compromised, it shouldn't matter for prod.
+			</p>
+			<p>
+				In Redshift, each environment is its own namespace, so you can hand out development access freely without anyone seeing production credentials.
 			</p>
 			<pre><code>$ redshift setup
 ? Select environment: development
@@ -576,36 +513,26 @@ $ redshift run -e development -- npm test</code></pre>
 
 			<h2>Pattern 2: Minimal Permissions</h2>
 			<p>
-				Every secret should have the minimum permissions required:
+				Scope everything down. Read-only tokens for CI jobs that only need to fetch. API keys limited to specific actions. Credentials that expire on their own so you don't have to remember to rotate them.
 			</p>
-			<ul>
-				<li><strong>Read-only tokens</strong> for most CI jobs</li>
-				<li><strong>Scoped API keys</strong> limited to specific actions</li>
-				<li><strong>Time-limited credentials</strong> that expire automatically</li>
-			</ul>
 			<p>
-				If a secret is exposed, the blast radius should be as small as possible. A token that can only read public package metadata is far less dangerous than one with full admin access.
+				The goal is blast radius. When (not if) something leaks, a token that can only read public package metadata is a non-event. A token with full admin access is an incident.
 			</p>
 
 			<h2>Pattern 3: Contributor Access Without Shared Secrets</h2>
 			<p>
-				The biggest mistake projects make is sharing a single set of credentials among all maintainers. When someone leaves, you have to rotate everything.
+				I've learned this one the hard way. You share one set of credentials with all your maintainers, someone steps away from the project, and now you're rotating everything at 11pm because you're not sure they revoked access on their end.
 			</p>
 			<p>
-				Better approaches:
+				Give each maintainer their own credentials instead. Define roles—release manager, CI admin—with specific permissions tied to each. Keep audit logs so you know who accessed what. It's more setup upfront, but future-you will be grateful.
 			</p>
-			<ul>
-				<li><strong>Per-contributor tokens</strong>: Each maintainer has their own credentials</li>
-				<li><strong>Role-based access</strong>: Define roles (release manager, CI admin) with specific permissions</li>
-				<li><strong>Audit logging</strong>: Know who accessed what and when</li>
-			</ul>
 			<p>
-				Redshift's roadmap includes team features specifically designed for this—cryptographic access control without a central authority.
+				Redshift's roadmap includes team features for exactly this: cryptographic access control without needing a central authority.
 			</p>
 
 			<h2>Pattern 4: Secrets in CI/CD</h2>
 			<p>
-				GitHub Actions, GitLab CI, and other platforms have built-in secret storage. Use it wisely:
+				GitHub Actions, GitLab CI, and the rest all have built-in secret storage. Use it, but think about what you're actually storing there. Here's what a Redshift setup looks like:
 			</p>
 			<pre><code># .github/workflows/release.yml
 jobs:
@@ -620,46 +547,34 @@ jobs:
         env:
           REDSHIFT_NSEC: \${{ secrets.REDSHIFT_NSEC }}</code></pre>
 			<p>
-				The CI platform only stores your Nostr identity—actual secrets are fetched at runtime from decentralized relays.
+				The CI platform only stores your Nostr identity. Actual secrets get fetched at runtime from decentralized relays, so you're not duplicating sensitive values across GitHub's secret store and everywhere else.
 			</p>
 
 			<h2>Pattern 5: The Bus Factor Solution</h2>
 			<p>
-				What happens if you're hit by a bus (or just take a vacation)?
+				What happens if you take a two-week vacation and something breaks? Or, less charitably, what if you just lose interest?
 			</p>
-			<ul>
-				<li><strong>Document everything</strong>: List all secrets and their purposes in a private maintainer doc</li>
-				<li><strong>Multi-maintainer access</strong>: At least two people should be able to access critical credentials</li>
-				<li><strong>Recovery procedures</strong>: Write down how to regenerate or rotate each secret</li>
-			</ul>
 			<p>
-				With Redshift, you can share encrypted secrets with co-maintainers using their Nostr public keys. No central service required—just cryptography.
+				At minimum: keep a private maintainer doc listing every secret and what it's for. Make sure at least two people can access critical credentials. Write down how to regenerate or rotate each one—you think you'll remember, but you won't.
+			</p>
+			<p>
+				With Redshift, you can share encrypted secrets with co-maintainers using their Nostr public keys. No central service in the middle, just cryptography.
 			</p>
 
 			<h2>Pattern 6: Public Secrets for Development</h2>
 			<p>
-				Some "secrets" don't need to be secret in development:
+				Not everything needs to be locked down. Public API keys for services with generous free tiers, test credentials for sandboxed environments, mock tokens that only work locally—these are fine to share openly.
 			</p>
-			<ul>
-				<li><strong>Public API keys</strong> for services with generous free tiers</li>
-				<li><strong>Test credentials</strong> for sandboxed environments</li>
-				<li><strong>Mock service tokens</strong> that work in development only</li>
-			</ul>
 			<p>
-				Document these clearly so new contributors can get started without requesting access. Keep them in a <code>.env.example</code> file committed to the repo.
+				Put them in a <code>.env.example</code> committed to the repo. New contributors should be able to clone, copy that file, and have a working dev environment without asking anyone for access. The fewer barriers to a first contribution, the better.
 			</p>
 
 			<h2>Getting Started</h2>
 			<p>
-				For open source projects, Redshift offers:
+				Redshift is free for individuals—no credit card, no corporate account needed. Your encrypted secrets live on Nostr relays, so even if Redshift disappears, your data doesn't.
 			</p>
-			<ul>
-				<li><strong>Free forever</strong>: No credit card, no limits for individuals</li>
-				<li><strong>Decentralized</strong>: No corporate account or billing relationship required</li>
-				<li><strong>Portable</strong>: If Redshift disappears tomorrow, your encrypted secrets are still on Nostr relays</li>
-			</ul>
 			<p>
-				Ready to secure your open source project? <a href="/docs/quickstart">Read the quickstart guide</a> or <a href="/admin">create your first project</a>.
+				Check the <a href="/docs/quickstart">quickstart guide</a> or <a href="/admin">create your first project</a>.
 			</p>
 		`,
 	},
@@ -674,63 +589,48 @@ jobs:
 		tags: ['open-source', 'security', 'philosophy'],
 		content: `
 			<p class="lead">
-				When a security tool is closed-source, you're placing blind trust in the vendor's claims. When it's open source, you can verify those claims yourself—or pay someone you trust to verify them for you.
+				I don't trust closed-source security tools. Not because the people building them are dishonest, but because "just trust us" is a fundamentally broken model for software that handles your secrets.
 			</p>
 
 			<h2>The Trust Problem</h2>
 			<p>
-				Every security tool makes promises:
+				Go read the landing page for any closed-source secrets manager. You'll find some version of: "your data is encrypted at rest," "we never see your plaintext secrets," "zero-knowledge architecture." Maybe a compliance badge or two.
 			</p>
-			<ul>
-				<li>"We use military-grade encryption"</li>
-				<li>"Your data is never stored unencrypted"</li>
-				<li>"We can't access your secrets"</li>
-				<li>"There are no backdoors"</li>
-			</ul>
 			<p>
-				With closed-source software, these are just marketing claims. You have no way to verify them. The vendor could be lying, mistaken, or compromised—and you'd never know.
+				How would you know if any of that is true? You wouldn't. The vendor could be mistaken about their own implementation. They could have a bug they haven't found yet. They could be under a gag order. You're trusting a marketing page, not a codebase.
 			</p>
 
-			<h2>What Open Source Enables</h2>
+			<h2>What Open Source Actually Gets You</h2>
 
 			<h3>Independent Audits</h3>
 			<p>
-				Anyone can review the code. Security researchers, competitors, paranoid users—all can examine exactly how the software works. Bugs and vulnerabilities get found faster because more eyes are looking.
-			</p>
-			<p>
-				Redshift's encryption implementation is visible at <a href="https://github.com/accolver/redshift" target="_blank" rel="noopener">github.com/accolver/redshift</a>. You can verify we're using NIP-59 correctly, that secrets are encrypted before transmission, and that there's no key escrow.
+				Redshift's encryption implementation is at <a href="https://github.com/accolver/redshift" target="_blank" rel="noopener">github.com/accolver/redshift</a>. You can go read how we use NIP-59, confirm secrets are encrypted before they leave your machine, and check that there's no key escrow. You don't need to take our word for it. Security researchers and paranoid developers have the same access you do.
 			</p>
 
-			<h3>No Hidden Backdoors</h3>
+			<h3>Backdoors Are Visible</h3>
 			<p>
-				Closed-source vendors can be compelled—by governments, by investors, by acquirers—to add backdoors. They might not even tell you about it.
+				Closed-source vendors can be compelled to add backdoors -- by governments, by investors, by acquirers -- and they may not be allowed to tell you about it. This isn't theoretical.
 			</p>
 			<p>
-				With open source, backdoors are visible. If we added one, someone would notice. The code is the contract.
-			</p>
-
-			<h3>Longevity and Forking</h3>
-			<p>
-				Companies fail. Products get discontinued. Acquisitions happen.
-			</p>
-			<p>
-				When a closed-source security tool dies, your data may die with it. When an open-source tool's maintainers move on, the community can fork it and continue development. Your investment in learning the tool, integrating it, and storing data with it is protected.
+				An open source backdoor would show up in a diff. That's a meaningful difference.
 			</p>
 
-			<h3>Customization</h3>
+			<h3>The Project Outlives the Company</h3>
 			<p>
-				Need a feature the vendor won't build? With open source, you can build it yourself or hire someone to build it. You're not dependent on the vendor's roadmap or priorities.
+				Companies fail. Products get acqui-hired into oblivion. When your closed-source secrets manager shuts down, you're scrambling. When an open source project's maintainers move on, the community can fork it. All the time you invested in integration and tooling isn't wasted.
 			</p>
 
-			<h2>The "Security Through Obscurity" Myth</h2>
+			<h3>You Can Fix It Yourself</h3>
 			<p>
-				Some vendors claim that hiding their code makes it more secure. This is a discredited idea in security circles.
+				Need something the maintainers won't prioritize? Build it. You're not sitting in a feature request queue hoping the next quarterly roadmap goes your way.
+			</p>
+
+			<h2>Security Through Obscurity Is Still Wrong</h2>
+			<p>
+				Some vendors argue that hiding source code makes their product more secure. This has been a discredited position in cryptography for decades. AES, TLS, every serious security primitive you rely on daily -- all publicly documented. Strong security comes from sound algorithms and correct implementation, not from hoping attackers can't read your code.
 			</p>
 			<p>
-				Good security doesn't depend on attackers not knowing how it works. AES encryption, TLS, and every other trusted security standard is fully documented. Security comes from strong algorithms and proper implementation—not from hiding the details.
-			</p>
-			<p>
-				In fact, obscurity often <em>hides</em> security problems rather than preventing them. The most embarrassing security breaches often come from closed-source systems that looked secure on the surface.
+				Obscurity doesn't prevent security problems. It <em>hides</em> them. Some of the worst breaches in recent memory came from closed-source systems that looked perfectly secure from the outside.
 			</p>
 
 			<h2>Open Source Isn't Perfect</h2>
@@ -743,23 +643,15 @@ jobs:
 				<li><strong>Supply chain attacks</strong>: Dependencies can be compromised</li>
 			</ul>
 			<p>
-				But these challenges exist for closed-source too—they're just invisible. At least with open source, you have the <em>option</em> to verify.
+				But these problems all exist in closed-source software too -- you just can't see them. Open source at least gives you the <em>option</em> to verify.
 			</p>
 
 			<h2>Redshift's Approach</h2>
 			<p>
-				Redshift is MIT licensed. Every line of code is public:
-			</p>
-			<ul>
-				<li><strong>CLI</strong>: The binary you run on your machine</li>
-				<li><strong>Web admin</strong>: The dashboard you use to manage secrets</li>
-				<li><strong>Crypto libraries</strong>: The encryption implementation</li>
-			</ul>
-			<p>
-				We believe security tools should be verifiable. If you don't trust us, read the code. If you find a bug, open an issue. If you want a feature, submit a PR.
+				Redshift is MIT licensed. The CLI, the web admin dashboard, the crypto libraries -- all public. If you don't trust us, read the code. If you find a bug, open an issue. If you want a feature, submit a PR.
 			</p>
 			<p>
-				That's how security software should work. <a href="/admin">Try Redshift</a> and verify for yourself.
+				<a href="/admin">Try Redshift</a> and see for yourself.
 			</p>
 		`,
 	},
@@ -774,21 +666,15 @@ jobs:
 		tags: ['tutorial', 'cicd', 'devops'],
 		content: `
 			<p class="lead">
-				Your CI/CD pipeline needs access to secrets—API keys, deployment credentials, signing certificates. Here's how to use Redshift to inject secrets into automated workflows without exposing them in your repository or CI platform.
+				I recently wired up Redshift to three different CI platforms in the same week. The actual config is straightforward once you see it, but there were a few things I wish I'd known upfront. This is the guide I would've wanted.
 			</p>
 
-			<h2>The Problem with CI/CD Secrets</h2>
+			<h2>Why Not Just Use the Built-in Secrets?</h2>
 			<p>
-				Most CI platforms have built-in secret storage, but it comes with limitations:
+				GitHub Actions, GitLab, CircleCI -- they all have secret storage built in. It works fine until you need to share secrets across platforms, or you realize that anyone with repo admin can read them, or you try to figure out who changed a value last Tuesday. The built-in options get you 80% of the way there, but the last 20% is where things get annoying.
 			</p>
-			<ul>
-				<li><strong>Platform lock-in</strong>: Secrets stored in GitHub Actions don't transfer to GitLab</li>
-				<li><strong>Access control gaps</strong>: Anyone with repo admin access can often read secrets</li>
-				<li><strong>Audit limitations</strong>: Tracking who accessed what and when is often poor</li>
-				<li><strong>No versioning</strong>: Rolling back a secret change is difficult</li>
-			</ul>
 			<p>
-				Redshift solves this by storing secrets on decentralized Nostr relays and injecting them at runtime.
+				Redshift takes a different approach: your secrets live on Nostr relays, encrypted to your identity, and get pulled in at runtime. The CI platform only ever holds one thing -- your Nostr key.
 			</p>
 
 			<h2>Prerequisites</h2>
@@ -803,7 +689,7 @@ jobs:
 
 			<h2>GitHub Actions Setup</h2>
 			<p>
-				Store your CI Nostr identity as a repository secret, then use Redshift in your workflow:
+				This is probably where most people will start. Add your CI identity's nsec as a repository secret called <code>REDSHIFT_NSEC</code>, then your workflow looks like this:
 			</p>
 			<pre><code># .github/workflows/deploy.yml
 name: Deploy
@@ -831,7 +717,7 @@ jobs:
 
 			<h2>GitLab CI Setup</h2>
 			<p>
-				Add <code>REDSHIFT_NSEC</code> as a CI/CD variable in your project settings:
+				GitLab keeps CI/CD variables in project settings rather than a secrets tab. Go to Settings > CI/CD > Variables and add <code>REDSHIFT_NSEC</code> there. The pipeline config itself is pretty minimal:
 			</p>
 			<pre><code># .gitlab-ci.yml
 stages:
@@ -849,7 +735,7 @@ deploy:
 
 			<h2>CircleCI Setup</h2>
 			<p>
-				Add <code>REDSHIFT_NSEC</code> in Project Settings → Environment Variables:
+				For CircleCI, you'll find environment variables under Project Settings. The YAML is a bit more verbose than the others, but the Redshift part is identical:
 			</p>
 			<pre><code># .circleci/config.yml
 version: 2.1
@@ -875,11 +761,11 @@ workflows:
             branches:
               only: main</code></pre>
 
-			<h2>Security Best Practices</h2>
+			<h2>Keep Your CI Identity Separate</h2>
 
-			<h3>Use Dedicated CI Identities</h3>
+			<h3>Don't Reuse Your Personal Key</h3>
 			<p>
-				Don't use your personal Nostr identity for CI. Create a separate keypair using a Nostr key generator or your NIP-07 extension, then authenticate with it:
+				This is the one thing I'd really stress. Don't use your personal Nostr identity for CI. If that nsec leaks from a CI log or a misconfigured workflow, you don't want it to be the same key that holds your personal secrets. Generate a dedicated keypair:
 			</p>
 			<pre><code># Generate a new keypair using any Nostr tool (e.g., nak, nostr-tools)
 $ nak key generate
@@ -889,12 +775,12 @@ nsec1...
 # Then login with the new identity
 $ redshift login --nsec nsec1...</code></pre>
 			<p>
-				This limits blast radius if the CI secret is exposed and makes revocation easier.
+				If the CI key does get exposed, you revoke that one identity and re-share secrets with a new one. Your personal stuff stays untouched.
 			</p>
 
 			<h3>Scope Secrets by Environment</h3>
 			<p>
-				Use different environments for different pipeline stages:
+				Use different environments for different pipeline stages. Your test suite doesn't need production database credentials:
 			</p>
 			<ul>
 				<li><code>-e ci</code> for build/test jobs (limited secrets)</li>
@@ -902,9 +788,9 @@ $ redshift login --nsec nsec1...</code></pre>
 				<li><code>-e production</code> for production deployments (restricted access)</li>
 			</ul>
 
-			<h3>Rotate Regularly</h3>
+			<h3>Rotate After Team Changes</h3>
 			<p>
-				Rotate your CI Nostr identity periodically, especially after team changes. Since secrets are encrypted to the identity, you'll need to re-share secrets with the new identity.
+				When someone leaves the team, rotate your CI Nostr identity. Since secrets are encrypted to that identity, you'll need to re-share them with the new keypair -- but that's a feature, not a bug. It forces you to actually revoke access instead of just hoping the old credentials aren't saved somewhere.
 			</p>
 
 			<h2>Debugging CI Issues</h2>
@@ -913,20 +799,15 @@ $ redshift login --nsec nsec1...</code></pre>
 			</p>
 			<ol>
 				<li>Verify <code>REDSHIFT_NSEC</code> is set: <code>echo $REDSHIFT_NSEC | head -c 10</code></li>
-				<li>Check relay connectivity: <code>redshift status</code></li>
-				<li>Verify project/environment exist: <code>redshift projects list</code></li>
+				<li>Check your identity: <code>redshift me</code></li>
+				<li>Verify project setup: <code>redshift configure</code></li>
 				<li>Test locally with the same identity</li>
 			</ol>
 
 			<h2>Next Steps</h2>
 			<p>
-				With Redshift in your CI/CD pipeline, you get:
+				Once this is running, you get secrets that travel with you across CI platforms, cryptographic access control without passing credentials around, and the same secret values locally and in CI. No more "it works on my machine" because of a missing env var.
 			</p>
-			<ul>
-				<li>Secrets that aren't locked into any CI platform</li>
-				<li>Cryptographic access control without shared credentials</li>
-				<li>The same secrets locally and in CI</li>
-			</ul>
 			<p>
 				For more details, see our <a href="/docs/cli">CLI documentation</a> or <a href="/docs/quickstart">quickstart guide</a>.
 			</p>
@@ -951,43 +832,35 @@ $ redshift login --nsec nsec1...</code></pre>
 				NIP-07 is a Nostr Implementation Possibility that defines a <code>window.nostr</code> API for browser extensions. When a web app needs to sign an event (like encrypting your secrets), it asks the extension to sign instead of handling your private key directly.
 			</p>
 			<p>
-				This is similar to how MetaMask works for Ethereum—the extension holds your keys, and websites request signatures through a standard interface.
+				If you've used SSH keys, the mental model is similar -- your key lives in one place, and applications ask it to sign things on their behalf. The key itself never gets handed over.
 			</p>
 
 			<h2>Why Use a NIP-07 Extension?</h2>
-			<ul>
-				<li><strong>Key isolation</strong>: Your private key never leaves the extension</li>
-				<li><strong>Phishing protection</strong>: Malicious websites can't steal your nsec</li>
-				<li><strong>Convenience</strong>: One-click authentication across all Nostr apps</li>
-				<li><strong>Approval control</strong>: You approve each signing request</li>
-			</ul>
+			<p>
+				The short answer: your private key stays out of websites entirely. Without an extension, you'd paste your nsec into every Nostr app you use. One phishing site or one XSS vulnerability and it's gone. With NIP-07, the extension holds the key and the website just gets the signature it asked for. You also get a confirmation prompt for each request, so nothing happens without you approving it.
+			</p>
+			<p>
+				On a practical level, it's also just faster. Install the extension once, and every Nostr app recognizes you instantly. No passwords, no login forms.
+			</p>
 
 			<h2>Popular NIP-07 Extensions</h2>
 
-			<h3>Alby</h3>
+			<h3>Alby (the one we recommend)</h3>
 			<p>
-				<a href="https://getalby.com" target="_blank" rel="noopener">Alby</a> is the most popular option. It combines a Bitcoin Lightning wallet with Nostr key management:
+				<a href="https://getalby.com" target="_blank" rel="noopener">Alby</a> started as a Bitcoin Lightning wallet and grew into the most full-featured NIP-07 extension available. It supports Chrome, Firefox, and Safari, handles multiple Nostr accounts, and is actively maintained and open source. The Lightning integration is nice if you use it, but honestly the Nostr key management alone makes it worth installing.
 			</p>
-			<ul>
-				<li>Available for Chrome, Firefox, and Safari</li>
-				<li>Supports multiple Nostr accounts</li>
-				<li>Integrates Lightning payments with Nostr identity</li>
-				<li>Open source and actively maintained</li>
-			</ul>
+			<p>
+				It's what we use internally and what most of the Nostr ecosystem has standardized around. If you're not sure which to pick, pick Alby.
+			</p>
 
 			<h3>nos2x</h3>
 			<p>
-				<a href="https://github.com/fiatjaf/nos2x" target="_blank" rel="noopener">nos2x</a> is a minimal, no-frills option:
+				<a href="https://github.com/fiatjaf/nos2x" target="_blank" rel="noopener">nos2x</a> is fiatjaf's original NIP-07 implementation. Chrome only, no wallet, no extras -- it just signs Nostr events and gets out of the way. If you want the smallest possible extension and don't care about Lightning or multi-account support, nos2x is fine. It hasn't seen as much active development lately though, which is worth considering.
 			</p>
-			<ul>
-				<li>Chrome only</li>
-				<li>Does one thing well: signs Nostr events</li>
-				<li>Lightweight and simple</li>
-			</ul>
 
 			<h3>Flamingo</h3>
 			<p>
-				A newer option focused on mobile-friendly design and ease of use.
+				A newer option focused on mobile-friendly design. We haven't tested it extensively with Redshift, so your mileage may vary.
 			</p>
 
 			<h2>Setting Up Alby (Recommended)</h2>
@@ -1020,52 +893,28 @@ $ redshift login --nsec nsec1...</code></pre>
 				When you save secrets, Redshift asks the extension to encrypt them. You'll see a popup for each encryption request (or you can configure auto-approve for trusted sites).
 			</p>
 
-			<h2>Security Considerations</h2>
-
-			<h3>Extension Permissions</h3>
+			<h2>A Few Things to Be Aware Of</h2>
 			<p>
-				NIP-07 extensions can request different permission levels:
+				NIP-07 extensions handle three types of requests: reading your public key (harmless -- it's public), signing events, and encrypting/decrypting content. Redshift needs all three. When you first connect, the extension will ask you to approve each type. Take a second to actually read those prompts rather than clicking through them.
 			</p>
-			<ul>
-				<li><strong>Read public key</strong>: Always allowed, just returns your npub</li>
-				<li><strong>Sign events</strong>: Requires approval, signs Nostr events</li>
-				<li><strong>Encrypt/decrypt</strong>: Requires approval, used for private messages and secrets</li>
-			</ul>
 			<p>
-				Redshift needs all three. Review the permission requests before approving.
+				Once you trust a site, you can configure your extension to auto-approve its requests. Alby makes this easy in its settings. We'd recommend doing this for redshiftapp.com since you'll be triggering encryption requests frequently when managing secrets, and clicking "approve" fifty times gets old fast.
+			</p>
+			<p>
+				One thing that catches people: <strong>your extension stores keys in your browser's local storage</strong>. Clear your browser data, switch to a new machine, or uninstall the extension without exporting your nsec first, and you've locked yourself out. Export your nsec from the extension settings and back it up somewhere safe -- a password manager, an encrypted note, whatever works for you. Do this before you need it, not after.
 			</p>
 
-			<h3>Site Allowlists</h3>
+			<h2>Common Issues</h2>
+
+			<h3>"Redshift says no extension found"</h3>
 			<p>
-				Configure your extension to auto-approve requests from trusted sites like redshiftapp.com. This improves UX while maintaining security for unknown sites.
+				This is almost always a page load timing issue. The extension injects <code>window.nostr</code> on page load, so if you installed it without refreshing, Redshift doesn't know it's there. Refresh the page. If that doesn't work, check that the extension is actually enabled (it's easy to accidentally disable it) and make sure you're not using a browser it doesn't support -- nos2x is Chrome-only, for instance.
 			</p>
 
-			<h3>Backup Your Keys</h3>
+			<h3>"I click approve but nothing happens" / signing seems stuck</h3>
 			<p>
-				Your extension stores keys locally. If you clear browser data or switch devices, you'll need your nsec backup. Export it from the extension settings and store it securely (password manager, encrypted note, hardware backup).
+				The approval popup might be hiding behind your browser window, or your popup blocker might be eating it. Click the extension icon directly to see if there are pending requests queued up. If the extension seems completely unresponsive, a browser restart usually fixes it. This happens more often than you'd think after browser updates.
 			</p>
-
-			<h2>Troubleshooting</h2>
-
-			<h3>Extension Not Detected</h3>
-			<p>
-				If Redshift doesn't see your extension:
-			</p>
-			<ul>
-				<li>Refresh the page after installing the extension</li>
-				<li>Check that the extension is enabled</li>
-				<li>Try a different browser (some extensions are Chrome-only)</li>
-			</ul>
-
-			<h3>Signing Requests Timing Out</h3>
-			<p>
-				If approval popups don't appear:
-			</p>
-			<ul>
-				<li>Click the extension icon to check for pending requests</li>
-				<li>Disable popup blockers for the extension</li>
-				<li>Restart the browser</li>
-			</ul>
 
 			<h2>CLI Authentication</h2>
 			<p>
@@ -1091,23 +940,20 @@ $ redshift login --nsec nsec1...</code></pre>
 		tags: ['best-practices', 'tutorial', 'environments'],
 		content: `
 			<p class="lead">
-				Most applications run in multiple environments: development, staging, production, and maybe more. Each environment needs its own set of secrets, and mixing them up can cause anything from test failures to production outages.
+				If you've ever truncated a production table because your local app was pointed at the wrong database, you already know why this matters. The fix isn't complicated, but most teams don't set up proper environment separation until after something goes wrong.
 			</p>
 
 			<h2>The Multi-Environment Problem</h2>
 			<p>
-				Common issues when managing secrets across environments:
+				The root issue is that <code>DATABASE_URL</code> means something completely different depending on context. Locally, it's your throwaway Postgres container. In CI, it's a shared test instance. In production, it's the thing that page-alerts you at 3am when it goes down. Same variable name, wildly different consequences if you mix them up.
 			</p>
-			<ul>
-				<li><strong>Accidental production access</strong>: Development code hitting production databases</li>
-				<li><strong>Secret drift</strong>: Environments getting out of sync</li>
-				<li><strong>Onboarding friction</strong>: New developers struggling to get the right credentials</li>
-				<li><strong>Audit confusion</strong>: Not knowing which secrets are used where</li>
-			</ul>
+			<p>
+				Beyond the obvious "dev pointed at prod" disaster, environments tend to drift apart quietly. Someone updates a key in staging but forgets production. A new hire spends half a day figuring out which Slack thread has the current dev credentials. Six months in, nobody's confident that any two environments actually match.
+			</p>
 
 			<h2>Redshift Environment Model</h2>
 			<p>
-				In Redshift, secrets are organized as:
+				Redshift keeps each environment in its own namespace under a project. The structure looks like this:
 			</p>
 			<pre><code>Project
 ├── development
@@ -1123,12 +969,12 @@ $ redshift login --nsec nsec1...</code></pre>
     ├── API_KEY
     └── DEBUG=false</code></pre>
 			<p>
-				Each environment is a separate namespace. The same secret name can have different values per environment.
+				Same secret names, different values, no chance of cross-contamination. The <code>-e</code> flag is the only thing that determines which set you get.
 			</p>
 
 			<h2>Setting Up Environments</h2>
 			<p>
-				Create environments during project setup:
+				The setup wizard walks you through it. You can always add more later, but starting with the environments you know you need saves you from the "I'll organize this eventually" trap:
 			</p>
 			<pre><code>$ redshift setup
 ? Project name: my-api
@@ -1143,7 +989,7 @@ Created project "my-api" with 3 environments</code></pre>
 
 			<h2>Adding Secrets Per Environment</h2>
 			<p>
-				Use the <code>-e</code> flag to target specific environments:
+				The <code>-e</code> flag targets a specific environment. Nothing surprising here, but seeing it spelled out makes the isolation concrete:
 			</p>
 			<pre><code># Development - local database, verbose logging
 $ redshift secrets set DATABASE_URL postgres://localhost:5432/myapp_dev -e development
@@ -1159,7 +1005,7 @@ $ redshift secrets set LOG_LEVEL warn -e production</code></pre>
 
 			<h2>Running with Environment Secrets</h2>
 			<p>
-				Inject the right secrets by specifying the environment:
+				This is the part your scripts and CI configs actually care about:
 			</p>
 			<pre><code># Local development
 $ redshift run -e development -- npm run dev
@@ -1208,57 +1054,53 @@ $ redshift run -e production -- npm start</code></pre>
 
 			<h2>Sharing Secrets Across Environments</h2>
 			<p>
-				Some secrets are the same everywhere (maybe a third-party API key with environment detection). You can:
+				Sometimes a secret genuinely is the same everywhere -- a third-party API key that auto-detects the environment, or a shared analytics token. You have a few options:
 			</p>
 			<ol>
 				<li><strong>Duplicate manually</strong>: Set the same value in each environment</li>
 				<li><strong>Script it</strong>: Write a shell script that sets common secrets across environments</li>
 				<li><strong>Use inheritance</strong>: Coming in a future Redshift release</li>
 			</ol>
+			<p>
+				Duplication is annoying but at least it's explicit. We're building inheritance so you can define base values that environments override selectively, but that's not shipped yet.
+			</p>
 
 			<h2>Preventing Environment Mistakes</h2>
+			<p>
+				The goal here is to make it hard to accidentally run against the wrong environment. No single trick solves this, but a few habits stacked together make it pretty unlikely.
+			</p>
 
 			<h3>Use Descriptive Values</h3>
 			<p>
-				Make it obvious which environment you're connected to:
+				If your database URL contains the word "staging" and you see it in a production log, that's an instant red flag. Bake the environment name into values wherever it makes sense:
 			</p>
 			<pre><code># Include environment in URLs where possible
 DATABASE_URL=postgres://localhost:5432/myapp_development
 DATABASE_URL=postgres://staging.internal:5432/myapp_staging</code></pre>
 
-			<h3>Color-Code Your Terminals</h3>
-			<p>
-				Many developers set terminal background colors per environment—red for production, green for development. This visual cue prevents accidents.
-			</p>
-
 			<h3>Require Explicit Environment</h3>
 			<p>
-				Don't default to production. Make users explicitly specify <code>-e production</code>:
+				This one matters more than people think. If <code>redshift run</code> without a <code>-e</code> flag defaulted to production, you'd eventually fat-finger it. Redshift requires you to specify, and you should do the same in your npm scripts:
 			</p>
 			<pre><code># In package.json scripts
 "start:prod": "redshift run -e production -- node server.js"</code></pre>
 
 			<h2>Auditing Environment Access</h2>
 			<p>
-				Redshift Cloud (coming soon) includes audit logs showing:
+				<a href="https://relay.redshiftapp.com">Redshift Cloud</a> includes 7-day audit logs showing who accessed which environment, when secrets were read or modified, and what changed. Useful when you're trying to figure out why staging broke after someone "didn't touch anything."
 			</p>
-			<ul>
-				<li>Who accessed which environment</li>
-				<li>When secrets were read or modified</li>
-				<li>What changes were made</li>
-			</ul>
 			<p>
-				For now, use separate Nostr identities per environment tier for coarse access control.
+				On the free tier, you can use separate Nostr identities per environment tier for coarse access control.
 			</p>
 
 			<h2>Migration from .env Files</h2>
 			<p>
-				If you're currently using <code>.env</code> files per environment:
+				If you're sitting on a pile of <code>.env.development</code>, <code>.env.staging</code>, <code>.env.production</code> files, the migration is mechanical:
 			</p>
 			<pre><code># Import each environment
-$ redshift secrets import .env.development -e development
-$ redshift secrets import .env.staging -e staging
-$ redshift secrets import .env.production -e production
+$ redshift secrets upload .env.development -e development
+$ redshift secrets upload .env.staging -e staging
+$ redshift secrets upload .env.production -e production
 
 # Then delete the .env files (they contain plaintext secrets!)
 $ rm .env.*</code></pre>
@@ -1266,9 +1108,9 @@ $ rm .env.*</code></pre>
 				Your secrets are now encrypted and accessible from anywhere, not just machines with the right dotfiles.
 			</p>
 
-			<h2>Next Steps</h2>
+			<h2>One Last Thing</h2>
 			<p>
-				Ready to organize your secrets by environment? <a href="/docs/quickstart">Follow the quickstart</a> or <a href="/admin">create a project</a> to get started.
+				If you take one thing from this post: set up the separation <em>before</em> you need it. It takes five minutes during <code>redshift setup</code> and saves you from the 2am "wait, which database is this connected to" panic. The <a href="/docs/quickstart">quickstart</a> covers the full flow, or just run <code>redshift setup</code> and follow the prompts.
 			</p>
 		`,
 	},
@@ -1276,31 +1118,34 @@ $ rm .env.*</code></pre>
 		slug: 'redshift-vs-hashicorp-vault',
 		title: 'Redshift vs HashiCorp Vault: When to Choose Each',
 		description:
-			'Vault is the industry standard for enterprise secrets. Redshift takes a different approach. Here is an honest comparison.',
+			'Vault is the industry standard for enterprise secrets. Redshift takes a fundamentally different approach. A comparison for developers trying to pick the right tool.',
 		date: '2024-10-20',
 		author: 'Redshift Team',
 		readingTime: '7 min read',
 		tags: ['comparison', 'vault', 'enterprise'],
 		content: `
 			<p class="lead">
-				HashiCorp Vault is the dominant player in enterprise secret management. Redshift is a newcomer with a radically different architecture. This isn't a "Redshift is better" piece—it's an honest comparison to help you choose the right tool.
+				We get asked about Vault a lot. Fair enough -- it's the default choice for secret management at most companies, and for good reason. But Vault and Redshift are built on fundamentally different assumptions about how secrets should work, and the right choice depends on what you actually need.
 			</p>
 
-			<h2>Architecture Differences</h2>
+			<h2>The Core Architectural Split</h2>
+			<p>
+				Everything else in this comparison flows from one decision: centralized server vs. decentralized protocol.
+			</p>
 
 			<h3>Vault: Centralized Server</h3>
 			<p>
-				Vault runs as a server (or cluster) that clients connect to. Secrets are stored in a backend (Consul, PostgreSQL, etc.) and encrypted at rest. Access is controlled through policies and authentication methods.
+				Vault is a server (or cluster) that your applications connect to. Secrets live in a storage backend -- Consul, PostgreSQL, whatever you configure -- encrypted at rest. Access is governed by policies and auth methods. It's a well-understood model and it works.
 			</p>
 			<ul>
-				<li><strong>Server required</strong>: You must run and maintain Vault infrastructure</li>
+				<li><strong>Server required</strong>: You run and maintain Vault infrastructure</li>
 				<li><strong>Network dependency</strong>: Clients need connectivity to the Vault server</li>
 				<li><strong>Centralized trust</strong>: Vault operators can access all secrets</li>
 			</ul>
 
 			<h3>Redshift: Decentralized Protocol</h3>
 			<p>
-				Redshift stores encrypted secrets on Nostr relays. There's no Redshift server—just a CLI and web interface that communicate with public relays.
+				Redshift stores encrypted secrets on Nostr relays. There's no Redshift server -- just a CLI and web interface that talk to public relays. It's a less proven model, but it eliminates a whole category of operational concerns.
 			</p>
 			<ul>
 				<li><strong>No server to run</strong>: Use public relays or run your own</li>
@@ -1308,56 +1153,59 @@ $ rm .env.*</code></pre>
 				<li><strong>Zero-knowledge</strong>: Relay operators can't decrypt your secrets</li>
 			</ul>
 
-			<h2>When to Choose Vault</h2>
-
-			<h3>Enterprise Compliance Requirements</h3>
+			<h2>Where Vault Wins</h2>
 			<p>
-				Vault has years of enterprise deployments, SOC 2 certifications, and compliance documentation. If your auditors require specific certifications, Vault is the safer choice today.
+				Let's start here, because Vault genuinely does a lot of things we don't.
+			</p>
+
+			<h3>Enterprise Compliance</h3>
+			<p>
+				Vault has years of enterprise deployments behind it, SOC 2 certifications, and the kind of compliance documentation that makes auditors happy. If you need to check specific certification boxes, Vault is the safer choice today. We're working on compliance, but we're not there yet.
 			</p>
 
 			<h3>Dynamic Secrets</h3>
 			<p>
-				Vault can generate short-lived credentials on demand—database users, AWS IAM credentials, PKI certificates. These are created when needed and automatically revoked. Redshift doesn't do this.
+				This is probably Vault's best feature. It generates short-lived database credentials, AWS IAM creds, PKI certificates -- created on demand and automatically revoked. Redshift doesn't do any of this, and we don't have plans to. Dynamic secrets fundamentally require the centralized server model that Vault uses.
 			</p>
 
-			<h3>Complex Access Policies</h3>
+			<h3>Access Policies</h3>
 			<p>
-				Vault's policy language is powerful. You can define fine-grained access rules based on paths, metadata, time windows, and more. Redshift's access control is simpler: you either have the decryption key or you don't.
+				Vault's policy language is genuinely powerful -- fine-grained rules based on paths, metadata, time windows, identity. Redshift's access model is binary: you have the key or you don't. For large orgs with complex permission requirements, that simplicity is a real limitation.
 			</p>
 
-			<h3>Existing HashiCorp Stack</h3>
+			<h3>HashiCorp Ecosystem</h3>
 			<p>
-				If you're already using Consul, Nomad, or Terraform Enterprise, Vault integrates seamlessly. The ecosystem benefits are significant.
+				If you're already running Consul, Nomad, or Terraform Enterprise, Vault fits right in. That ecosystem integration is a legitimate advantage we can't replicate.
 			</p>
 
-			<h2>When to Choose Redshift</h2>
+			<h2>Where Redshift Wins</h2>
 
-			<h3>No Infrastructure to Manage</h3>
+			<h3>Zero Ops</h3>
 			<p>
-				Vault requires running servers, managing storage backends, handling upgrades, and ensuring high availability. Redshift requires nothing—secrets are stored on existing Nostr infrastructure.
+				Running Vault in production is real work. Servers, storage backends, upgrades, HA configuration, unsealing -- if you've done it, you know. Redshift piggybacks on existing Nostr relay infrastructure, so there's nothing to deploy or maintain.
 			</p>
 			<p>
-				For small teams, solo developers, or anyone who doesn't want to run Vault, Redshift removes the operational burden entirely.
+				If you're a solo dev or small team without dedicated DevOps, Vault's operational overhead can be a dealbreaker. That's the problem we originally built Redshift to solve.
 			</p>
 
-			<h3>True Secret Sovereignty</h3>
+			<h3>Actual Zero-Knowledge</h3>
 			<p>
-				With Vault, operators can access secrets. With Redshift, no one can—not us, not relay operators, not anyone without your private key. If you need secrets that are truly beyond reach of any third party, Redshift's architecture guarantees it.
+				Vault operators can read your secrets. That's not a bug -- it's how centralized secret management works. With Redshift, nobody can read your secrets without your private key. Not us, not relay operators, nobody. If that property matters to you, Vault can't offer it by design.
 			</p>
 
 			<h3>Censorship Resistance</h3>
 			<p>
-				Vault servers can be shut down, blocked, or seized. Redshift secrets are distributed across global Nostr relays. There's no single point of control to target.
+				A Vault server can be shut down, blocked, or seized. Redshift secrets are spread across independent Nostr relays around the world. For most teams this is irrelevant, but for some it matters a lot.
 			</p>
 
-			<h3>Zero Cost for Individuals</h3>
+			<h3>Cost</h3>
 			<p>
-				Vault Enterprise is expensive. Even Vault OSS requires infrastructure investment. Redshift is free for individuals—unlimited projects, unlimited secrets.
+				Vault Enterprise is expensive. Vault OSS is free but you're paying in infrastructure and ops time. Redshift is free for individuals -- unlimited projects, unlimited secrets.
 			</p>
 
 			<h3>Doppler-Compatible CLI</h3>
 			<p>
-				If you're migrating from Doppler or want a simple CLI experience, Redshift's <code>run</code> command is a drop-in replacement. Vault's CLI is more complex.
+				If you're coming from Doppler, Redshift's <code>run</code> command is a drop-in replacement. Vault's CLI is more powerful but also more complex for day-to-day use.
 			</p>
 
 			<h2>Feature Comparison</h2>
@@ -1393,7 +1241,7 @@ $ rm .env.*</code></pre>
 					<tr>
 						<td>Managed service</td>
 						<td>HCP Vault</td>
-						<td>Redshift Cloud (coming)</td>
+						<td>Redshift Cloud</td>
 					</tr>
 					<tr>
 						<td>Zero-knowledge</td>
@@ -1408,7 +1256,7 @@ $ rm .env.*</code></pre>
 					<tr>
 						<td>Audit logs</td>
 						<td>Yes</td>
-						<td>Coming soon</td>
+						<td>Yes (Cloud tier)</td>
 					</tr>
 					<tr>
 						<td>SSO/SAML</td>
@@ -1420,18 +1268,18 @@ $ rm .env.*</code></pre>
 
 			<h2>Can They Coexist?</h2>
 			<p>
-				Yes. You might use Vault for dynamic database credentials and PKI while using Redshift for static secrets that need to be truly sovereign. They solve different problems.
+				Absolutely. Use Vault for dynamic database credentials and PKI -- that's what it's great at. Use Redshift for static secrets where you want true sovereignty. They solve different problems and complement each other fine.
 			</p>
 
-			<h2>Our Honest Take</h2>
+			<h2>Bottom Line</h2>
 			<p>
-				If you're a large enterprise with compliance requirements, dedicated DevOps staff, and budget for infrastructure—use Vault. It's battle-tested and feature-rich.
+				If you're a large enterprise with compliance requirements, a platform team, and budget for infrastructure -- use Vault. It's earned its reputation and we're not going to pretend otherwise.
 			</p>
 			<p>
-				If you're an individual developer, small team, open-source project, or anyone who values sovereignty over enterprise features—Redshift is built for you.
+				If you're an individual developer, small team, or open-source project that doesn't want to run infrastructure just to manage secrets -- that's who we built Redshift for. We also think it's worth a look if secret sovereignty matters to you, regardless of team size.
 			</p>
 			<p>
-				The secret management space is big enough for both approaches. <a href="/admin">Try Redshift</a> and see if it fits your needs.
+				<a href="/admin">Give Redshift a try</a> and see if it fits how you work. If Vault is a better fit, no hard feelings -- it's a good tool.
 			</p>
 		`,
 	},
@@ -1446,7 +1294,7 @@ $ rm .env.*</code></pre>
 		tags: ['sovereignty', 'identity', 'philosophy'],
 		content: `
 			<p class="lead">
-				Every developer identity you use—GitHub, npm, Docker Hub, your work email—is controlled by someone else. They can suspend it, delete it, or lock you out. Self-sovereign identity flips this: you control your identity, and platforms simply verify it.
+				Think about how many places own a piece of your developer identity. GitHub has your code and contribution graph. npm has your packages. Google has the email that resets everything else. Any of them can lock you out tomorrow, and there's not much you can do about it—unless the identity itself belongs to you and not the platform.
 			</p>
 
 			<h2>The Fragility of Platform Identity</h2>
@@ -1494,37 +1342,29 @@ $ rm .env.*</code></pre>
 
 			<h2>Nostr as Developer Identity</h2>
 			<p>
-				Nostr provides a practical implementation of self-sovereign identity:
+				So what does this look like concretely? Nostr gives you a keypair:
 			</p>
 			<ul>
 				<li><strong>npub</strong>: Your public identifier, derived from your public key</li>
-				<li><strong>nsec</strong>: Your private key, stored securely on your devices</li>
-				<li><strong>Signatures</strong>: Prove you authored any Nostr event</li>
+				<li><strong>nsec</strong>: Your private key, stored on your own devices</li>
+				<li><strong>Signatures</strong>: Cryptographic proof that you authored a given event</li>
 			</ul>
 			<p>
-				This same identity works for social media, messaging, payments, and—with Redshift—secret management. One identity, many applications, no central authority.
+				The same keypair already works for social media, messaging, and payments across Nostr clients. Redshift extends it to secret management. The point isn't that Nostr is the only way to do this—it's that the protocol exists today and the tooling is usable right now.
 			</p>
 
 			<h2>Practical Benefits for Developers</h2>
-
-			<h3>Portable Reputation</h3>
 			<p>
-				Contributions signed with your Nostr key are attributable to you forever. If a platform shuts down, your signed commits still prove you authored them.
+				The most immediate win is <strong>portable reputation</strong>. Contributions signed with your Nostr key are attributable to you forever. Platform shuts down? Doesn't matter—your signed commits still prove authorship. That history is yours, not GitHub's.
 			</p>
-
-			<h3>Cross-Platform Authentication</h3>
 			<p>
-				Use the same identity to authenticate with multiple services. No more username/password per platform, no more OAuth dance.
+				There's also a simplification angle. One keypair authenticates you across every service that supports it. No more juggling credentials per platform, no more OAuth redirect chains. It's closer to how SSH keys already work, just applied to identity more broadly.
 			</p>
-
-			<h3>True Account Recovery</h3>
 			<p>
-				Forget password reset emails. Your private key <em>is</em> your account. Back it up securely and you can never be locked out.
+				Account recovery gets interesting too. Your private key <em>is</em> your account—there's no "forgot password" flow because there's no password. Back the key up properly and lockout becomes a non-issue. (The flip side of this shows up in the tradeoffs below.)
 			</p>
-
-			<h3>Censorship Resistance</h3>
 			<p>
-				No one can deplatform your identity. They can refuse to host your content, but they can't take away who you are.
+				And then there's the hard-to-quantify benefit: nobody can deplatform your identity. A service can refuse to host your content, sure. But they can't revoke the keypair. The identity persists regardless of any single provider's decisions.
 			</p>
 
 			<h2>The Tradeoffs</h2>
@@ -1552,15 +1392,15 @@ $ rm .env.*</code></pre>
 				<li><strong>Try Redshift</strong>: Manage secrets with your Nostr identity, no account required</li>
 			</ol>
 
-			<h2>The Future</h2>
+			<h2>Where This Is Headed</h2>
 			<p>
-				Self-sovereign identity is still early. But the trend is clear: developers are recognizing that platform dependency is a risk. The tools are maturing. The ecosystem is growing.
+				Self-sovereign identity is still early, and honestly most developers aren't thinking about it yet. But the pieces are falling into place faster than you might expect—Nostr clients are improving, NIP-07 browser extensions work well, and more services are starting to accept cryptographic authentication.
 			</p>
 			<p>
-				Redshift is built on this foundation. Your secrets are tied to your cryptographic identity, not to our platform. If we disappear tomorrow, your identity and your encrypted data remain.
+				We built Redshift on this foundation because it made sense for the problem. Secrets are tied to your cryptographic identity, not to our platform. If Redshift goes away, your keypair and your encrypted data don't go with it.
 			</p>
 			<p>
-				That's what sovereignty means. <a href="/admin">Experience it yourself</a>.
+				If you're curious what this feels like in practice, <a href="/admin">give it a try</a>—no account signup required, just a Nostr key.
 			</p>
 		`,
 	},
@@ -1575,66 +1415,61 @@ $ rm .env.*</code></pre>
 		tags: ['serverless', 'tutorial', 'security'],
 		content: `
 			<p class="lead">
-				Serverless functions run in ephemeral environments you don't control. Getting secrets into them securely—without hardcoding or exposing them in logs—requires careful design.
+				If you've deployed a Lambda or a Vercel function, you've had the moment: where do I put the API key? You can't just drop a <code>.env</code> file on a filesystem that doesn't persist. Hardcoding it is obviously out. And every platform has its own way of handling this, which means the "right" answer changes depending on where you're deploying. Here's what we've seen work.
 			</p>
 
-			<h2>The Serverless Secret Challenge</h2>
+			<h2>Why Serverless Makes This Harder</h2>
 			<p>
-				Serverless environments have unique constraints:
+				Regular servers are straightforward -- put secrets in env vars, config files, or pull from a vault at boot. Serverless blows that up in a few ways. There's no persistent disk, so anything you write is gone next invocation. Cold starts mean your function might need to re-fetch secrets from scratch. You usually can't install whatever you want in the runtime. And if you're deploying across Lambda, Vercel, and Workers, congratulations -- you now get to learn three different secret storage systems.
 			</p>
-			<ul>
-				<li><strong>No persistent filesystem</strong>: You can't store <code>.env</code> files</li>
-				<li><strong>Cold starts</strong>: Functions spin up fresh, so initialization matters</li>
-				<li><strong>Limited environment</strong>: You can't install arbitrary software</li>
-				<li><strong>Platform lock-in</strong>: Each provider has its own secret storage</li>
-			</ul>
+			<p>
+				None of these are unsolvable, but they do mean you have to think about <em>when</em> secrets enter the picture, not just <em>how</em>.
+			</p>
 
 			<h2>Pattern 1: Build-Time Injection</h2>
 			<p>
-				Fetch secrets during build and inject them as environment variables:
+				The simplest approach: pull secrets during your build step and bake them into the deployment as environment variables. This is what most teams start with, and honestly it works fine for a lot of cases.
 			</p>
 			<pre><code># In your build script or CI
 $ redshift run -e production -- npm run build
 
-# Or export and pass to your bundler
-$ export $(redshift secrets export -e production)
+# Or download and pass to your bundler
+$ export $(redshift secrets download -e production --format env)
 $ npm run build</code></pre>
 			<p>
-				<strong>Pros</strong>: Simple, works everywhere, no runtime dependency<br />
-				<strong>Cons</strong>: Secrets are baked into the deployment artifact
+				The tradeoff is that your secrets end up in the deployment artifact. If someone gets access to the built bundle, they get the secrets too. For many internal tools this is acceptable risk. For anything handling payment keys or PII, you probably want one of the other patterns.
 			</p>
 
 			<h2>Pattern 2: Platform Secret Storage</h2>
 			<p>
-				Store secrets in your serverless platform's native storage, synced from Redshift:
+				This is the most common pattern we see in production: keep Redshift as the source of truth, but sync secrets into whatever native storage your platform provides. Your functions read secrets the way the platform expects, and you avoid any runtime dependency on external services.
 			</p>
 
 			<h3>Vercel</h3>
 			<pre><code># Sync Redshift secrets to Vercel
-$ redshift secrets export -e production | while IFS='=' read -r key value; do
+$ redshift secrets download -e production --format env | while IFS='=' read -r key value; do
     vercel env add "$key" production <<< "$value"
 done</code></pre>
 
 			<h3>AWS Lambda</h3>
 			<pre><code># Sync to AWS Secrets Manager
-$ redshift secrets export -e production --format json | \\
+$ redshift secrets download -e production --format json | \\
     aws secretsmanager put-secret-value \\
     --secret-id my-app/production \\
     --secret-string file:///dev/stdin</code></pre>
 
 			<h3>Cloudflare Workers</h3>
 			<pre><code># Sync to Cloudflare secrets
-$ redshift secrets export -e production | while IFS='=' read -r key value; do
+$ redshift secrets download -e production --format env | while IFS='=' read -r key value; do
     echo "$value" | wrangler secret put "$key"
 done</code></pre>
 			<p>
-				<strong>Pros</strong>: Uses platform-native features, no runtime calls<br />
-				<strong>Cons</strong>: Requires sync step, secrets live in two places
+				The downside is obvious: your secrets now live in two places. You need a sync step in CI, and if someone updates a secret on the platform directly, it'll get overwritten next deploy. Discipline helps. Making Redshift the only place anyone edits secrets helps more.
 			</p>
 
 			<h2>Pattern 3: Runtime Fetching</h2>
 			<p>
-				Fetch secrets at function startup. This requires network access and adds latency but ensures secrets are always fresh:
+				Instead of baking secrets in at build or syncing them ahead of time, you fetch them when the function starts up. This means secrets are always current -- no stale values sitting in platform storage from a deploy three months ago. The cost is cold start latency and a network dependency.
 			</p>
 			<pre><code>// Inside your serverless function
 import { fetchSecrets } from './redshift-client';
@@ -1651,15 +1486,14 @@ export async function handler(event) {
     // ... use secrets
 }</code></pre>
 			<p>
-				<strong>Pros</strong>: Secrets always current, single source of truth<br />
-				<strong>Cons</strong>: Adds cold start latency, requires network access
+				We cache outside the handler so warm invocations skip the fetch. On a Lambda with a ~500ms cold start, adding a relay query might push that to 700-800ms. Whether that matters depends entirely on your use case. For a webhook handler, nobody cares. For a user-facing API, maybe test it first.
 			</p>
 
 			<h2>Security Best Practices</h2>
 
 			<h3>Never Log Secrets</h3>
 			<p>
-				Serverless logs are often centralized and persistent. Never log environment variables or API responses that might contain secrets:
+				This one bites people constantly. Serverless logs tend to go to centralized logging services where retention policies are generous and access controls are lax. One <code>console.log(process.env)</code> during debugging and your keys are sitting in CloudWatch for the next 90 days.
 			</p>
 			<pre><code>// Bad - secrets might appear in logs
 console.log('Config:', process.env);
@@ -1669,58 +1503,53 @@ console.log('Function initialized');</code></pre>
 
 			<h3>Use Least Privilege</h3>
 			<p>
-				Create separate secret sets for each function. A function that only reads from an API shouldn't have database write credentials.
+				Scope your secrets per function. The function that sends welcome emails doesn't need your Stripe secret key. This is annoying to set up and absolutely worth it when something goes wrong.
 			</p>
 
 			<h3>Rotate Regularly</h3>
 			<p>
-				Serverless functions often run for months without redeployment. Establish a rotation schedule and redeploy when secrets change.
+				Serverless functions have a sneaky property: they can run unchanged for months because nobody redeploys them. If you rotated a key but didn't redeploy the function that uses build-time injection, you've got a stale secret in production and a fresh one in Redshift and neither of you knows about the mismatch until something breaks.
 			</p>
 
 			<h3>Encrypt in Transit</h3>
 			<p>
-				If fetching secrets at runtime, ensure you're using HTTPS and validating certificates. Nostr relay connections are websocket-based and should use WSS.
+				If you're fetching secrets at runtime, make sure the connection is encrypted. HTTPS for REST APIs, WSS for Nostr relay connections. This should be the default, but verify it -- especially in local development where it's tempting to skip TLS.
 			</p>
 
-			<h2>Platform-Specific Considerations</h2>
+			<h2>Platform-Specific Notes</h2>
 
 			<h3>AWS Lambda</h3>
 			<ul>
-				<li>Use Secrets Manager or Parameter Store for native integration</li>
-				<li>Lambda extensions can fetch secrets before your code runs</li>
-				<li>IAM roles control access to secret storage</li>
+				<li>Secrets Manager and Parameter Store both work; Parameter Store is cheaper for static secrets</li>
+				<li>Lambda extensions can pre-fetch secrets before your handler even runs, which is nice for cold starts</li>
+				<li>IAM roles are how you control which functions can access which secrets -- use them, don't just give everything <code>secretsmanager:GetSecretValue</code> on <code>*</code></li>
 			</ul>
 
 			<h3>Vercel</h3>
 			<ul>
-				<li>Environment variables are encrypted at rest</li>
-				<li>Different values per environment (preview, production)</li>
-				<li>Edge functions have more limited access than serverless functions</li>
+				<li>Environment variables are encrypted at rest, which is good</li>
+				<li>You can set different values for preview vs. production, which helps prevent the "tested in staging, deployed prod credentials to preview" mistake</li>
+				<li>Edge functions run in a more restricted environment than serverless functions -- check what APIs are available before assuming your secret-fetching code will work there</li>
 			</ul>
 
 			<h3>Cloudflare Workers</h3>
 			<ul>
-				<li>Use Workers Secrets for sensitive values</li>
-				<li>KV storage is not suitable for secrets (readable via API)</li>
-				<li>Workers run in isolates, reducing cross-request leakage risk</li>
+				<li>Workers Secrets are the right choice for sensitive values -- don't put secrets in KV, it's readable through the API</li>
+				<li>The V8 isolate model means less risk of cross-request leakage compared to traditional containers</li>
+				<li>The <code>wrangler secret put</code> CLI is straightforward but doesn't support bulk import, hence the loop in the sync script above</li>
 			</ul>
 
-			<h2>The Hybrid Approach</h2>
+			<h2>What Most Teams End Up Doing</h2>
 			<p>
-				For most teams, we recommend a hybrid:
+				In practice, most teams we've talked to land on some version of pattern 2: Redshift as the canonical store, platform secrets synced during CI/CD, platform-native access at runtime. It's not the most elegant architecture on a whiteboard, but it works reliably and doesn't add latency to function invocations.
 			</p>
-			<ol>
-				<li><strong>Store secrets in Redshift</strong> as your source of truth</li>
-				<li><strong>Sync to platform storage</strong> during CI/CD</li>
-				<li><strong>Access via platform APIs</strong> at runtime</li>
-			</ol>
 			<p>
-				This gives you Redshift's sovereignty and portability while using each platform's optimized secret delivery.
+				Some teams add runtime fetching for secrets that change frequently (API keys that get rotated weekly, feature flags). Some skip the platform sync entirely and do build-time injection because their deploys are frequent enough that staleness isn't a concern. There's no single right answer -- it depends on how often your secrets change, how sensitive they are, and how much cold start latency you can tolerate.
 			</p>
 
 			<h2>Get Started</h2>
 			<p>
-				Ready to secure your serverless secrets? <a href="/docs/quickstart">Follow our quickstart</a> or check out the <a href="/docs/cli">CLI documentation</a> for export and sync commands.
+				If you want to try any of these patterns, <a href="/docs/quickstart">the quickstart</a> will get you from zero to synced secrets in a few minutes. The <a href="/docs/cli">CLI docs</a> cover the <code>secrets download</code> command and its format options in detail.
 			</p>
 		`,
 	},
