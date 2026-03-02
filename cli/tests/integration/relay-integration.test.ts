@@ -28,6 +28,33 @@ const TEST_RELAYS = USE_PUBLIC_RELAYS
 	? ['wss://relay.damus.io', 'wss://nos.lol']
 	: ['ws://localhost:10547'];
 
+// Probe whether the local relay is reachable (avoids failing when relay isn't running)
+async function isRelayReachable(): Promise<boolean> {
+	if (USE_PUBLIC_RELAYS) return true;
+	try {
+		const ws = new WebSocket(TEST_RELAYS[0] as string);
+		return await new Promise<boolean>((resolve) => {
+			const timer = setTimeout(() => {
+				ws.close();
+				resolve(false);
+			}, 1000);
+			ws.onopen = () => {
+				clearTimeout(timer);
+				ws.close();
+				resolve(true);
+			};
+			ws.onerror = () => {
+				clearTimeout(timer);
+				resolve(false);
+			};
+		});
+	} catch {
+		return false;
+	}
+}
+
+const RELAY_AVAILABLE = await isRelayReachable();
+
 // Generate ephemeral test keys
 const testPrivateKey = generateSecretKey();
 const testPublicKey = getPublicKey(testPrivateKey);
@@ -35,8 +62,8 @@ const testPublicKey = getPublicKey(testPrivateKey);
 // Helper to add delays between relay operations
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Skip all tests in CI - no local relay available
-describe.skipIf(IS_CI)('Relay Integration Tests', () => {
+// Skip when CI or local relay is not available
+describe.skipIf(IS_CI || !RELAY_AVAILABLE)('Relay Integration Tests', () => {
 	let manager: SecretManager;
 	const testProjectId = `test-${Date.now()}`;
 	const testEnvironment = 'integration';

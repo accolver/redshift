@@ -216,8 +216,8 @@ bun run build:web
 bun run build:cli
 
 # 3. Tests — run from each workspace that has changes
-cd web && bun test    # Svelte / Vitest
-cd cli && bun test    # CLI / Bun test
+cd web && bun run test    # Svelte / Vitest
+cd cli && bun test        # CLI / Bun test
 ```
 
 ### Rules
