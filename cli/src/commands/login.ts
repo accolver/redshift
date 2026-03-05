@@ -28,7 +28,7 @@ import {
 	saveConfig,
 } from '../lib/config';
 import { decodeNsec, validateNsec } from '../lib/crypto';
-import { getKeychainServiceName, storeNsecInKeychain } from '../lib/keychain';
+import { getKeychainServiceName, storeBunkerKeyInKeychain, storeNsecInKeychain } from '../lib/keychain';
 import type { BunkerAuth } from '../lib/types';
 
 export interface LoginOptions {
@@ -149,12 +149,15 @@ async function loginWithBunker(bunkerUrl: string): Promise<void> {
 
 		const npub = npubEncode(connection.userPubkey);
 
-		// Save bunker auth
+		// Store client secret key in keychain if available
+		const clientKeyHex = Buffer.from(connection.clientSecretKey).toString('hex');
+		const storedInKeychain = await storeBunkerKeyInKeychain(clientKeyHex);
+
+		// Save bunker auth (omit clientSecretKey from config if stored in keychain)
 		const bunkerAuth: BunkerAuth = {
 			bunkerPubkey: connection.bunkerPointer.pubkey,
 			relays: connection.bunkerPointer.relays,
-			// SECURITY: clientSecretKey stored in config file. Future: move to system keychain.
-			clientSecretKey: Buffer.from(connection.clientSecretKey).toString('hex'),
+			clientSecretKey: storedInKeychain ? '' : clientKeyHex,
 		};
 		if (connection.bunkerPointer.secret) {
 			bunkerAuth.secret = connection.bunkerPointer.secret;
@@ -164,7 +167,12 @@ async function loginWithBunker(bunkerUrl: string): Promise<void> {
 		console.log('\n✓ Connected to bunker successfully!');
 		console.log(`  User: ${npub}`);
 		console.log(`  Bunker: ${formatBunkerPointer(connection.bunkerPointer)}`);
-		console.log('\nYour bunker connection has been stored in ~/.redshift/config.json');
+		if (storedInKeychain) {
+			console.log(`\nClient key stored securely in system keychain.`);
+			console.log(`  Service: ${getKeychainServiceName()}`);
+		} else {
+			console.log('\n⚠️  System keychain unavailable. Client key stored in ~/.redshift/config.json');
+		}
 
 		await connection.signer.close();
 	} catch (error) {
@@ -190,12 +198,15 @@ async function loginWithNostrConnect(): Promise<void> {
 		const connection = await waitForConnection(120000);
 		const npub = npubEncode(connection.userPubkey);
 
-		// Save bunker auth
+		// Store client secret key in keychain if available
+		const clientKeyHex = Buffer.from(connection.clientSecretKey).toString('hex');
+		const storedInKeychain = await storeBunkerKeyInKeychain(clientKeyHex);
+
+		// Save bunker auth (omit clientSecretKey from config if stored in keychain)
 		const bunkerAuth: BunkerAuth = {
 			bunkerPubkey: connection.bunkerPointer.pubkey,
 			relays: connection.bunkerPointer.relays,
-			// SECURITY: clientSecretKey stored in config file. Future: move to system keychain.
-			clientSecretKey: Buffer.from(connection.clientSecretKey).toString('hex'),
+			clientSecretKey: storedInKeychain ? '' : clientKeyHex,
 		};
 		if (connection.bunkerPointer.secret) {
 			bunkerAuth.secret = connection.bunkerPointer.secret;
@@ -205,6 +216,12 @@ async function loginWithNostrConnect(): Promise<void> {
 		console.log('\n✓ Connected successfully!');
 		console.log(`  User: ${npub}`);
 		console.log(`  Bunker: ${formatBunkerPointer(connection.bunkerPointer)}`);
+		if (storedInKeychain) {
+			console.log(`\nClient key stored securely in system keychain.`);
+			console.log(`  Service: ${getKeychainServiceName()}`);
+		} else {
+			console.log('\n⚠️  System keychain unavailable. Client key stored in ~/.redshift/config.json');
+		}
 
 		await connection.signer.close();
 	} catch (error) {

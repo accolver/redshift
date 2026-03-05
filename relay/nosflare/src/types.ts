@@ -85,8 +85,10 @@ export interface RelayInfo {
 	limitation?: {
 		payment_required?: boolean;
 		restricted_writes?: boolean;
-		[key: string]: any;
+		[key: string]: boolean | number | string | undefined;
 	};
+	privacy_policy?: string;
+	terms_of_service?: string;
 	payments_url?: string;
 	fees?: {
 		admission?: Array<{ amount: number; unit: string }>;
@@ -217,7 +219,7 @@ export interface DurableObject {
 		reason: string,
 		wasClean: boolean,
 	): void | Promise<void>;
-	webSocketError?(ws: WebSocket, error: any): void | Promise<void>;
+	webSocketError?(ws: WebSocket, error: unknown): void | Promise<void>;
 }
 
 // Durable Object stub with location hint support
@@ -246,10 +248,10 @@ export interface DurableObjectState {
 }
 
 export interface DurableObjectStorage {
-	get<T = any>(key: string): Promise<T | undefined>;
-	get<T = any>(keys: string[]): Promise<Map<string, T>>;
-	put<T = any>(key: string, value: T): Promise<void>;
-	put(entries: Record<string, any>): Promise<void>;
+	get<T = unknown>(key: string): Promise<T | undefined>;
+	get<T = unknown>(keys: string[]): Promise<Map<string, T>>;
+	put<T = unknown>(key: string, value: T): Promise<void>;
+	put(entries: Record<string, unknown>): Promise<void>;
 	delete(key: string): Promise<boolean>;
 	delete(keys: string[]): Promise<number>;
 	setAlarm(scheduledTime: number | Date): Promise<void>;
@@ -260,7 +262,7 @@ export interface DurableObjectStorage {
 // Extended WebSocket interface with hibernation attachment methods
 declare global {
 	interface WebSocket {
-		serializeAttachment(value: any): void;
-		deserializeAttachment(): any;
+		serializeAttachment(value: unknown): void;
+		deserializeAttachment(): unknown;
 	}
 }

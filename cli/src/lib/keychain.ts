@@ -20,6 +20,7 @@ const KEYCHAIN_SERVICE = 'com.redshiftapp.cli';
  * Credential names stored in keychain
  */
 const KEYCHAIN_NSEC = 'nsec';
+const KEYCHAIN_BUNKER_CLIENT_KEY = 'bunker-client-secret-key';
 
 /**
  * Check if keychain is available on this system
@@ -106,6 +107,72 @@ export async function deleteNsecFromKeychain(): Promise<boolean> {
 		return true;
 	} catch {
 		// Keychain unavailable - return false
+		return false;
+	}
+}
+
+/**
+ * Store bunker client secret key in the system keychain
+ *
+ * @param hexKey - The client secret key (hex encoded)
+ * @returns true if stored successfully, false if keychain unavailable
+ */
+export async function storeBunkerKeyInKeychain(hexKey: string): Promise<boolean> {
+	if (typeof Bun === 'undefined' || !Bun.secrets) {
+		return false;
+	}
+
+	try {
+		await Bun.secrets.set({
+			service: KEYCHAIN_SERVICE,
+			name: KEYCHAIN_BUNKER_CLIENT_KEY,
+			value: hexKey,
+		});
+		return true;
+	} catch (error) {
+		console.error('Keychain storage failed:', error instanceof Error ? error.message : error);
+		return false;
+	}
+}
+
+/**
+ * Retrieve bunker client secret key from the system keychain
+ *
+ * @returns The hex-encoded key if found, null if not found or keychain unavailable
+ */
+export async function getBunkerKeyFromKeychain(): Promise<string | null> {
+	if (typeof Bun === 'undefined' || !Bun.secrets) {
+		return null;
+	}
+
+	try {
+		const key = await Bun.secrets.get({
+			service: KEYCHAIN_SERVICE,
+			name: KEYCHAIN_BUNKER_CLIENT_KEY,
+		});
+		return key;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Delete bunker client secret key from the system keychain
+ *
+ * @returns true if deleted (or didn't exist), false if keychain unavailable
+ */
+export async function deleteBunkerKeyFromKeychain(): Promise<boolean> {
+	if (typeof Bun === 'undefined' || !Bun.secrets) {
+		return false;
+	}
+
+	try {
+		await Bun.secrets.delete({
+			service: KEYCHAIN_SERVICE,
+			name: KEYCHAIN_BUNKER_CLIENT_KEY,
+		});
+		return true;
+	} catch {
 		return false;
 	}
 }

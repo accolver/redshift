@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { DEFAULT_RELAYS } from '@redshift/crypto';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { ConfigError } from './errors';
-import { deleteNsecFromKeychain, getNsecFromKeychain } from './keychain';
+import { deleteBunkerKeyFromKeychain, deleteNsecFromKeychain, getBunkerKeyFromKeychain, getNsecFromKeychain } from './keychain';
 import type { AuthMethod, BunkerAuth, RedshiftConfig } from './types';
 
 /**
@@ -253,6 +253,17 @@ export async function getAuth(): Promise<AuthResult | null> {
 
 	// Prefer bunker if configured
 	if (config.authMethod === 'bunker' && config.bunker) {
+		// Try to retrieve client key from keychain if not in config
+		if (!config.bunker.clientSecretKey) {
+			const keychainKey = await getBunkerKeyFromKeychain();
+			if (keychainKey) {
+				return {
+					method: 'bunker',
+					bunker: { ...config.bunker, clientSecretKey: keychainKey },
+					source: 'keychain',
+				};
+			}
+		}
 		return { method: 'bunker', bunker: config.bunker, source: 'config' };
 	}
 
@@ -282,6 +293,7 @@ export async function saveBunkerAuth(bunker: BunkerAuth): Promise<void> {
 export async function clearAuth(): Promise<void> {
 	// Clear from keychain (ignore errors - may not be available)
 	await deleteNsecFromKeychain();
+	await deleteBunkerKeyFromKeychain();
 
 	// Clear from config file
 	const config = await loadConfig();

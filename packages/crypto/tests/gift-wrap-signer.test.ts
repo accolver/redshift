@@ -308,6 +308,77 @@ describe('NIP-59 Gift Wrap (Signer-based)', () => {
 		});
 	});
 
+	describe('Edge cases (Signer)', () => {
+		it('handles large secret values near NIP-44 limit', async () => {
+			const largeValue = 'x'.repeat(10_000);
+			const secrets: SecretBundle = { LARGE_KEY: largeValue };
+			const dTag = 'test|env';
+
+			const { event } = await wrapSecretsWithSigner(secrets, pubkey, dTag, encryptFn, signFn);
+			const result = await unwrapGiftWrapWithSigner(event, decryptFn);
+
+			expect(result.secrets.LARGE_KEY).toBe(largeValue);
+			expect(result.secrets.LARGE_KEY.length).toBe(10_000);
+		});
+
+		it('handles many secrets in a bundle', async () => {
+			const secrets: SecretBundle = {};
+			for (let i = 0; i < 200; i++) {
+				secrets[`KEY_${i}`] = `value_${i}_${'a'.repeat(100)}`;
+			}
+			const dTag = 'test|env';
+
+			const { event } = await wrapSecretsWithSigner(secrets, pubkey, dTag, encryptFn, signFn);
+			const result = await unwrapGiftWrapWithSigner(event, decryptFn);
+
+			expect(Object.keys(result.secrets).length).toBe(200);
+			expect(result.secrets.KEY_0).toBe(secrets.KEY_0);
+			expect(result.secrets.KEY_199).toBe(secrets.KEY_199);
+		});
+
+		it('handles special characters in keys', async () => {
+			const secrets: SecretBundle = {
+				'KEY-WITH-DASHES': 'value1',
+				KEY_WITH_UNDERSCORES: 'value2',
+				'KEY.WITH.DOTS': 'value3',
+				'KEY/WITH/SLASHES': 'value4',
+				'KEY WITH SPACES': 'value5',
+			};
+			const dTag = 'test|env';
+
+			const { event } = await wrapSecretsWithSigner(secrets, pubkey, dTag, encryptFn, signFn);
+			const result = await unwrapGiftWrapWithSigner(event, decryptFn);
+
+			expect(result.secrets).toEqual(secrets);
+		});
+
+		it('wrapping with a signer that throws produces clear error', async () => {
+			const secrets: SecretBundle = { KEY: 'value' };
+			const dTag = 'test|env';
+
+			const failingSignFn: SignFn = async () => {
+				throw new Error('Signer refused to sign');
+			};
+
+			await expect(
+				wrapSecretsWithSigner(secrets, pubkey, dTag, encryptFn, failingSignFn),
+			).rejects.toThrow('Signer refused to sign');
+		});
+
+		it('wrapping with a failing encryptFn produces clear error', async () => {
+			const secrets: SecretBundle = { KEY: 'value' };
+			const dTag = 'test|env';
+
+			const failingEncryptFn: EncryptFn = async () => {
+				throw new Error('Encryption failed');
+			};
+
+			await expect(
+				wrapSecretsWithSigner(secrets, pubkey, dTag, failingEncryptFn, signFn),
+			).rejects.toThrow('Encryption failed');
+		});
+	});
+
 	describe('Rumor metadata (Signer)', () => {
 		it('preserves d-tag in rumor', async () => {
 			const secrets: SecretBundle = { KEY: 'value' };
