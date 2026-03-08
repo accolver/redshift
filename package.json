@@ -46,6 +46,7 @@
 		"typescript": "^5.9.3"
 	},
 	"dependencies": {
+		"@redshift/bunker": "workspace:*",
 		"@redshift/crypto": "workspace:*",
 		"@redshift/rate-limiter": "workspace:*",
 		"nostr-tools": "^2.23.2",

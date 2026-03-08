@@ -5,6 +5,7 @@
     "": {
       "name": "redshift",
       "dependencies": {
+        "@redshift/bunker": "workspace:*",
         "@redshift/crypto": "workspace:*",
         "@redshift/rate-limiter": "workspace:*",
         "nostr-tools": "^2.23.2",

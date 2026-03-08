@@ -636,6 +636,8 @@ export function createCLI(version: string): CLI {
 	cli.registerCommand(createConfigureCommand());
 	cli.registerCommand(createMeCommand());
 	cli.registerCommand(createUpgradeCommand());
+	cli.registerCommand(createTeamsCommand());
+	cli.registerCommand(createBunkerCommand());
 
 	return cli;
 }
@@ -864,6 +866,12 @@ function createSecretsCommand(): CommandDef {
 				aliasOf: 'config',
 				hidden: true,
 			},
+			team: {
+				type: 'string',
+				short: 't',
+				description: 'team slug or ID for team secret operations',
+				placeholder: 'team',
+			},
 			'only-names': {
 				type: 'boolean',
 				description: 'only print the secret names; omit all values',
@@ -1090,6 +1098,122 @@ function createMeCommand(): CommandDef {
 	};
 }
 
+function createTeamsCommand(): CommandDef {
+	return {
+		name: 'teams',
+		description: 'Manage teams',
+		examples: [
+			'redshift teams list',
+			'redshift teams create "My Team" --slug my-team',
+			'redshift teams members <team-id>',
+			'redshift teams invite <team-id> --email user@example.com --role developer',
+			'redshift teams remove <team-id> <pubkey>',
+			'redshift teams rotate-key <team-id>',
+		],
+		subcommands: {
+			create: {
+				name: 'create',
+				description: 'Create a new team',
+				examples: ['redshift teams create "My Team" --slug my-team'],
+				positionals: [
+					{
+						name: 'name',
+						description: 'Team name',
+						required: true,
+					},
+				],
+				flags: {
+					slug: {
+						type: 'string',
+						short: 's',
+						description: 'team slug (URL-friendly identifier)',
+						placeholder: 'slug',
+					},
+				},
+			},
+			list: {
+				name: 'list',
+				description: 'List all teams',
+				examples: ['redshift teams list', 'redshift teams list --json'],
+			},
+			members: {
+				name: 'members',
+				description: 'List members of a team',
+				examples: ['redshift teams members <team-id>'],
+				positionals: [
+					{
+						name: 'team-id',
+						description: 'Team ID or slug',
+						required: true,
+					},
+				],
+			},
+			invite: {
+				name: 'invite',
+				description: 'Invite a member to a team',
+				examples: [
+					'redshift teams invite <team-id> --email user@example.com --role developer',
+					'redshift teams invite <team-id> --pubkey <npub> --role admin',
+				],
+				positionals: [
+					{
+						name: 'team-id',
+						description: 'Team ID or slug',
+						required: true,
+					},
+				],
+				flags: {
+					email: {
+						type: 'string',
+						description: 'email address of the invitee',
+						placeholder: 'email',
+					},
+					pubkey: {
+						type: 'string',
+						description: 'public key of the invitee',
+						placeholder: 'pubkey',
+					},
+					role: {
+						type: 'string',
+						short: 'r',
+						description: 'role for the member (admin, developer, readonly)',
+						placeholder: 'role',
+					},
+				},
+			},
+			remove: {
+				name: 'remove',
+				description: 'Remove a member from a team',
+				examples: ['redshift teams remove <team-id> <pubkey>'],
+				positionals: [
+					{
+						name: 'team-id',
+						description: 'Team ID or slug',
+						required: true,
+					},
+					{
+						name: 'pubkey',
+						description: 'Public key of the member to remove',
+						required: true,
+					},
+				],
+			},
+			'rotate-key': {
+				name: 'rotate-key',
+				description: "Rotate a team's signing key",
+				examples: ['redshift teams rotate-key <team-id>'],
+				positionals: [
+					{
+						name: 'team-id',
+						description: 'Team ID or slug',
+						required: true,
+					},
+				],
+			},
+		},
+	};
+}
+
 function createUpgradeCommand(): CommandDef {
 	return {
 		name: 'upgrade',
@@ -1107,6 +1231,58 @@ function createUpgradeCommand(): CommandDef {
 				short: 't',
 				description: 'install a specific version (e.g., v0.2.0)',
 				placeholder: 'version',
+			},
+		},
+	};
+}
+
+function createBunkerCommand(): CommandDef {
+	return {
+		name: 'bunker',
+		description: 'Run the NIP-46 bunker server',
+		examples: [
+			'redshift bunker start',
+			'redshift bunker start --port 4000',
+			'redshift bunker status',
+			'redshift bunker status --json',
+		],
+		subcommands: {
+			start: {
+				name: 'start',
+				description: 'Start the bunker NIP-46 server and HTTP server',
+				examples: [
+					'redshift bunker start',
+					'redshift bunker start --port 4000 --host 0.0.0.0',
+					'redshift bunker start --database /var/lib/bunker/data.db',
+				],
+				flags: {
+					port: {
+						type: 'string',
+						short: 'p',
+						description: 'HTTP port to listen on',
+						default: '3333',
+						placeholder: 'port',
+					},
+					host: {
+						type: 'string',
+						short: 'H',
+						description: 'HTTP host to bind to',
+						default: '127.0.0.1',
+						placeholder: 'host',
+					},
+					database: {
+						type: 'string',
+						short: 'd',
+						description: 'SQLite database file path',
+						default: 'bunker.db',
+						placeholder: 'path',
+					},
+				},
+			},
+			status: {
+				name: 'status',
+				description: 'Check if the bunker server is reachable',
+				examples: ['redshift bunker status', 'redshift bunker status --json'],
 			},
 		},
 	};

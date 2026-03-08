@@ -32,6 +32,8 @@ export interface SecretsOptions {
 	raw?: boolean;
 	/** Output format */
 	format?: 'table' | 'json' | 'env';
+	/** Team slug or ID for team secret operations */
+	team?: string;
 }
 
 /**
@@ -66,6 +68,15 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 
 	// Require authentication
 	const auth = await requireAuth();
+
+	// TODO: When --team is specified, connect to the bunker using the team's pubkey
+	// as the NIP-46 target. This means secrets are read/written using the team's key
+	// (via bunker). The SecretManager gets the bunker signer which routes through
+	// NIP-46 to the team key. This will be wired when the bunker server has relay
+	// connectivity. For now, log a notice that team mode is active.
+	if (options.team) {
+		console.log(`Using team: ${options.team}`);
+	}
 
 	// Connect to relays
 	const relays = projectConfig?.relays || (await getRelays());

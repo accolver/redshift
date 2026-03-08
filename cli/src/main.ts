@@ -12,12 +12,14 @@
 import { type ParsedArgs, createCLI } from './lib/cli';
 import { VERSION } from './version';
 
+import { bunkerCommand } from './commands/bunker-cmd';
 // Import command handlers
 import { loginCommand, logoutCommand } from './commands/login';
 import { runCommand } from './commands/run';
 import { type SecretsSubcommand, secretsCommand } from './commands/secrets';
 import { serveCommand } from './commands/serve';
 import { setupCommand } from './commands/setup';
+import { type TeamsSubcommand, teamsCommand } from './commands/teams';
 import { upgradeCommand } from './commands/upgrade';
 
 // Create and configure CLI
@@ -104,6 +106,10 @@ async function executeCommand(parsed: ParsedArgs): Promise<void> {
 			return handleMeCommand(parsed.globalFlags);
 		case 'upgrade':
 			return handleUpgradeCommand(parsed);
+		case 'teams':
+			return handleTeamsCommand(parsed);
+		case 'bunker':
+			return bunkerCommand(parsed);
 		default:
 			console.error(`Unknown command: ${parsed.command}`);
 			process.exit(1);
@@ -181,6 +187,7 @@ async function handleSecretsCommand(parsed: ParsedArgs): Promise<void> {
 		project: typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined,
 		environment: typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined,
 		format: parsed.globalFlags.json ? 'json' : undefined,
+		team: typeof parsed.flags.team === 'string' ? parsed.flags.team : undefined,
 	};
 
 	// Handle positionals based on subcommand
@@ -236,6 +243,23 @@ async function handleServeCommand(parsed: ParsedArgs): Promise<void> {
 }
 
 /**
+ * Handle the teams command
+ */
+async function handleTeamsCommand(parsed: ParsedArgs): Promise<void> {
+	const teamsSubcommand = (parsed.subcommand || 'list') as TeamsSubcommand;
+
+	await teamsCommand({
+		subcommand: teamsSubcommand,
+		positionals: parsed.positionals,
+		slug: typeof parsed.flags.slug === 'string' ? parsed.flags.slug : undefined,
+		email: typeof parsed.flags.email === 'string' ? parsed.flags.email : undefined,
+		pubkey: typeof parsed.flags.pubkey === 'string' ? parsed.flags.pubkey : undefined,
+		role: typeof parsed.flags.role === 'string' ? parsed.flags.role : undefined,
+		json: parsed.globalFlags.json,
+	});
+}
+
+/**
  * Handle the upgrade command
  */
 async function handleUpgradeCommand(parsed: ParsedArgs): Promise<void> {
@@ -276,7 +300,12 @@ async function handleConfigureCommand(
 		}
 
 		case 'set': {
-			const ALLOWED_CONFIG_KEYS = new Set(['relays', 'defaultProject', 'defaultEnvironment']);
+			const ALLOWED_CONFIG_KEYS = new Set([
+				'relays',
+				'defaultProject',
+				'defaultEnvironment',
+				'bunkerUrl',
+			]);
 			const SENSITIVE_KEYS = new Set(['nsec', 'bunker', 'authMethod', 'clientSecretKey']);
 			const config = await loadConfig();
 			for (const arg of positionals) {

@@ -10,7 +10,12 @@ import { join } from 'node:path';
 import { DEFAULT_RELAYS } from '@redshift/crypto';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { ConfigError } from './errors';
-import { deleteBunkerKeyFromKeychain, deleteNsecFromKeychain, getBunkerKeyFromKeychain, getNsecFromKeychain } from './keychain';
+import {
+	deleteBunkerKeyFromKeychain,
+	deleteNsecFromKeychain,
+	getBunkerKeyFromKeychain,
+	getNsecFromKeychain,
+} from './keychain';
 import type { AuthMethod, BunkerAuth, RedshiftConfig } from './types';
 
 /**
@@ -27,6 +32,8 @@ export interface Config {
 	relays?: string[];
 	/** Default project ID */
 	defaultProject?: string;
+	/** Bunker admin API URL for team management */
+	bunkerUrl?: string;
 }
 
 /**
