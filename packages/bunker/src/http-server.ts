@@ -37,6 +37,7 @@ import {
 	exchangeGithubCode,
 	exchangeGoogleCode,
 } from './oauth.js';
+import { TeamSecretService } from './team-secret-service.js';
 import { TeamService } from './team-service.js';
 import type { BunkerConfig, InvitableRole, Member, MemberRole, OAuthUserInfo } from './types.js';
 import { WebSessionManager } from './web-session.js';
@@ -60,6 +61,7 @@ export function createHttpServer(options: HttpServerConfig) {
 	const publicUrl = config.publicUrl ?? `http://${config.host}:${config.port}`;
 
 	const teamService = new TeamService(db, config.masterKey);
+	const teamSecretService = new TeamSecretService(db, config.masterKey, teamService);
 
 	const server = Bun.serve({
 		hostname: config.host,
@@ -70,6 +72,7 @@ export function createHttpServer(options: HttpServerConfig) {
 				db,
 				sessionManager,
 				teamService,
+				teamSecretService,
 				isSecure,
 				publicUrl,
 			});
@@ -85,6 +88,7 @@ interface RequestContext {
 	readonly db: Database;
 	readonly sessionManager: WebSessionManager;
 	readonly teamService: TeamService;
+	readonly teamSecretService: TeamSecretService;
 	readonly isSecure: boolean;
 	readonly publicUrl: string;
 }
@@ -179,6 +183,30 @@ async function handleRequest(request: Request, ctx: RequestContext) {
 				ctx,
 				roleMatch[1] as string,
 				roleMatch[2] as string,
+			);
+		}
+
+		// Admin key rotation route
+		const rotateKeyMatch = path.match(/^\/api\/admin\/teams\/([^/]+)\/rotate-key$/);
+		if (rotateKeyMatch && request.method === 'POST') {
+			return handleAdminRotateKey(request, ctx, rotateKeyMatch[1] as string);
+		}
+
+		// Admin rotated keys routes
+		const rotatedKeysMatch = path.match(/^\/api\/admin\/teams\/([^/]+)\/rotated-keys$/);
+		if (rotatedKeysMatch && request.method === 'GET') {
+			return handleAdminListRotatedKeys(request, ctx, rotatedKeysMatch[1] as string);
+		}
+
+		const rotatedKeyDeleteMatch = path.match(
+			/^\/api\/admin\/teams\/([^/]+)\/rotated-keys\/([^/]+)$/,
+		);
+		if (rotatedKeyDeleteMatch && request.method === 'DELETE') {
+			return handleAdminDeleteRotatedKey(
+				request,
+				ctx,
+				rotatedKeyDeleteMatch[1] as string,
+				rotatedKeyDeleteMatch[2] as string,
 			);
 		}
 
@@ -807,6 +835,43 @@ async function handleAdminChangeRole(
 	}
 
 	ctx.teamService.changeRole(teamId, memberPubkey, body.role as MemberRole, adminPubkey);
+	return jsonResponse({ success: true });
+}
+
+// --- Admin Key Rotation Handlers ---
+
+/**
+ * POST /api/admin/teams/:id/rotate-key — Rotate a team's Nostr keypair.
+ */
+function handleAdminRotateKey(request: Request, ctx: RequestContext, teamId: string) {
+	const adminPubkey = requireAdminAuth(request, ctx);
+
+	const result = ctx.teamSecretService.rotateTeamKey(teamId, adminPubkey);
+	return jsonResponse({ oldPubkey: result.oldPubkey, newPubkey: result.newPubkey });
+}
+
+/**
+ * GET /api/admin/teams/:id/rotated-keys — List rotated keys for a team.
+ */
+function handleAdminListRotatedKeys(request: Request, ctx: RequestContext, teamId: string) {
+	requireAdminAuth(request, ctx);
+
+	const rotatedKeys = ctx.teamSecretService.getRotatedKeys(teamId);
+	return jsonResponse({ rotatedKeys });
+}
+
+/**
+ * DELETE /api/admin/teams/:id/rotated-keys/:oldPubkey — Delete a rotated key entry.
+ */
+function handleAdminDeleteRotatedKey(
+	request: Request,
+	ctx: RequestContext,
+	teamId: string,
+	oldPubkey: string,
+) {
+	requireAdminAuth(request, ctx);
+
+	ctx.teamSecretService.deleteRotatedKey(teamId, oldPubkey);
 	return jsonResponse({ success: true });
 }
 

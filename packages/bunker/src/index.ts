@@ -63,6 +63,12 @@ export { hasPermission, getPermissions, getRequiredPermission } from './rbac.js'
 // Team Service
 export { TeamService } from './team-service.js';
 
+// Team Secret Service
+export { TeamSecretService } from './team-secret-service.js';
+
+// Team Metadata
+export { createTeamMetadataEvent } from './team-metadata.js';
+
 // NIP-98 Admin Auth
 export { verifyNip98Auth, verifyAdminAuth, isAdminPubkey } from './nip98.js';
 export type { Nip98AuthResult } from './nip98.js';
@@ -138,4 +144,5 @@ export type {
 	InvitationStatus,
 	InvitableRole,
 	InviteParams,
+	RotatedKey,
 } from './types.js';

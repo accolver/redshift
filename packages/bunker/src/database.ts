@@ -97,6 +97,17 @@ CREATE TABLE IF NOT EXISTS web_sessions (
 	created_at INTEGER NOT NULL,
 	expires_at INTEGER NOT NULL
 );
+
+-- Rotated Keys (old team keys preserved for re-encryption)
+CREATE TABLE IF NOT EXISTS rotated_keys (
+	id TEXT PRIMARY KEY,
+	team_id TEXT NOT NULL REFERENCES teams(id),
+	old_pubkey TEXT NOT NULL,
+	old_encrypted_nsec TEXT NOT NULL,
+	new_pubkey TEXT NOT NULL,
+	rotated_at INTEGER NOT NULL,
+	rotated_by TEXT NOT NULL
+);
 `;
 
 /** Index creation statements for query performance */
@@ -120,6 +131,7 @@ CREATE INDEX IF NOT EXISTS idx_invitations_team_id ON invitations(team_id);
 CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email);
 CREATE INDEX IF NOT EXISTS idx_invitations_pubkey ON invitations(pubkey);
 CREATE INDEX IF NOT EXISTS idx_invitations_status ON invitations(status);
+CREATE INDEX IF NOT EXISTS idx_rotated_keys_team_id ON rotated_keys(team_id);
 `;
 
 /** Expected table names in the bunker schema */
@@ -132,6 +144,7 @@ export const EXPECTED_TABLES = [
 	'audit_events',
 	'invitations',
 	'web_sessions',
+	'rotated_keys',
 ] as const;
 
 /**

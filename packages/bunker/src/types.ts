@@ -141,6 +141,17 @@ export interface InviteParams {
 	readonly role: InvitableRole;
 }
 
+/** Rotated key record (old team keys preserved for re-encryption) */
+export interface RotatedKey {
+	readonly id: string;
+	readonly team_id: string;
+	readonly old_pubkey: string;
+	readonly old_encrypted_nsec: string;
+	readonly new_pubkey: string;
+	readonly rotated_at: number;
+	readonly rotated_by: string;
+}
+
 /** Encrypted payload format: base64(iv:ciphertext:authTag) */
 export interface EncryptedPayload {
 	readonly iv: Uint8Array;
