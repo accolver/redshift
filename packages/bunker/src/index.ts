@@ -49,8 +49,32 @@ export {
 // Configuration
 export { loadConfig, parseDuration } from './config.js';
 
+// NIP-46 Server
+export { BunkerServer, parseNip46Request } from './nip46-server.js';
+export type { PublishFn } from './nip46-server.js';
+
+// Session Management
+export { SessionManager } from './session-manager.js';
+export type { ActiveSession, CreateSessionOptions } from './session-manager.js';
+
+// RBAC
+export { hasPermission, getPermissions, getRequiredPermission } from './rbac.js';
+
 // Errors
 export { EncryptionError, ConfigError, DatabaseError } from './errors.js';
+
+// NIP-46 Types
+export { NIP46_KIND } from './nip46-types.js';
+export type {
+	Nip46Method,
+	Nip46Request,
+	Nip46Response,
+	Nip46ErrorResponse,
+	Nip46ServerConfig,
+	TeamKeyInfo,
+	Nip46RequestContext,
+	Permission,
+} from './nip46-types.js';
 
 // Types
 export type {
