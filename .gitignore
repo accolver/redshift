@@ -50,3 +50,6 @@ memory/
 .DS_Store
 .applesauce-src
 *.bun-build
+
+# git worktrees
+.worktrees
