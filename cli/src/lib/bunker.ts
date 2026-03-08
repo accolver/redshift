@@ -8,7 +8,7 @@
  * L5: Journey-Validator - Secure authentication flow
  */
 
-import type { EventTemplate, VerifiedEvent } from 'nostr-tools/core';
+import type { EventTemplate } from 'nostr-tools/core';
 import {
 	type BunkerPointer,
 	BunkerSigner,
@@ -17,6 +17,7 @@ import {
 } from 'nostr-tools/nip46';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { getRelays } from './config';
+import type { NostrSigner } from './types';
 
 /**
  * Result of bunker connection
@@ -202,17 +203,20 @@ export async function createNostrConnectUri(
 }
 
 /**
- * Wrapper that makes a BunkerSigner compatible with SecretManager.
+ * Wrapper that makes a BunkerSigner compatible with NostrSigner.
  * Signs events using the remote bunker instead of a local key.
+ *
+ * Implements the NostrSigner interface so it can be used interchangeably
+ * with NsecSigner in all CLI commands.
  */
-export class BunkerSecretManager {
-	private signer: BunkerSigner;
-	private userPubkey: string;
+export class BunkerSecretManager implements NostrSigner {
+	readonly pubkey: string;
+	private bunkerSigner: BunkerSigner;
 	private relays: string[];
 
 	constructor(connection: BunkerConnection, relays: string[]) {
-		this.signer = connection.signer;
-		this.userPubkey = connection.userPubkey;
+		this.bunkerSigner = connection.signer;
+		this.pubkey = connection.userPubkey;
 		this.relays = relays;
 	}
 
@@ -220,7 +224,7 @@ export class BunkerSecretManager {
 	 * Get the user's public key
 	 */
 	getPublicKey(): string {
-		return this.userPubkey;
+		return this.pubkey;
 	}
 
 	/**
@@ -233,29 +237,43 @@ export class BunkerSecretManager {
 	/**
 	 * Sign an event using the bunker
 	 */
-	async signEvent(event: EventTemplate): Promise<VerifiedEvent> {
-		return this.signer.signEvent(event);
+	async signEvent(event: {
+		kind: number;
+		created_at: number;
+		tags: string[][];
+		content: string;
+	}) {
+		const signed = await this.bunkerSigner.signEvent(event as EventTemplate);
+		return {
+			id: signed.id,
+			pubkey: signed.pubkey,
+			created_at: signed.created_at,
+			kind: signed.kind,
+			tags: signed.tags,
+			content: signed.content,
+			sig: signed.sig,
+		};
 	}
 
 	/**
 	 * Encrypt content using NIP-44 via bunker
 	 */
 	async encrypt(pubkey: string, plaintext: string): Promise<string> {
-		return this.signer.nip44Encrypt(pubkey, plaintext);
+		return this.bunkerSigner.nip44Encrypt(pubkey, plaintext);
 	}
 
 	/**
 	 * Decrypt content using NIP-44 via bunker
 	 */
 	async decrypt(pubkey: string, ciphertext: string): Promise<string> {
-		return this.signer.nip44Decrypt(pubkey, ciphertext);
+		return this.bunkerSigner.nip44Decrypt(pubkey, ciphertext);
 	}
 
 	/**
 	 * Close the bunker connection
 	 */
 	async close(): Promise<void> {
-		await this.signer.close();
+		await this.bunkerSigner.close();
 	}
 }
 

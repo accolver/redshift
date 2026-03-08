@@ -38,7 +38,7 @@ export async function setupCommand(options: SetupOptions): Promise<void> {
 
 	// Connect to relays and fetch existing projects
 	const relays = await getRelays();
-	const manager = new SecretManager(auth.privateKey);
+	const manager = new SecretManager(auth.signer);
 	manager.connect(relays);
 
 	let projectId: string;

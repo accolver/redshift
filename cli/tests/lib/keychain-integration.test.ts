@@ -11,8 +11,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { npubEncode, nsecEncode } from 'nostr-tools/nip19';
+import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 
 import { tryAuth } from '../../src/commands/login';
 import { clearAuth, getAuth, getPrivateKey, loadConfig, saveConfig } from '../../src/lib/config';
@@ -253,9 +253,8 @@ describe('Keychain + Config Integration', () => {
 			const result = await tryAuth();
 
 			expect(result).not.toBeNull();
-			expect(result?.nsec).toBe(nsec);
 			expect(result?.npub).toBe(expectedNpub);
-			expect(result?.privateKey).toBeInstanceOf(Uint8Array);
+			expect(result?.signer.pubkey).toBe(expectedPubkey);
 		});
 
 		it('returns null for invalid nsec in keychain', async () => {
@@ -314,7 +313,7 @@ describe('Keychain migration scenarios', () => {
 
 		// Verify old auth works
 		const oldAuth = await tryAuth();
-		expect(oldAuth?.nsec).toBe(oldNsec);
+		expect(oldAuth?.signer.pubkey).toBe(getPublicKey(oldSk));
 
 		// Now simulate "re-login" by storing in keychain
 		const newSk = generateSecretKey();
@@ -328,7 +327,7 @@ describe('Keychain migration scenarios', () => {
 
 		// New auth should come from keychain
 		const newAuth = await tryAuth();
-		expect(newAuth?.nsec).toBe(newNsec);
+		expect(newAuth?.signer.pubkey).toBe(getPublicKey(newSk));
 	});
 
 	it('handles case where keychain has old key and config has new key', async () => {
@@ -439,6 +438,6 @@ describe('Keychain edge cases', () => {
 
 		// All should return the same valid auth
 		expect(results.every((r) => r !== null)).toBe(true);
-		expect(results.every((r) => r?.nsec === nsec)).toBe(true);
+		expect(results.every((r) => r?.signer.pubkey === getPublicKey(sk))).toBe(true);
 	});
 });

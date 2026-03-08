@@ -69,7 +69,7 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 
 	// Connect to relays
 	const relays = projectConfig?.relays || (await getRelays());
-	const manager = new SecretManager(auth.privateKey);
+	const manager = new SecretManager(auth.signer);
 	manager.connect(relays);
 
 	try {

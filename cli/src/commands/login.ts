@@ -13,10 +13,13 @@ import { createInterface } from 'node:readline';
 import { npubEncode } from 'nostr-tools/nip19';
 import { getPublicKey } from 'nostr-tools/pure';
 import {
+	type BunkerConnection,
+	BunkerSecretManager,
 	connectToBunker,
 	createNostrConnectUri,
 	formatBunkerPointer,
 	isValidBunkerUrl,
+	reconnectToBunker,
 } from '../lib/bunker';
 import {
 	type AuthResult,
@@ -28,8 +31,15 @@ import {
 	saveConfig,
 } from '../lib/config';
 import { decodeNsec, validateNsec } from '../lib/crypto';
-import { getKeychainServiceName, storeBunkerKeyInKeychain, storeNsecInKeychain } from '../lib/keychain';
-import type { BunkerAuth } from '../lib/types';
+import { AuthError } from '../lib/errors';
+import {
+	getBunkerKeyFromKeychain,
+	getKeychainServiceName,
+	storeBunkerKeyInKeychain,
+	storeNsecInKeychain,
+} from '../lib/keychain';
+import { NsecSigner } from '../lib/signer';
+import type { BunkerAuth, NostrSigner } from '../lib/types';
 
 export interface LoginOptions {
 	nsec?: string;
@@ -353,45 +363,103 @@ export async function logoutCommand(): Promise<void> {
 }
 
 /**
+ * Unified auth result returned by tryAuth/requireAuth.
+ * Provides a NostrSigner that works with both nsec and bunker auth.
+ */
+export interface AuthContext {
+	/** Display-friendly npub */
+	npub: string;
+	/** Unified signer for all crypto operations */
+	signer: NostrSigner;
+}
+
+/**
+ * Reconnect to a bunker using stored credentials.
+ * Returns a BunkerConnection or throws if reconnection fails.
+ */
+async function reconnectFromStoredBunkerAuth(bunker: BunkerAuth): Promise<BunkerConnection> {
+	// Retrieve client secret key from keychain if not in config
+	let clientKeyHex = bunker.clientSecretKey;
+	if (!clientKeyHex) {
+		const keychainKey = await getBunkerKeyFromKeychain();
+		if (!keychainKey) {
+			throw new AuthError(
+				'Bunker client key not found. Please run `redshift login` again.',
+				'bunker',
+			);
+		}
+		clientKeyHex = keychainKey;
+	}
+
+	// Convert hex to Uint8Array
+	const clientSecretKey = new Uint8Array(
+		(clientKeyHex.match(/.{1,2}/g) ?? []).map((byte: string) => Number.parseInt(byte, 16)),
+	);
+
+	// Build bunker pointer
+	const bp = {
+		pubkey: bunker.bunkerPubkey,
+		relays: bunker.relays,
+		secret: bunker.secret ?? null,
+	};
+
+	return reconnectToBunker(bp, clientSecretKey);
+}
+
+/**
  * Try to get auth credentials without exiting.
  * Returns null if not logged in or auth is invalid.
+ *
+ * For nsec auth, returns an NsecSigner.
+ * For bunker auth, reconnects to the bunker and returns a BunkerSecretManager as signer.
  */
-export async function tryAuth(): Promise<{
-	nsec: string;
-	npub: string;
-	privateKey: Uint8Array;
-} | null> {
+export async function tryAuth(): Promise<AuthContext | null> {
 	const auth = await getAuth();
 
 	if (!auth) {
 		return null;
 	}
 
-	// For now, only nsec auth provides direct private key access
-	if (auth.method !== 'nsec' || !auth.nsec) {
-		return null;
+	// Handle nsec auth
+	if (auth.method === 'nsec' && auth.nsec) {
+		if (!validateNsec(auth.nsec)) {
+			return null;
+		}
+
+		const privateKey = decodeNsec(auth.nsec);
+		const pubkey = getPublicKey(privateKey);
+		const npub = npubEncode(pubkey);
+		const signer = new NsecSigner(privateKey);
+
+		return { npub, signer };
 	}
 
-	if (!validateNsec(auth.nsec)) {
-		return null;
+	// Handle bunker auth
+	if (auth.method === 'bunker' && auth.bunker) {
+		try {
+			const connection = await reconnectFromStoredBunkerAuth(auth.bunker);
+			const npub = npubEncode(connection.userPubkey);
+			const relays = auth.bunker.relays;
+			const signer = new BunkerSecretManager(connection, relays);
+
+			return { npub, signer };
+		} catch {
+			// Bunker reconnection failed — return null (caller decides what to do)
+			return null;
+		}
 	}
 
-	const privateKey = decodeNsec(auth.nsec);
-	const pubkey = getPublicKey(privateKey);
-	const npub = npubEncode(pubkey);
-
-	return { nsec: auth.nsec, npub, privateKey };
+	return null;
 }
 
 /**
  * Check if user is logged in and return their credentials.
  * Exits with error if not logged in.
+ *
+ * Returns an AuthContext with a unified NostrSigner that works
+ * for both nsec and bunker auth methods.
  */
-export async function requireAuth(): Promise<{
-	nsec: string;
-	npub: string;
-	privateKey: Uint8Array;
-}> {
+export async function requireAuth(): Promise<AuthContext> {
 	const auth = await tryAuth();
 
 	if (!auth) {
@@ -399,11 +467,12 @@ export async function requireAuth(): Promise<{
 		if (!storedAuth) {
 			console.error('Not logged in. Run `redshift login` first.');
 			console.error('Or set REDSHIFT_NSEC environment variable for CI/CD.');
-		} else if (storedAuth.method !== 'nsec' || !storedAuth.nsec) {
-			console.error('Bunker auth not yet fully supported for this command.');
-			console.error('Please use nsec authentication for now.');
-		} else {
+		} else if (storedAuth.method === 'bunker') {
+			console.error('Failed to reconnect to bunker. Please run `redshift login` again.');
+		} else if (storedAuth.method === 'nsec' && storedAuth.nsec) {
 			console.error('Invalid nsec stored in config. Please run `redshift login` again.');
+		} else {
+			console.error('Invalid auth configuration. Please run `redshift login` again.');
 		}
 		process.exit(1);
 	}

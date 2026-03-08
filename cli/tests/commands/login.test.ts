@@ -9,12 +9,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { generateSecretKey } from 'nostr-tools/pure';
 import { nsecEncode } from 'nostr-tools/nip19';
+import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 
 // We need to test the helper functions that are exported
 import { tryAuth } from '../../src/commands/login';
-import { saveConfig, loadConfig, clearAuth } from '../../src/lib/config';
+import { clearAuth, loadConfig, saveConfig } from '../../src/lib/config';
+import { NsecSigner } from '../../src/lib/signer';
 
 describe('Login Command', () => {
 	const testDir = join(tmpdir(), `redshift-login-test-${Date.now()}`);
@@ -49,7 +50,7 @@ describe('Login Command', () => {
 			expect(result).toBeNull();
 		});
 
-		it('returns auth from config file when nsec is stored', async () => {
+		it('returns auth with signer from config file when nsec is stored', async () => {
 			const sk = generateSecretKey();
 			const nsec = nsecEncode(sk);
 
@@ -58,12 +59,13 @@ describe('Login Command', () => {
 			const result = await tryAuth();
 
 			expect(result).not.toBeNull();
-			expect(result?.nsec).toBe(nsec);
 			expect(result?.npub).toMatch(/^npub1/);
-			expect(result?.privateKey).toBeInstanceOf(Uint8Array);
+			expect(result?.signer).toBeDefined();
+			expect(result?.signer.pubkey).toBe(getPublicKey(sk));
+			expect(result?.signer).toBeInstanceOf(NsecSigner);
 		});
 
-		it('returns auth from REDSHIFT_NSEC env var', async () => {
+		it('returns auth with signer from REDSHIFT_NSEC env var', async () => {
 			const sk = generateSecretKey();
 			const nsec = nsecEncode(sk);
 
@@ -72,7 +74,7 @@ describe('Login Command', () => {
 			const result = await tryAuth();
 
 			expect(result).not.toBeNull();
-			expect(result?.nsec).toBe(nsec);
+			expect(result?.signer.pubkey).toBe(getPublicKey(sk));
 		});
 
 		it('prefers env var over config file', async () => {
@@ -86,7 +88,8 @@ describe('Login Command', () => {
 
 			const result = await tryAuth();
 
-			expect(result?.nsec).toBe(nsec2);
+			// Should use the env var key, not the config key
+			expect(result?.signer.pubkey).toBe(getPublicKey(sk2));
 		});
 
 		it('returns null for invalid nsec in config', async () => {
@@ -97,7 +100,8 @@ describe('Login Command', () => {
 			expect(result).toBeNull();
 		});
 
-		it('returns null for bunker auth (not yet supported in tryAuth)', async () => {
+		it('returns null for bunker auth when bunker is unreachable', async () => {
+			// Bunker auth with invalid credentials will fail to reconnect
 			await saveConfig({
 				authMethod: 'bunker',
 				bunker: {
@@ -109,6 +113,7 @@ describe('Login Command', () => {
 
 			const result = await tryAuth();
 
+			// Should return null because reconnection will fail
 			expect(result).toBeNull();
 		});
 	});

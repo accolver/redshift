@@ -5,11 +5,11 @@
  * L4: Integration-Contractor - NIP-59 protocol compliance
  */
 
+import { unwrapGiftWrapWithSigner, wrapSecretsWithSigner } from '@redshift/crypto';
 import { getPublicKey } from 'nostr-tools/pure';
 import {
 	createDTag,
 	createDeletionEvent,
-	createTombstone,
 	parseDTag,
 	unwrapGiftWrap,
 	unwrapSecrets as unwrapSecretsFromEvent,
@@ -19,7 +19,7 @@ import type { UnwrapResult } from './crypto';
 import { NotConnectedError } from './errors';
 import type { RelayPool } from './relay';
 import { createRelayPool, filterGiftWraps } from './relay';
-import type { GiftWrapResult, NostrEvent, SecretBundle } from './types';
+import type { GiftWrapResult, NostrEvent, NostrSigner, SecretBundle } from './types';
 
 /**
  * Cached secret entry with metadata
@@ -54,9 +54,14 @@ const FETCH_ALL_CACHE_TTL_MS = 5000;
 /**
  * SecretManager handles all secret-related operations including
  * encryption, relay communication, and state management.
+ *
+ * Accepts either a raw Uint8Array private key (nsec auth) or a NostrSigner
+ * (bunker auth). When a NostrSigner is provided, all crypto operations
+ * are delegated to the signer (which may be a remote bunker).
  */
 export class SecretManager {
-	private privateKey: Uint8Array;
+	private privateKey: Uint8Array | null;
+	private signer: NostrSigner | null;
 	private publicKey: string;
 	private pool: RelayPool | null = null;
 
@@ -66,9 +71,16 @@ export class SecretManager {
 	/** Short-lived cache for fetchAllSecrets Promise deduplication */
 	private fetchAllCache: FetchAllCache | null = null;
 
-	constructor(privateKey: Uint8Array) {
-		this.privateKey = privateKey;
-		this.publicKey = getPublicKey(privateKey);
+	constructor(keyOrSigner: Uint8Array | NostrSigner) {
+		if (keyOrSigner instanceof Uint8Array) {
+			this.privateKey = keyOrSigner;
+			this.signer = null;
+			this.publicKey = getPublicKey(keyOrSigner);
+		} else {
+			this.privateKey = null;
+			this.signer = keyOrSigner;
+			this.publicKey = keyOrSigner.pubkey;
+		}
 	}
 
 	/**
@@ -115,23 +127,81 @@ export class SecretManager {
 	}
 
 	/**
-	 * Wrap secrets into a Gift Wrap event
+	 * Wrap secrets into a Gift Wrap event.
+	 * Uses signer-based wrapping when a NostrSigner is provided.
 	 */
-	wrapSecrets(secrets: SecretBundle, dTag: string): GiftWrapResult {
+	async wrapSecretsAsync(secrets: SecretBundle, dTag: string): Promise<GiftWrapResult> {
+		const signer = this.signer;
+		if (signer) {
+			const result = await wrapSecretsWithSigner(
+				secrets,
+				this.publicKey,
+				dTag,
+				(pubkey: string, plaintext: string) => signer.encrypt(pubkey, plaintext),
+				(event: { kind: number; created_at: number; tags: string[][]; content: string }) =>
+					signer.signEvent(event),
+			);
+			return { event: result.event, rumor: result.rumor };
+		}
+		if (!this.privateKey) {
+			throw new Error('No private key or signer available');
+		}
 		return wrapSecretsToEvent(secrets, this.privateKey, dTag);
 	}
 
 	/**
-	 * Unwrap a Gift Wrap event to retrieve secrets
+	 * Unwrap a Gift Wrap event with full metadata.
+	 * Uses signer-based unwrapping when a NostrSigner is provided.
+	 */
+	async unwrapWithMetadataAsync(event: NostrEvent): Promise<UnwrapResult> {
+		const signer = this.signer;
+		if (signer) {
+			return unwrapGiftWrapWithSigner(event, (pubkey: string, ciphertext: string) =>
+				signer.decrypt(pubkey, ciphertext),
+			);
+		}
+		if (!this.privateKey) {
+			throw new Error('No private key or signer available');
+		}
+		return unwrapGiftWrap(event, this.privateKey);
+	}
+
+	/**
+	 * Wrap secrets into a Gift Wrap event (sync, nsec-only).
+	 * @deprecated Use wrapSecretsAsync for signer compatibility.
+	 */
+	wrapSecrets(secrets: SecretBundle, dTag: string): GiftWrapResult {
+		if (!this.privateKey) {
+			throw new Error(
+				'Sync wrapSecrets requires a private key. Use wrapSecretsAsync for signer-based auth.',
+			);
+		}
+		return wrapSecretsToEvent(secrets, this.privateKey, dTag);
+	}
+
+	/**
+	 * Unwrap a Gift Wrap event to retrieve secrets (sync, nsec-only).
+	 * @deprecated Use unwrapWithMetadataAsync for signer compatibility.
 	 */
 	unwrapSecrets(event: NostrEvent): SecretBundle {
+		if (!this.privateKey) {
+			throw new Error(
+				'Sync unwrapSecrets requires a private key. Use unwrapWithMetadataAsync for signer-based auth.',
+			);
+		}
 		return unwrapSecretsFromEvent(event, this.privateKey);
 	}
 
 	/**
-	 * Unwrap a Gift Wrap event with full metadata
+	 * Unwrap a Gift Wrap event with full metadata (sync, nsec-only).
+	 * @deprecated Use unwrapWithMetadataAsync for signer compatibility.
 	 */
 	unwrapWithMetadata(event: NostrEvent): UnwrapResult {
+		if (!this.privateKey) {
+			throw new Error(
+				'Sync unwrapWithMetadata requires a private key. Use unwrapWithMetadataAsync for signer-based auth.',
+			);
+		}
 		return unwrapGiftWrap(event, this.privateKey);
 	}
 
@@ -206,7 +276,7 @@ export class SecretManager {
 			}
 
 			try {
-				const result = unwrapGiftWrap(gw, this.privateKey);
+				const result = await this.unwrapWithMetadataAsync(gw);
 
 				// Cache the successful decryption
 				this.decryptionCache.set(gw.id, {
@@ -306,7 +376,7 @@ export class SecretManager {
 			}
 
 			try {
-				const result = unwrapGiftWrap(gw, this.privateKey);
+				const result = await this.unwrapWithMetadataAsync(gw);
 
 				// Cache the successful decryption
 				this.decryptionCache.set(gw.id, {
@@ -347,7 +417,7 @@ export class SecretManager {
 		}
 
 		const dTag = createDTag(projectId, environment);
-		const { event } = this.wrapSecrets(secrets, dTag);
+		const { event } = await this.wrapSecretsAsync(secrets, dTag);
 
 		await this.pool.publish(event);
 
@@ -367,7 +437,8 @@ export class SecretManager {
 		}
 
 		const dTag = createDTag(projectId, environment);
-		const { event } = createTombstone(this.privateKey, dTag);
+		// Tombstone is an empty secret bundle wrapped via the signer path
+		const { event } = await this.wrapSecretsAsync({}, dTag);
 
 		await this.pool.publish(event);
 
@@ -378,14 +449,33 @@ export class SecretManager {
 	}
 
 	/**
-	 * Create a NIP-09 deletion request for specific events
+	 * Create a NIP-09 deletion request for specific events.
+	 * Note: Deletion events must be signed by the user's real key.
+	 * For bunker auth, this uses the signer's signEvent.
 	 */
 	async requestDeletion(eventIds: string[], reason?: string): Promise<NostrEvent> {
 		if (!this.pool) {
 			throw new NotConnectedError();
 		}
 
-		const deletion = createDeletionEvent(eventIds, this.privateKey, reason);
+		let deletion: NostrEvent;
+		const signer = this.signer;
+		if (signer) {
+			// Create tags with 'e' for each event ID to delete
+			const tags: string[][] = eventIds.map((id) => ['e', id]);
+			const signed = await signer.signEvent({
+				kind: 5, // NIP-09 deletion
+				created_at: Math.floor(Date.now() / 1000),
+				tags,
+				content: reason ?? '',
+			});
+			deletion = signed;
+		} else if (this.privateKey) {
+			deletion = createDeletionEvent(eventIds, this.privateKey, reason);
+		} else {
+			throw new Error('No private key or signer available');
+		}
+
 		await this.pool.publish(deletion);
 
 		return deletion;
