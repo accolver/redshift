@@ -115,6 +115,32 @@ export interface IdentityInfo {
 	readonly role: MemberRole;
 }
 
+/** Invitation status */
+export type InvitationStatus = 'pending' | 'accepted' | 'expired';
+
+/** Invitation role (owner cannot be invited, only transferred) */
+export type InvitableRole = Exclude<MemberRole, 'owner'>;
+
+/** Invitation record */
+export interface Invitation {
+	readonly id: string;
+	readonly team_id: string;
+	readonly email: string | null;
+	readonly pubkey: string | null;
+	readonly role: InvitableRole;
+	readonly invited_by: string;
+	readonly status: InvitationStatus;
+	readonly created_at: number;
+	readonly expires_at: number;
+}
+
+/** Parameters for creating an invitation */
+export interface InviteParams {
+	readonly email?: string | undefined;
+	readonly pubkey?: string | undefined;
+	readonly role: InvitableRole;
+}
+
 /** Encrypted payload format: base64(iv:ciphertext:authTag) */
 export interface EncryptedPayload {
 	readonly iv: Uint8Array;

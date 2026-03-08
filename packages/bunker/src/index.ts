@@ -60,8 +60,25 @@ export type { ActiveSession, CreateSessionOptions } from './session-manager.js';
 // RBAC
 export { hasPermission, getPermissions, getRequiredPermission } from './rbac.js';
 
+// Team Service
+export { TeamService } from './team-service.js';
+
+// NIP-98 Admin Auth
+export { verifyNip98Auth, verifyAdminAuth, isAdminPubkey } from './nip98.js';
+export type { Nip98AuthResult } from './nip98.js';
+
 // Errors
-export { EncryptionError, ConfigError, DatabaseError, OAuthError, SessionError } from './errors.js';
+export {
+	EncryptionError,
+	ConfigError,
+	DatabaseError,
+	OAuthError,
+	SessionError,
+	AuthorizationError,
+	NotFoundError,
+	ConflictError,
+	ValidationError,
+} from './errors.js';
 
 // NIP-46 Types
 export { NIP46_KIND } from './nip46-types.js';
@@ -117,4 +134,8 @@ export type {
 	WebSession,
 	OAuthUserInfo,
 	IdentityInfo,
+	Invitation,
+	InvitationStatus,
+	InvitableRole,
+	InviteParams,
 } from './types.js';

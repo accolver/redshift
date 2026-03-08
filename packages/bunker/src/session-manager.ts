@@ -180,6 +180,19 @@ export class SessionManager {
 	}
 
 	/**
+	 * Remove all sessions for a specific member.
+	 * Used when a member is removed from a team.
+	 */
+	removeMemberSessions(memberId: string) {
+		for (const [pubkey, active] of this.sessions) {
+			if (active.session.member_id === memberId) {
+				this.sessions.delete(pubkey);
+			}
+		}
+		this.db.query('DELETE FROM sessions WHERE member_id = ?').run(memberId);
+	}
+
+	/**
 	 * Get all active (non-expired) sessions.
 	 */
 	getActiveSessions() {

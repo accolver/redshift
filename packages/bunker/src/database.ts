@@ -76,6 +76,19 @@ CREATE TABLE IF NOT EXISTS audit_events (
 	created_at INTEGER NOT NULL
 );
 
+-- Invitations
+CREATE TABLE IF NOT EXISTS invitations (
+	id TEXT PRIMARY KEY,
+	team_id TEXT NOT NULL REFERENCES teams(id),
+	email TEXT,
+	pubkey TEXT,
+	role TEXT NOT NULL CHECK(role IN ('admin', 'developer', 'readonly')),
+	invited_by TEXT NOT NULL,
+	status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'expired')),
+	created_at INTEGER NOT NULL,
+	expires_at INTEGER NOT NULL
+);
+
 -- Web Sessions (OAuth HTTP sessions, distinct from NIP-46 sessions)
 CREATE TABLE IF NOT EXISTS web_sessions (
 	id TEXT PRIMARY KEY,
@@ -103,6 +116,10 @@ CREATE INDEX IF NOT EXISTS idx_audit_events_actor_pubkey ON audit_events(actor_p
 CREATE INDEX IF NOT EXISTS idx_audit_events_created_at ON audit_events(created_at);
 CREATE INDEX IF NOT EXISTS idx_web_sessions_member_id ON web_sessions(member_id);
 CREATE INDEX IF NOT EXISTS idx_web_sessions_expires_at ON web_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_invitations_team_id ON invitations(team_id);
+CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email);
+CREATE INDEX IF NOT EXISTS idx_invitations_pubkey ON invitations(pubkey);
+CREATE INDEX IF NOT EXISTS idx_invitations_status ON invitations(status);
 `;
 
 /** Expected table names in the bunker schema */
@@ -113,6 +130,7 @@ export const EXPECTED_TABLES = [
 	'assignments',
 	'sessions',
 	'audit_events',
+	'invitations',
 	'web_sessions',
 ] as const;
 

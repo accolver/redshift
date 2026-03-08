@@ -20,8 +20,16 @@
 
 import type { Database } from 'bun:sqlite';
 import { encrypt } from './encryption.js';
-import { OAuthError, SessionError } from './errors.js';
+import {
+	AuthorizationError,
+	ConflictError,
+	NotFoundError,
+	OAuthError,
+	SessionError,
+	ValidationError,
+} from './errors.js';
 import { deriveNostrKey } from './key-derivation.js';
+import { verifyAdminAuth } from './nip98.js';
 import {
 	buildGithubAuthUrl,
 	buildGoogleAuthUrl,
@@ -29,7 +37,8 @@ import {
 	exchangeGithubCode,
 	exchangeGoogleCode,
 } from './oauth.js';
-import type { BunkerConfig, Member, OAuthUserInfo } from './types.js';
+import { TeamService } from './team-service.js';
+import type { BunkerConfig, InvitableRole, Member, MemberRole, OAuthUserInfo } from './types.js';
 import { WebSessionManager } from './web-session.js';
 
 /** Configuration for the HTTP server */
@@ -50,6 +59,8 @@ export function createHttpServer(options: HttpServerConfig) {
 	const isSecure = config.publicUrl?.startsWith('https') ?? false;
 	const publicUrl = config.publicUrl ?? `http://${config.host}:${config.port}`;
 
+	const teamService = new TeamService(db, config.masterKey);
+
 	const server = Bun.serve({
 		hostname: config.host,
 		port: config.port,
@@ -58,6 +69,7 @@ export function createHttpServer(options: HttpServerConfig) {
 				config,
 				db,
 				sessionManager,
+				teamService,
 				isSecure,
 				publicUrl,
 			});
@@ -72,6 +84,7 @@ interface RequestContext {
 	readonly config: BunkerConfig;
 	readonly db: Database;
 	readonly sessionManager: WebSessionManager;
+	readonly teamService: TeamService;
 	readonly isSecure: boolean;
 	readonly publicUrl: string;
 }
@@ -115,6 +128,60 @@ async function handleRequest(request: Request, ctx: RequestContext) {
 			return await handleAuthorizePubkey(request, ctx);
 		}
 
+		// --- Admin API Routes (NIP-98 auth) ---
+		if (path === '/api/admin/teams' && request.method === 'POST') {
+			return await handleAdminCreateTeam(request, ctx);
+		}
+		if (path === '/api/admin/teams' && request.method === 'GET') {
+			return handleAdminListTeams(request, ctx);
+		}
+
+		// Admin routes with team ID parameter
+		const teamMatch = path.match(/^\/api\/admin\/teams\/([^/]+)$/);
+		if (teamMatch) {
+			const teamId = teamMatch[1] as string;
+			if (request.method === 'GET') {
+				return handleAdminGetTeam(request, ctx, teamId);
+			}
+			if (request.method === 'DELETE') {
+				return handleAdminDeleteTeam(request, ctx, teamId);
+			}
+		}
+
+		// Admin invite route
+		const inviteMatch = path.match(/^\/api\/admin\/teams\/([^/]+)\/invite$/);
+		if (inviteMatch && request.method === 'POST') {
+			return await handleAdminInviteMember(request, ctx, inviteMatch[1] as string);
+		}
+
+		// Admin members list route
+		const membersMatch = path.match(/^\/api\/admin\/teams\/([^/]+)\/members$/);
+		if (membersMatch && request.method === 'GET') {
+			return handleAdminListMembers(request, ctx, membersMatch[1] as string);
+		}
+
+		// Admin member removal route
+		const memberMatch = path.match(/^\/api\/admin\/teams\/([^/]+)\/members\/([^/]+)$/);
+		if (memberMatch && request.method === 'DELETE') {
+			return handleAdminRemoveMember(
+				request,
+				ctx,
+				memberMatch[1] as string,
+				memberMatch[2] as string,
+			);
+		}
+
+		// Admin role change route
+		const roleMatch = path.match(/^\/api\/admin\/teams\/([^/]+)\/members\/([^/]+)\/role$/);
+		if (roleMatch && request.method === 'PUT') {
+			return await handleAdminChangeRole(
+				request,
+				ctx,
+				roleMatch[1] as string,
+				roleMatch[2] as string,
+			);
+		}
+
 		// --- Health Check ---
 		if (path === '/health') {
 			return jsonResponse({ status: 'ok' });
@@ -126,6 +193,18 @@ async function handleRequest(request: Request, ctx: RequestContext) {
 			return jsonResponse({ error: error.message }, 401);
 		}
 		if (error instanceof OAuthError) {
+			return jsonResponse({ error: error.message }, 400);
+		}
+		if (error instanceof AuthorizationError) {
+			return jsonResponse({ error: error.message }, 403);
+		}
+		if (error instanceof NotFoundError) {
+			return jsonResponse({ error: error.message }, 404);
+		}
+		if (error instanceof ConflictError) {
+			return jsonResponse({ error: error.message }, 409);
+		}
+		if (error instanceof ValidationError) {
 			return jsonResponse({ error: error.message }, 400);
 		}
 
@@ -580,6 +659,155 @@ async function handleAuthorizePubkey(request: Request, ctx: RequestContext) {
 		},
 		201,
 	);
+}
+
+// --- Admin API Handlers (NIP-98 auth) ---
+
+/**
+ * Verify NIP-98 admin auth for a request.
+ * Returns the authenticated admin's pubkey.
+ */
+function requireAdminAuth(request: Request, ctx: RequestContext) {
+	const authHeader = request.headers.get('Authorization');
+	if (!authHeader) {
+		throw new AuthorizationError('Missing Authorization header');
+	}
+
+	const result = verifyAdminAuth(authHeader, request.url, request.method, ctx.config.adminPubkeys);
+
+	return result.pubkey;
+}
+
+/**
+ * POST /api/admin/teams — Create a new team.
+ * Body: { name: string, slug: string }
+ */
+async function handleAdminCreateTeam(request: Request, ctx: RequestContext) {
+	const adminPubkey = requireAdminAuth(request, ctx);
+
+	const body = (await request.json()) as {
+		name?: string;
+		slug?: string;
+	};
+
+	if (!body.name || !body.slug) {
+		return jsonResponse({ error: 'Missing name or slug' }, 400);
+	}
+
+	const team = ctx.teamService.createTeam(body.name, body.slug, adminPubkey);
+	return jsonResponse({ team }, 201);
+}
+
+/**
+ * GET /api/admin/teams — List all teams.
+ */
+function handleAdminListTeams(request: Request, ctx: RequestContext) {
+	requireAdminAuth(request, ctx);
+
+	const teams = ctx.teamService.listTeams();
+	return jsonResponse({ teams });
+}
+
+/**
+ * GET /api/admin/teams/:id — Get team details.
+ */
+function handleAdminGetTeam(request: Request, ctx: RequestContext, teamId: string) {
+	requireAdminAuth(request, ctx);
+
+	const team = ctx.teamService.getTeam(teamId);
+	if (!team) {
+		return jsonResponse({ error: 'Team not found' }, 404);
+	}
+
+	const members = ctx.teamService.listMembers(teamId);
+	return jsonResponse({ team, members });
+}
+
+/**
+ * DELETE /api/admin/teams/:id — Delete a team (owner only).
+ */
+function handleAdminDeleteTeam(request: Request, ctx: RequestContext, teamId: string) {
+	const adminPubkey = requireAdminAuth(request, ctx);
+
+	ctx.teamService.deleteTeam(teamId, adminPubkey);
+	return jsonResponse({ success: true });
+}
+
+/**
+ * POST /api/admin/teams/:id/invite — Invite a member.
+ * Body: { email?: string, pubkey?: string, role: InvitableRole }
+ */
+async function handleAdminInviteMember(request: Request, ctx: RequestContext, teamId: string) {
+	const adminPubkey = requireAdminAuth(request, ctx);
+
+	const body = (await request.json()) as {
+		email?: string;
+		pubkey?: string;
+		role?: string;
+	};
+
+	if (!body.role) {
+		return jsonResponse({ error: 'Missing role' }, 400);
+	}
+
+	const invitation = ctx.teamService.inviteMember(
+		teamId,
+		{
+			email: body.email,
+			pubkey: body.pubkey,
+			role: body.role as InvitableRole,
+		},
+		adminPubkey,
+	);
+
+	return jsonResponse({ invitation }, 201);
+}
+
+/**
+ * GET /api/admin/teams/:id/members — List team members.
+ */
+function handleAdminListMembers(request: Request, ctx: RequestContext, teamId: string) {
+	requireAdminAuth(request, ctx);
+
+	const members = ctx.teamService.listMembers(teamId);
+	return jsonResponse({ members });
+}
+
+/**
+ * DELETE /api/admin/teams/:id/members/:pubkey — Remove a member.
+ */
+function handleAdminRemoveMember(
+	request: Request,
+	ctx: RequestContext,
+	teamId: string,
+	memberPubkey: string,
+) {
+	const adminPubkey = requireAdminAuth(request, ctx);
+
+	ctx.teamService.removeMember(teamId, memberPubkey, adminPubkey);
+	return jsonResponse({ success: true });
+}
+
+/**
+ * PUT /api/admin/teams/:id/members/:pubkey/role — Change a member's role.
+ * Body: { role: MemberRole }
+ */
+async function handleAdminChangeRole(
+	request: Request,
+	ctx: RequestContext,
+	teamId: string,
+	memberPubkey: string,
+) {
+	const adminPubkey = requireAdminAuth(request, ctx);
+
+	const body = (await request.json()) as { role?: string };
+
+	if (!body.role) {
+		return jsonResponse({ error: 'Missing role' }, 400);
+	}
+
+	ctx.teamService.changeRole(teamId, memberPubkey, body.role as MemberRole, adminPubkey);
+	return jsonResponse({ success: true });
 }
 
 // --- Utility Functions ---
