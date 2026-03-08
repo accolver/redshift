@@ -61,7 +61,7 @@ export type { ActiveSession, CreateSessionOptions } from './session-manager.js';
 export { hasPermission, getPermissions, getRequiredPermission } from './rbac.js';
 
 // Errors
-export { EncryptionError, ConfigError, DatabaseError } from './errors.js';
+export { EncryptionError, ConfigError, DatabaseError, OAuthError, SessionError } from './errors.js';
 
 // NIP-46 Types
 export { NIP46_KIND } from './nip46-types.js';
@@ -76,6 +76,32 @@ export type {
 	Permission,
 } from './nip46-types.js';
 
+// Key Derivation
+export { deriveNostrKey } from './key-derivation.js';
+
+// OAuth
+export {
+	buildGoogleAuthUrl,
+	buildGithubAuthUrl,
+	exchangeGoogleCode,
+	exchangeGithubCode,
+	generateCodeVerifier,
+	computeCodeChallenge,
+	generateState,
+	consumePendingState,
+	clearPendingStates,
+	setOAuthFetch,
+	resetOAuthFetch,
+} from './oauth.js';
+export type { OAuthState } from './oauth.js';
+
+// Web Session Management
+export { WebSessionManager, SESSION_COOKIE_NAME } from './web-session.js';
+
+// HTTP Server
+export { createHttpServer } from './http-server.js';
+export type { HttpServerConfig } from './http-server.js';
+
 // Types
 export type {
 	Team,
@@ -88,4 +114,7 @@ export type {
 	EncryptedPayload,
 	MemberRole,
 	OAuthProvider,
+	WebSession,
+	OAuthUserInfo,
+	IdentityInfo,
 } from './types.js';

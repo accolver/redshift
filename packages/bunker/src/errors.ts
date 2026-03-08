@@ -25,3 +25,19 @@ export class DatabaseError extends Error {
 		this.name = 'DatabaseError';
 	}
 }
+
+/** Error thrown when OAuth authentication fails */
+export class OAuthError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'OAuthError';
+	}
+}
+
+/** Error thrown when session validation fails */
+export class SessionError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'SessionError';
+	}
+}

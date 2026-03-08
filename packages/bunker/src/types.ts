@@ -89,6 +89,32 @@ export interface BunkerConfig {
 	readonly publicUrl: string | null;
 }
 
+/** Web session record (OAuth HTTP sessions) */
+export interface WebSession {
+	readonly id: string;
+	readonly member_id: string;
+	readonly team_id: string;
+	readonly created_at: number;
+	readonly expires_at: number;
+}
+
+/** OAuth user info returned from provider */
+export interface OAuthUserInfo {
+	readonly provider: OAuthProvider;
+	readonly subject: string;
+	readonly email: string;
+}
+
+/** Identity with assignment info for the identity picker */
+export interface IdentityInfo {
+	readonly identityId: string;
+	readonly teamId: string;
+	readonly teamName: string;
+	readonly pubkey: string;
+	readonly label: string | null;
+	readonly role: MemberRole;
+}
+
 /** Encrypted payload format: base64(iv:ciphertext:authTag) */
 export interface EncryptedPayload {
 	readonly iv: Uint8Array;
