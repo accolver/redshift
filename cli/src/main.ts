@@ -10,12 +10,13 @@
  */
 
 import { type ParsedArgs, createCLI } from './lib/cli';
+import { getConfigDir } from './lib/config';
 import { VERSION } from './version';
 
 import { bunkerCommand } from './commands/bunker-cmd';
 // Import command handlers
 import { loginCommand, logoutCommand } from './commands/login';
-import { runCommand } from './commands/run';
+import { cleanFallbackFiles, runCommand } from './commands/run';
 import { type SecretsSubcommand, secretsCommand } from './commands/secrets';
 import { serveCommand } from './commands/serve';
 import { setupCommand } from './commands/setup';
@@ -95,6 +96,9 @@ async function executeCommand(parsed: ParsedArgs): Promise<void> {
 		case 'setup':
 			return handleSetupCommand(parsed);
 		case 'run':
+			if (parsed.subcommand === 'clean') {
+				return handleRunClean();
+			}
 			return handleRunCommand(parsed);
 		case 'secrets':
 			return handleSecretsCommand(parsed);
@@ -166,11 +170,35 @@ async function handleRunCommand(parsed: ParsedArgs): Promise<void> {
 		process.exit(1);
 	}
 
+	const mountFormat =
+		typeof parsed.flags['mount-format'] === 'string' ? parsed.flags['mount-format'] : undefined;
+
 	await runCommand({
 		command: commandToRun,
 		project: typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined,
 		environment: typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined,
+		mount: typeof parsed.flags.mount === 'string' ? parsed.flags.mount : undefined,
+		mountFormat: mountFormat === 'json' || mountFormat === 'env' ? mountFormat : undefined,
+		fallback: typeof parsed.flags.fallback === 'string' ? parsed.flags.fallback : undefined,
+		fallbackOnly: parsed.flags['fallback-only'] === true,
+		fallbackReadonly: parsed.flags['fallback-readonly'] === true,
+		noFallback: parsed.flags['no-fallback'] === true,
 	});
+}
+
+/**
+ * Handle the run clean subcommand - delete fallback files
+ */
+function handleRunClean(): void {
+	const deleted = cleanFallbackFiles(getConfigDir());
+	if (deleted.length === 0) {
+		console.log('No fallback files found.');
+	} else {
+		console.log(`Deleted ${deleted.length} fallback file(s):`);
+		for (const f of deleted) {
+			console.log(`  ${f}`);
+		}
+	}
 }
 
 /**
@@ -188,6 +216,8 @@ async function handleSecretsCommand(parsed: ParsedArgs): Promise<void> {
 		environment: typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined,
 		format: parsed.globalFlags.json ? 'json' : undefined,
 		team: typeof parsed.flags.team === 'string' ? parsed.flags.team : undefined,
+		onlyNames: parsed.flags['only-names'] === true,
+		plain: parsed.flags.plain === true,
 	};
 
 	// Handle positionals based on subcommand
@@ -217,7 +247,19 @@ async function handleSecretsCommand(parsed: ParsedArgs): Promise<void> {
 				secretsOpts.key = parsed.positionals[0];
 			}
 			break;
-		case 'download':
+		case 'download': {
+			const dlFormat = parsed.flags.format;
+			if (typeof dlFormat === 'string') {
+				secretsOpts.downloadFormat = dlFormat as Parameters<
+					typeof secretsCommand
+				>[0]['downloadFormat'];
+			}
+			secretsOpts.noFile = parsed.flags['no-file'] === true;
+			if (parsed.positionals[0]) {
+				secretsOpts.filepath = parsed.positionals[0];
+			}
+			break;
+		}
 		case 'upload':
 			if (parsed.positionals[0]) {
 				secretsOpts.key = parsed.positionals[0]; // filepath

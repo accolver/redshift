@@ -5,10 +5,13 @@
  */
 
 import { spawn } from 'node:child_process';
+import { existsSync, readdirSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import { getRelays, loadProjectConfig } from '../lib/config';
 import { SecretManager, injectSecrets } from '../lib/secret-manager';
 import { redactValue } from '../lib/validation';
 import { requireAuth } from './login';
+import { formatSecretsAsEnv, formatSecretsAsJson } from './secrets';
 
 export interface RunOptions {
 	/** Command and arguments to execute */
@@ -19,6 +22,18 @@ export interface RunOptions {
 	environment?: string;
 	/** Preserve color output */
 	preserveColor?: boolean;
+	/** Path to write secrets file (mount) */
+	mount?: string;
+	/** Format for the mounted secrets file (default: 'env') */
+	mountFormat?: 'env' | 'json';
+	/** Path to fallback file for offline mode */
+	fallback?: string;
+	/** Skip relay entirely, read secrets from fallback file */
+	fallbackOnly?: boolean;
+	/** Read fallback on relay failure, but never write to it */
+	fallbackReadonly?: boolean;
+	/** Disable all fallback behavior */
+	noFallback?: boolean;
 }
 
 /**
@@ -79,6 +94,75 @@ function parseCommandTokens(parts: string[]): string[] {
 }
 
 /**
+ * Write secrets to a file in the specified format.
+ */
+export async function writeMountFile(
+	secrets: Record<string, unknown>,
+	mountPath: string,
+	format: 'env' | 'json' = 'env',
+) {
+	const content = format === 'json' ? formatSecretsAsJson(secrets) : formatSecretsAsEnv(secrets);
+	await Bun.write(mountPath, content);
+}
+
+/**
+ * Remove a mount file, ignoring errors if it doesn't exist.
+ */
+export function cleanupMountFile(mountPath: string) {
+	try {
+		unlinkSync(mountPath);
+	} catch {
+		/* ignore if already deleted */
+	}
+}
+
+/**
+ * Write secrets to a fallback file as JSON.
+ */
+export async function writeFallbackFile(
+	secrets: Record<string, string>,
+	path: string,
+): Promise<void> {
+	await Bun.write(path, JSON.stringify(secrets));
+}
+
+/**
+ * Read and parse secrets from a fallback file.
+ * Throws if the file doesn't exist or contains invalid JSON.
+ */
+export async function readFallbackFile(path: string): Promise<Record<string, string>> {
+	if (!existsSync(path)) {
+		throw new Error(`Fallback file not found: ${path}`);
+	}
+	const file = Bun.file(path);
+	const content = await file.text();
+	const parsed: unknown = JSON.parse(content);
+	if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+		throw new Error(`Fallback file does not contain a JSON object: ${path}`);
+	}
+	return parsed as Record<string, string>;
+}
+
+/**
+ * Find and delete *.fallback.json files in the given directory.
+ * Returns the list of deleted filenames.
+ */
+export function cleanFallbackFiles(configDir: string): string[] {
+	if (!existsSync(configDir)) {
+		return [];
+	}
+	const entries = readdirSync(configDir);
+	const deleted: string[] = [];
+	for (const entry of entries) {
+		if (entry.endsWith('.fallback.json')) {
+			unlinkSync(join(configDir, entry));
+			deleted.push(entry);
+		}
+	}
+	return deleted;
+}
+
+/**
  * Execute a command with secrets injected into the environment.
  */
 export async function runCommand(options: RunOptions): Promise<void> {
@@ -101,19 +185,51 @@ export async function runCommand(options: RunOptions): Promise<void> {
 		process.exit(1);
 	}
 
-	// Require authentication
-	const auth = await requireAuth();
+	// Handle --fallback-only: skip relay entirely
+	if (options.fallbackOnly) {
+		if (!options.fallback) {
+			console.error('Error: --fallback-only requires --fallback <path>');
+			process.exit(1);
+		}
+		console.error(`Using fallback file: ${options.fallback}`);
+	}
 
-	// Connect to relays
-	const relays = projectConfig?.relays || (await getRelays());
-	const manager = new SecretManager(auth.signer);
-	manager.connect(relays);
+	let secrets: Record<string, string> | null = null;
+	let manager: SecretManager | undefined;
+
+	if (options.fallbackOnly && options.fallback) {
+		// Skip relay, read directly from fallback
+		secrets = await readFallbackFile(options.fallback);
+	} else {
+		// Require authentication and connect to relays
+		const auth = await requireAuth();
+		const relays = projectConfig?.relays || (await getRelays());
+		manager = new SecretManager(auth.signer);
+		manager.connect(relays);
+	}
 
 	try {
-		console.error(`Fetching secrets for ${projectId}/${environment}...`);
+		if (!options.fallbackOnly && manager) {
+			console.error(`Fetching secrets for ${projectId}/${environment}...`);
 
-		// Fetch secrets
-		const secrets = await manager.fetchSecrets(projectId, environment);
+			// Fetch secrets from relay, with fallback on failure
+			try {
+				secrets = await manager.fetchSecrets(projectId, environment);
+
+				// Write fallback on success (unless noFallback or fallbackReadonly)
+				if (secrets && options.fallback && !options.noFallback && !options.fallbackReadonly) {
+					await writeFallbackFile(secrets, options.fallback);
+				}
+			} catch (relayError) {
+				// Try fallback on relay failure
+				if (options.fallback && !options.noFallback) {
+					console.error(`Relay fetch failed, using fallback: ${options.fallback}`);
+					secrets = await readFallbackFile(options.fallback);
+				} else {
+					throw relayError;
+				}
+			}
+		}
 
 		if (!secrets) {
 			console.error(`Warning: No secrets found for ${projectId}/${environment}`);
@@ -122,6 +238,14 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
 		// Inject secrets into environment
 		const env = injectSecrets(process.env as Record<string, string>, secrets || {});
+
+		// Write secrets to mount file if requested
+		let mountFilePath: string | undefined;
+		if (options.mount) {
+			await writeMountFile(secrets || {}, options.mount, options.mountFormat || 'env');
+			mountFilePath = options.mount;
+			env.REDSHIFT_CLI_SECRETS_PATH = mountFilePath;
+		}
 
 		// Execute the command
 		// Parse command tokens, respecting quoted strings to avoid shell injection
@@ -135,30 +259,36 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
 		console.error(`Running: ${options.command.join(' ')}\n`);
 
-		const child = spawn(cmd, args, {
-			env,
-			stdio: 'inherit',
-			// Only use shell on Windows where it's needed for .cmd/.bat resolution
-			shell: process.platform === 'win32',
-		});
-
-		// Wrap the child process in a Promise so we can await its completion
-		// before disconnecting from relays. Without this, manager.disconnect()
-		// in the finally block would fire while the child is still running.
-		const exitCode = await new Promise<number>((resolve, reject) => {
-			child.on('error', (err) => {
-				reject(new Error(`Failed to start command: ${err.message}`));
+		try {
+			const child = spawn(cmd, args, {
+				env,
+				stdio: 'inherit',
+				// Only use shell on Windows where it's needed for .cmd/.bat resolution
+				shell: process.platform === 'win32',
 			});
 
-			child.on('close', (code) => {
-				resolve(code ?? 0);
-			});
-		});
+			// Wrap the child process in a Promise so we can await its completion
+			// before disconnecting from relays. Without this, manager.disconnect()
+			// in the finally block would fire while the child is still running.
+			const exitCode = await new Promise<number>((resolve, reject) => {
+				child.on('error', (err) => {
+					reject(new Error(`Failed to start command: ${err.message}`));
+				});
 
-		manager.disconnect();
-		process.exit(exitCode);
+				child.on('close', (code) => {
+					resolve(code ?? 0);
+				});
+			});
+
+			manager?.disconnect();
+			process.exit(exitCode);
+		} finally {
+			if (mountFilePath) {
+				cleanupMountFile(mountFilePath);
+			}
+		}
 	} catch (error) {
-		manager.disconnect();
+		manager?.disconnect();
 		if (error instanceof Error && error.message.startsWith('Failed to start command:')) {
 			console.error(error.message);
 		} else {

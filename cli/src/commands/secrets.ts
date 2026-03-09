@@ -18,6 +18,8 @@ import { requireAuth } from './login';
 
 export type SecretsSubcommand = 'list' | 'get' | 'set' | 'delete' | 'download' | 'upload';
 
+export type DownloadFormat = 'json' | 'env' | 'yaml' | 'docker' | 'env-no-quotes';
+
 export interface SecretsOptions {
 	subcommand: SecretsSubcommand;
 	/** Secret key for get/set/delete, or file path for upload */
@@ -34,6 +36,16 @@ export interface SecretsOptions {
 	format?: 'table' | 'json' | 'env';
 	/** Team slug or ID for team secret operations */
 	team?: string;
+	/** List only secret names, one per line (no values, no headers) */
+	onlyNames?: boolean;
+	/** Output just the plain value (with trailing newline) */
+	plain?: boolean;
+	/** Download output format (for `secrets download`) */
+	downloadFormat?: DownloadFormat;
+	/** When true, print to stdout instead of writing a file */
+	noFile?: boolean;
+	/** Custom file path for download output */
+	filepath?: string;
 }
 
 /**
@@ -178,6 +190,13 @@ async function listSecrets(
 		return;
 	}
 
+	if (options.onlyNames) {
+		for (const key of Object.keys(secrets)) {
+			console.log(key);
+		}
+		return;
+	}
+
 	const format = options.format || 'table';
 
 	switch (format) {
@@ -229,11 +248,18 @@ async function getSecret(
 	const value = secrets[key];
 
 	if (options.raw) {
-		// Output raw value (useful for piping)
+		// Output raw value without trailing newline (useful for piping)
 		if (typeof value === 'string') {
 			process.stdout.write(value);
 		} else {
 			process.stdout.write(JSON.stringify(value));
+		}
+	} else if (options.plain) {
+		// Output just the value with trailing newline (no key= prefix)
+		if (typeof value === 'string') {
+			console.log(value);
+		} else {
+			console.log(JSON.stringify(value));
 		}
 	} else {
 		console.log(`${key}=${formatSecretValue(value, true)}`);
@@ -289,14 +315,107 @@ async function deleteSecret(
 	console.log(`✓ Deleted ${key} from ${projectId}/${environment}`);
 }
 
+// ---------------------------------------------------------------------------
+// Download format helpers (exported for testing)
+// ---------------------------------------------------------------------------
+
+/** Characters that require quoting in YAML values */
+const YAML_SPECIAL_CHARS = /[:#{}[\],&*?|<>=!%@\-\n"]/;
+
+function toStringValue(value: unknown): string {
+	return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
 /**
- * Download secrets as .env file content.
+ * Format secrets as pretty-printed JSON.
+ */
+export function formatSecretsAsJson(secrets: Record<string, unknown>) {
+	return JSON.stringify(secrets, null, 2);
+}
+
+/**
+ * Format secrets as KEY="escaped_value" lines (.env format).
+ * Escapes backslashes, double quotes, and newlines.
+ */
+export function formatSecretsAsEnv(secrets: Record<string, unknown>) {
+	return Object.entries(secrets)
+		.map(([key, value]) => {
+			const str = toStringValue(value);
+			const escaped = str.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+			return `${key}="${escaped}"`;
+		})
+		.join('\n');
+}
+
+/**
+ * Format secrets as YAML KEY: value lines.
+ * Quotes values that contain special YAML characters, newlines,
+ * or leading/trailing spaces. Empty strings are always quoted.
+ */
+export function formatSecretsAsYaml(secrets: Record<string, unknown>) {
+	return Object.entries(secrets)
+		.map(([key, value]) => {
+			const str = toStringValue(value);
+			if (str === '' || YAML_SPECIAL_CHARS.test(str) || str !== str.trim()) {
+				// Escape internal double quotes and newlines, then wrap in quotes
+				const escaped = str.replace(/"/g, '\\"').replace(/\n/g, '\\n');
+				return `${key}: "${escaped}"`;
+			}
+			return `${key}: ${str}`;
+		})
+		.join('\n');
+}
+
+/**
+ * Format secrets as docker run --env lines.
+ */
+export function formatSecretsAsDocker(secrets: Record<string, unknown>) {
+	return Object.entries(secrets)
+		.map(([key, value]) => `--env ${key}=${toStringValue(value)}`)
+		.join('\n');
+}
+
+/**
+ * Format secrets as KEY=value lines with no quoting at all.
+ */
+export function formatSecretsAsEnvNoQuotes(secrets: Record<string, unknown>) {
+	return Object.entries(secrets)
+		.map(([key, value]) => `${key}=${toStringValue(value)}`)
+		.join('\n');
+}
+
+/**
+ * Map a download format to its default file extension.
+ */
+export function getDownloadExtension(format: DownloadFormat) {
+	const extensions: Record<DownloadFormat, string> = {
+		json: 'json',
+		env: 'env',
+		yaml: 'yaml',
+		docker: 'txt',
+		'env-no-quotes': 'env',
+	};
+	return extensions[format];
+}
+
+/** Map a download format to its formatter function. */
+const FORMAT_FUNCTIONS: Record<DownloadFormat, (secrets: Record<string, unknown>) => string> = {
+	json: formatSecretsAsJson,
+	env: formatSecretsAsEnv,
+	yaml: formatSecretsAsYaml,
+	docker: formatSecretsAsDocker,
+	'env-no-quotes': formatSecretsAsEnvNoQuotes,
+};
+
+/**
+ * Download secrets in the requested format.
+ * Writes to a file by default, or prints to stdout when noFile is true.
  */
 async function downloadSecrets(
 	manager: SecretManager,
 	projectId: string,
 	environment: string,
-	_options: SecretsOptions,
+	options: SecretsOptions,
 ): Promise<void> {
 	const secrets = await manager.fetchSecrets(projectId, environment);
 
@@ -305,11 +424,19 @@ async function downloadSecrets(
 		process.exit(1);
 	}
 
-	// Output in .env format
-	for (const [key, value] of Object.entries(secrets)) {
-		const strValue = typeof value === 'string' ? value : JSON.stringify(value);
-		const escaped = strValue.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-		console.log(`${key}="${escaped}"`);
+	const format: DownloadFormat = options.downloadFormat || 'env';
+	const formatted = FORMAT_FUNCTIONS[format](secrets);
+
+	if (options.noFile) {
+		// Print to stdout
+		console.log(formatted);
+	} else {
+		// Write to file
+		const ext = getDownloadExtension(format);
+		const filename = options.filepath || `secrets.${ext}`;
+		await Bun.write(filename, `${formatted}\n`);
+		const count = Object.keys(secrets).length;
+		console.error(`✓ Downloaded ${count} secrets to ${filename}`);
 	}
 }
 
