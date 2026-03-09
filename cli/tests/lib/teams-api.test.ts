@@ -10,7 +10,14 @@ import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { verifyEvent } from 'nostr-tools/pure';
 import { NsecSigner } from '../../src/lib/signer';
 import { TeamsApiClient } from '../../src/lib/teams-api';
-import type { Invitation, KeyRotationResult, Member, Team } from '../../src/lib/teams-api';
+import type {
+	AuditLogResult,
+	AuditSummaryResult,
+	Invitation,
+	KeyRotationResult,
+	Member,
+	Team,
+} from '../../src/lib/teams-api';
 
 // Create a test signer
 const testSecretKey = generateSecretKey();
@@ -21,6 +28,7 @@ const testSigner = new NsecSigner(testSecretKey);
 let mockServer: ReturnType<typeof Bun.serve> | null = null;
 let lastRequest: {
 	url: string;
+	search: string;
 	method: string;
 	headers: Record<string, string>;
 	body: unknown;
@@ -51,6 +59,7 @@ beforeAll(() => {
 
 			lastRequest = {
 				url: url.pathname,
+				search: url.search,
 				method: req.method,
 				headers,
 				body,
@@ -323,6 +332,105 @@ describe('TeamsApiClient', () => {
 			expect(lastRequest?.method).toBe('POST');
 			expect(rotateResult.oldPubkey).toBe('old-pub-key');
 			expect(rotateResult.newPubkey).toBe('new-pub-key');
+		});
+	});
+
+	describe('queryAuditLog', () => {
+		it('sends GET to /api/admin/teams/:id/audit', async () => {
+			const response: AuditLogResult = {
+				events: [
+					{
+						id: 'evt-1',
+						team_id: 'team-1',
+						actor_pubkey: 'a1b2c3d4e5f6a1b2c3d4e5f6',
+						action: 'member_invited',
+						target: 'user@example.com',
+						metadata: null,
+						created_at: 1700000000,
+					},
+				],
+				total: 1,
+				hasMore: false,
+			};
+			mockResponse = { status: 200, body: response };
+
+			const client = new TeamsApiClient(TEST_URL, testSigner);
+			const result = await client.queryAuditLog('team-1');
+
+			expect(lastRequest?.url).toBe('/api/admin/teams/team-1/audit');
+			expect(lastRequest?.search).toBe('');
+			expect(lastRequest?.method).toBe('GET');
+			expect(result.events).toHaveLength(1);
+			expect(result.total).toBe(1);
+			expect(result.hasMore).toBe(false);
+		});
+
+		it('sends query params when options are provided', async () => {
+			const response: AuditLogResult = {
+				events: [],
+				total: 0,
+				hasMore: false,
+			};
+			mockResponse = { status: 200, body: response };
+
+			const client = new TeamsApiClient(TEST_URL, testSigner);
+			await client.queryAuditLog('team-1', {
+				actor: 'abc123',
+				action: 'member_removed',
+				since: 1700000000,
+				until: 1700100000,
+				limit: 10,
+				offset: 20,
+			});
+
+			expect(lastRequest?.url).toBe('/api/admin/teams/team-1/audit');
+			expect(lastRequest?.search).toContain('actor=abc123');
+			expect(lastRequest?.search).toContain('action=member_removed');
+			expect(lastRequest?.search).toContain('since=1700000000');
+			expect(lastRequest?.search).toContain('until=1700100000');
+			expect(lastRequest?.search).toContain('limit=10');
+			expect(lastRequest?.search).toContain('offset=20');
+		});
+
+		it('omits undefined options from query params', async () => {
+			const response: AuditLogResult = {
+				events: [],
+				total: 0,
+				hasMore: false,
+			};
+			mockResponse = { status: 200, body: response };
+
+			const client = new TeamsApiClient(TEST_URL, testSigner);
+			await client.queryAuditLog('team-1', { action: 'team_created' });
+
+			expect(lastRequest?.search).toContain('action=team_created');
+			expect(lastRequest?.search).not.toContain('actor=');
+			expect(lastRequest?.search).not.toContain('since=');
+			expect(lastRequest?.search).not.toContain('until=');
+			expect(lastRequest?.search).not.toContain('limit=');
+			expect(lastRequest?.search).not.toContain('offset=');
+		});
+	});
+
+	describe('getAuditSummary', () => {
+		it('sends GET to /api/admin/teams/:id/audit/summary', async () => {
+			const response: AuditSummaryResult = {
+				counts: {
+					team_created: 1,
+					member_invited: 5,
+					nip46_sign_event: 42,
+				},
+			};
+			mockResponse = { status: 200, body: response };
+
+			const client = new TeamsApiClient(TEST_URL, testSigner);
+			const result = await client.getAuditSummary('team-1');
+
+			expect(lastRequest?.url).toBe('/api/admin/teams/team-1/audit/summary');
+			expect(lastRequest?.method).toBe('GET');
+			expect(result.counts.team_created).toBe(1);
+			expect(result.counts.member_invited).toBe(5);
+			expect(result.counts.nip46_sign_event).toBe(42);
 		});
 	});
 

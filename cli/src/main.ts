@@ -256,6 +256,18 @@ async function handleTeamsCommand(parsed: ParsedArgs): Promise<void> {
 		pubkey: typeof parsed.flags.pubkey === 'string' ? parsed.flags.pubkey : undefined,
 		role: typeof parsed.flags.role === 'string' ? parsed.flags.role : undefined,
 		json: parsed.globalFlags.json,
+		actor: typeof parsed.flags.actor === 'string' ? parsed.flags.actor : undefined,
+		action: typeof parsed.flags.action === 'string' ? parsed.flags.action : undefined,
+		since:
+			typeof parsed.flags.since === 'string' ? Number.parseInt(parsed.flags.since, 10) : undefined,
+		until:
+			typeof parsed.flags.until === 'string' ? Number.parseInt(parsed.flags.until, 10) : undefined,
+		limit:
+			typeof parsed.flags.limit === 'string' ? Number.parseInt(parsed.flags.limit, 10) : undefined,
+		offset:
+			typeof parsed.flags.offset === 'string'
+				? Number.parseInt(parsed.flags.offset, 10)
+				: undefined,
 	});
 }
 

@@ -1109,6 +1109,9 @@ function createTeamsCommand(): CommandDef {
 			'redshift teams invite <team-id> --email user@example.com --role developer',
 			'redshift teams remove <team-id> <pubkey>',
 			'redshift teams rotate-key <team-id>',
+			'redshift teams audit <team-id>',
+			'redshift teams audit <team-id> --action member_invited --limit 10',
+			'redshift teams audit-summary <team-id>',
 		],
 		subcommands: {
 			create: {
@@ -1202,6 +1205,67 @@ function createTeamsCommand(): CommandDef {
 				name: 'rotate-key',
 				description: "Rotate a team's signing key",
 				examples: ['redshift teams rotate-key <team-id>'],
+				positionals: [
+					{
+						name: 'team-id',
+						description: 'Team ID or slug',
+						required: true,
+					},
+				],
+			},
+			audit: {
+				name: 'audit',
+				description: 'View the audit log for a team',
+				examples: [
+					'redshift teams audit <team-id>',
+					'redshift teams audit <team-id> --action member_invited',
+					'redshift teams audit <team-id> --actor <pubkey> --limit 10',
+				],
+				positionals: [
+					{
+						name: 'team-id',
+						description: 'Team ID or slug',
+						required: true,
+					},
+				],
+				flags: {
+					actor: {
+						type: 'string',
+						description: 'filter by actor pubkey',
+						placeholder: 'pubkey',
+					},
+					action: {
+						type: 'string',
+						description: 'filter by action type (e.g. member_removed, nip46_sign_event)',
+						placeholder: 'action',
+					},
+					since: {
+						type: 'string',
+						description: 'only events after this Unix timestamp',
+						placeholder: 'timestamp',
+					},
+					until: {
+						type: 'string',
+						description: 'only events before this Unix timestamp',
+						placeholder: 'timestamp',
+					},
+					limit: {
+						type: 'string',
+						description: 'max results',
+						default: '50',
+						placeholder: 'n',
+					},
+					offset: {
+						type: 'string',
+						description: 'pagination offset',
+						placeholder: 'n',
+					},
+				},
+			},
+			'audit-summary': {
+				name: 'audit-summary',
+				description: 'View audit event counts by action type for a team',
+				examples: ['redshift teams audit-summary <team-id>'],
 				positionals: [
 					{
 						name: 'team-id',

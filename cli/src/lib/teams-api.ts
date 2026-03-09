@@ -57,6 +57,47 @@ export interface KeyRotationResult {
 }
 
 /**
+ * Audit event from the team audit log
+ */
+export interface AuditEvent {
+	readonly id: string;
+	readonly team_id: string;
+	readonly actor_pubkey: string;
+	readonly action: string;
+	readonly target: string | null;
+	readonly metadata: string | null;
+	readonly created_at: number;
+}
+
+/**
+ * Options for querying the audit log
+ */
+export interface AuditLogOptions {
+	actor?: string | undefined;
+	action?: string | undefined;
+	since?: number | undefined;
+	until?: number | undefined;
+	limit?: number | undefined;
+	offset?: number | undefined;
+}
+
+/**
+ * Audit log query result
+ */
+export interface AuditLogResult {
+	events: AuditEvent[];
+	total: number;
+	hasMore: boolean;
+}
+
+/**
+ * Audit summary result
+ */
+export interface AuditSummaryResult {
+	counts: Record<string, number>;
+}
+
+/**
  * Invite member parameters
  */
 export interface InviteMemberParams {
@@ -198,5 +239,29 @@ export class TeamsApiClient {
 	 */
 	async rotateKey(teamId: string) {
 		return this.request<KeyRotationResult>(`/api/admin/teams/${teamId}/rotate-key`, 'POST');
+	}
+
+	/**
+	 * Query the audit log for a team.
+	 */
+	async queryAuditLog(teamId: string, options?: AuditLogOptions) {
+		const params = new URLSearchParams();
+		if (options?.actor) params.set('actor', options.actor);
+		if (options?.action) params.set('action', options.action);
+		if (options?.since !== undefined) params.set('since', String(options.since));
+		if (options?.until !== undefined) params.set('until', String(options.until));
+		if (options?.limit !== undefined) params.set('limit', String(options.limit));
+		if (options?.offset !== undefined) params.set('offset', String(options.offset));
+
+		const query = params.toString();
+		const path = `/api/admin/teams/${teamId}/audit${query ? `?${query}` : ''}`;
+		return this.request<AuditLogResult>(path, 'GET');
+	}
+
+	/**
+	 * Get audit summary (event counts by action) for a team.
+	 */
+	async getAuditSummary(teamId: string) {
+		return this.request<AuditSummaryResult>(`/api/admin/teams/${teamId}/audit/summary`, 'GET');
 	}
 }

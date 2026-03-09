@@ -69,6 +69,13 @@ export { TeamSecretService } from './team-secret-service.js';
 // Team Metadata
 export { createTeamMetadataEvent } from './team-metadata.js';
 
+// Audit Service
+export { AuditService } from './audit-service.js';
+export type { AuditQueryOptions, AuditQueryResult } from './audit-service.js';
+
+// Audit Event Builder
+export { createAuditEventTemplate, AUDIT_EVENT_KIND } from './audit-event-builder.js';
+
 // NIP-98 Admin Auth
 export { verifyNip98Auth, verifyAdminAuth, isAdminPubkey } from './nip98.js';
 export type { Nip98AuthResult } from './nip98.js';

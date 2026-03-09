@@ -167,6 +167,131 @@ describe('Teams Command', () => {
 		});
 	});
 
+	describe('audit subcommand CLI parsing', () => {
+		const cli = createCLI('1.0.0');
+
+		it('parses teams audit with team-id positional', () => {
+			const result = cli.parse(['teams', 'audit', 'team-123']);
+			expect(result.command).toBe('teams');
+			expect(result.subcommand).toBe('audit');
+			expect(result.positionals).toContain('team-123');
+		});
+
+		it('parses teams audit with --actor flag', () => {
+			const result = cli.parse(['teams', 'audit', 'team-123', '--actor', 'abc123def456']);
+			expect(result.command).toBe('teams');
+			expect(result.subcommand).toBe('audit');
+			expect(result.flags.actor).toBe('abc123def456');
+		});
+
+		it('parses teams audit with --action flag', () => {
+			const result = cli.parse(['teams', 'audit', 'team-123', '--action', 'member_invited']);
+			expect(result.command).toBe('teams');
+			expect(result.subcommand).toBe('audit');
+			expect(result.flags.action).toBe('member_invited');
+		});
+
+		it('parses teams audit with --since and --until flags', () => {
+			const result = cli.parse([
+				'teams',
+				'audit',
+				'team-123',
+				'--since',
+				'1700000000',
+				'--until',
+				'1700100000',
+			]);
+			expect(result.command).toBe('teams');
+			expect(result.subcommand).toBe('audit');
+			expect(result.flags.since).toBe('1700000000');
+			expect(result.flags.until).toBe('1700100000');
+		});
+
+		it('parses teams audit with --limit and --offset flags', () => {
+			const result = cli.parse(['teams', 'audit', 'team-123', '--limit', '10', '--offset', '20']);
+			expect(result.command).toBe('teams');
+			expect(result.subcommand).toBe('audit');
+			expect(result.flags.limit).toBe('10');
+			expect(result.flags.offset).toBe('20');
+		});
+
+		it('parses teams audit with all flags combined', () => {
+			const result = cli.parse([
+				'teams',
+				'audit',
+				'team-123',
+				'--actor',
+				'abc123',
+				'--action',
+				'nip46_sign_event',
+				'--since',
+				'1700000000',
+				'--until',
+				'1700100000',
+				'--limit',
+				'25',
+				'--offset',
+				'50',
+			]);
+			expect(result.command).toBe('teams');
+			expect(result.subcommand).toBe('audit');
+			expect(result.positionals).toContain('team-123');
+			expect(result.flags.actor).toBe('abc123');
+			expect(result.flags.action).toBe('nip46_sign_event');
+			expect(result.flags.since).toBe('1700000000');
+			expect(result.flags.until).toBe('1700100000');
+			expect(result.flags.limit).toBe('25');
+			expect(result.flags.offset).toBe('50');
+		});
+
+		it('parses teams audit with --json flag', () => {
+			const result = cli.parse(['teams', 'audit', 'team-123', '--json']);
+			expect(result.command).toBe('teams');
+			expect(result.subcommand).toBe('audit');
+			expect(result.globalFlags.json).toBe(true);
+		});
+
+		it('parses teams audit-summary with team-id positional', () => {
+			const result = cli.parse(['teams', 'audit-summary', 'team-123']);
+			expect(result.command).toBe('teams');
+			expect(result.subcommand).toBe('audit-summary');
+			expect(result.positionals).toContain('team-123');
+		});
+
+		it('parses teams audit-summary with --json flag', () => {
+			const result = cli.parse(['teams', 'audit-summary', 'team-123', '--json']);
+			expect(result.command).toBe('teams');
+			expect(result.subcommand).toBe('audit-summary');
+			expect(result.globalFlags.json).toBe(true);
+		});
+	});
+
+	describe('audit help generation', () => {
+		const cli = createCLI('1.0.0');
+
+		it('includes audit subcommands in teams help', () => {
+			const help = cli.generateCommandHelp('teams');
+			expect(help).toContain('audit');
+			expect(help).toContain('audit-summary');
+		});
+
+		it('generates help for teams audit subcommand', () => {
+			const help = cli.generateCommandHelp('teams', 'audit');
+			expect(help).toContain('View the audit log');
+			expect(help).toContain('--actor');
+			expect(help).toContain('--action');
+			expect(help).toContain('--since');
+			expect(help).toContain('--until');
+			expect(help).toContain('--limit');
+			expect(help).toContain('--offset');
+		});
+
+		it('generates help for teams audit-summary subcommand', () => {
+			const help = cli.generateCommandHelp('teams', 'audit-summary');
+			expect(help).toContain('audit event counts');
+		});
+	});
+
 	describe('secrets --team flag', () => {
 		const cli = createCLI('1.0.0');
 

@@ -6,11 +6,19 @@
  */
 
 import { loadConfig } from '../lib/config';
-import type { Invitation, KeyRotationResult, Member, Team } from '../lib/teams-api';
+import type { AuditEvent, Invitation, KeyRotationResult, Member, Team } from '../lib/teams-api';
 import { TeamsApiClient } from '../lib/teams-api';
 import { requireAuth } from './login';
 
-export type TeamsSubcommand = 'create' | 'list' | 'members' | 'invite' | 'remove' | 'rotate-key';
+export type TeamsSubcommand =
+	| 'create'
+	| 'list'
+	| 'members'
+	| 'invite'
+	| 'remove'
+	| 'rotate-key'
+	| 'audit'
+	| 'audit-summary';
 
 export interface TeamsOptions {
 	subcommand: TeamsSubcommand;
@@ -26,6 +34,18 @@ export interface TeamsOptions {
 	role?: string | undefined;
 	/** JSON output */
 	json?: boolean | undefined;
+	/** Audit: filter by actor pubkey */
+	actor?: string | undefined;
+	/** Audit: filter by action type */
+	action?: string | undefined;
+	/** Audit: only events after this Unix timestamp */
+	since?: number | undefined;
+	/** Audit: only events before this Unix timestamp */
+	until?: number | undefined;
+	/** Audit: max results */
+	limit?: number | undefined;
+	/** Audit: pagination offset */
+	offset?: number | undefined;
 }
 
 /**
@@ -77,9 +97,17 @@ export async function teamsCommand(options: TeamsOptions) {
 			case 'rotate-key':
 				await rotateKey(client, options);
 				break;
+			case 'audit':
+				await queryAuditLog(client, options);
+				break;
+			case 'audit-summary':
+				await getAuditSummary(client, options);
+				break;
 			default:
 				console.error(`Unknown subcommand: ${options.subcommand}`);
-				console.error('Available: create, list, members, invite, remove, rotate-key');
+				console.error(
+					'Available: create, list, members, invite, remove, rotate-key, audit, audit-summary',
+				);
 				process.exit(1);
 		}
 	} catch (error) {
@@ -246,6 +274,72 @@ async function rotateKey(client: TeamsApiClient, options: TeamsOptions) {
 	}
 }
 
+/**
+ * Query the audit log for a team.
+ */
+async function queryAuditLog(client: TeamsApiClient, options: TeamsOptions) {
+	const teamId = options.positionals[0];
+	if (!teamId) {
+		console.error('Error: Team ID is required.');
+		console.error('Usage: redshift teams audit <team-id>');
+		process.exit(1);
+	}
+
+	const result = await client.queryAuditLog(teamId, {
+		actor: options.actor,
+		action: options.action,
+		since: options.since,
+		until: options.until,
+		limit: options.limit,
+		offset: options.offset,
+	});
+
+	if (options.json) {
+		console.log(JSON.stringify(result, null, 2));
+		return;
+	}
+
+	if (result.events.length === 0) {
+		console.log('No audit events found.');
+		return;
+	}
+
+	printAuditTable(result.events);
+
+	if (result.hasMore) {
+		console.log(
+			`\nShowing ${result.events.length} of ${result.total} events. Use --offset to paginate.`,
+		);
+	}
+}
+
+/**
+ * Get audit summary for a team.
+ */
+async function getAuditSummary(client: TeamsApiClient, options: TeamsOptions) {
+	const teamId = options.positionals[0];
+	if (!teamId) {
+		console.error('Error: Team ID is required.');
+		console.error('Usage: redshift teams audit-summary <team-id>');
+		process.exit(1);
+	}
+
+	const result = await client.getAuditSummary(teamId);
+
+	if (options.json) {
+		console.log(JSON.stringify(result, null, 2));
+		return;
+	}
+
+	const entries = Object.entries(result.counts);
+	if (entries.length === 0) {
+		console.log('No audit events found.');
+		return;
+	}
+
+	printAuditSummaryTable(entries);
+}
+
 // ============================================================================
 // Output Formatting
 // ============================================================================
@@ -349,4 +443,64 @@ function printKeyRotationResult(result: KeyRotationResult) {
 	console.log('✓ Team key rotated successfully!');
 	console.log(`  Old pubkey: ${truncatePubkey(result.oldPubkey)}`);
 	console.log(`  New pubkey: ${truncatePubkey(result.newPubkey)}`);
+}
+
+/**
+ * Format a Unix timestamp for audit table display.
+ */
+function formatTimestamp(unixTimestamp: number) {
+	return new Date(unixTimestamp * 1000).toISOString().replace('T', ' ').substring(0, 19);
+}
+
+/**
+ * Truncate a pubkey for audit display (first 12 chars + ..).
+ */
+function truncateAuditPubkey(pubkey: string) {
+	if (pubkey.length <= 14) {
+		return pubkey;
+	}
+	return `${pubkey.substring(0, 12)}..`;
+}
+
+/**
+ * Print audit events in table format.
+ */
+function printAuditTable(events: AuditEvent[]) {
+	const timeWidth = 19;
+	const actorWidth = 14;
+	const actionWidth = Math.max(6, ...events.map((e) => e.action.length));
+	const targetWidth = Math.max(6, ...events.map((e) => (e.target || '-').length));
+
+	// Header
+	console.log(
+		`${'TIME'.padEnd(timeWidth)}  ${'ACTOR'.padEnd(actorWidth)}  ${'ACTION'.padEnd(actionWidth)}  TARGET`,
+	);
+	console.log(
+		`${'-'.repeat(timeWidth)}  ${'-'.repeat(actorWidth)}  ${'-'.repeat(actionWidth)}  ${'-'.repeat(targetWidth)}`,
+	);
+
+	// Rows
+	for (const event of events) {
+		console.log(
+			`${formatTimestamp(event.created_at).padEnd(timeWidth)}  ${truncateAuditPubkey(event.actor_pubkey).padEnd(actorWidth)}  ${event.action.padEnd(actionWidth)}  ${event.target || '-'}`,
+		);
+	}
+}
+
+/**
+ * Print audit summary in table format.
+ */
+function printAuditSummaryTable(entries: [string, number][]) {
+	const actionWidth = Math.max(6, ...entries.map(([action]) => action.length));
+	const countWidth = 5;
+
+	// Header
+	console.log(`${'ACTION'.padEnd(actionWidth)}  COUNT`);
+	console.log(`${'-'.repeat(actionWidth)}  ${'-'.repeat(countWidth)}`);
+
+	// Rows (sorted by count descending)
+	const sorted = [...entries].sort((a, b) => b[1] - a[1]);
+	for (const [action, count] of sorted) {
+		console.log(`${action.padEnd(actionWidth)}  ${count}`);
+	}
 }

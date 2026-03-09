@@ -19,6 +19,7 @@
  */
 
 import type { Database } from 'bun:sqlite';
+import { AuditService } from './audit-service.js';
 import { encrypt } from './encryption.js';
 import {
 	AuthorizationError,
@@ -62,6 +63,7 @@ export function createHttpServer(options: HttpServerConfig) {
 
 	const teamService = new TeamService(db, config.masterKey);
 	const teamSecretService = new TeamSecretService(db, config.masterKey, teamService);
+	const auditService = new AuditService(db);
 
 	const server = Bun.serve({
 		hostname: config.host,
@@ -73,6 +75,7 @@ export function createHttpServer(options: HttpServerConfig) {
 				sessionManager,
 				teamService,
 				teamSecretService,
+				auditService,
 				isSecure,
 				publicUrl,
 			});
@@ -89,6 +92,7 @@ interface RequestContext {
 	readonly sessionManager: WebSessionManager;
 	readonly teamService: TeamService;
 	readonly teamSecretService: TeamSecretService;
+	readonly auditService: AuditService;
 	readonly isSecure: boolean;
 	readonly publicUrl: string;
 }
@@ -208,6 +212,22 @@ async function handleRequest(request: Request, ctx: RequestContext) {
 				rotatedKeyDeleteMatch[1] as string,
 				rotatedKeyDeleteMatch[2] as string,
 			);
+		}
+
+		// Admin audit routes
+		const auditPruneMatch = path.match(/^\/api\/admin\/teams\/([^/]+)\/audit\/prune$/);
+		if (auditPruneMatch && request.method === 'POST') {
+			return await handleAdminAuditPrune(request, ctx, auditPruneMatch[1] as string);
+		}
+
+		const auditSummaryMatch = path.match(/^\/api\/admin\/teams\/([^/]+)\/audit\/summary$/);
+		if (auditSummaryMatch && request.method === 'GET') {
+			return handleAdminAuditSummary(request, ctx, auditSummaryMatch[1] as string);
+		}
+
+		const auditMatch = path.match(/^\/api\/admin\/teams\/([^/]+)\/audit$/);
+		if (auditMatch && request.method === 'GET') {
+			return handleAdminAuditList(request, ctx, auditMatch[1] as string);
 		}
 
 		// --- Health Check ---
@@ -873,6 +893,75 @@ function handleAdminDeleteRotatedKey(
 
 	ctx.teamSecretService.deleteRotatedKey(teamId, oldPubkey);
 	return jsonResponse({ success: true });
+}
+
+// --- Admin Audit Handlers ---
+
+/**
+ * GET /api/admin/teams/:id/audit — Query audit events for a team.
+ * Query params: actor, action, since, until, limit, offset
+ */
+function handleAdminAuditList(request: Request, ctx: RequestContext, teamId: string) {
+	requireAdminAuth(request, ctx);
+
+	const url = new URL(request.url);
+	const actor = url.searchParams.get('actor') ?? undefined;
+	const action = url.searchParams.get('action') ?? undefined;
+	const sinceParam = url.searchParams.get('since');
+	const untilParam = url.searchParams.get('until');
+	const limitParam = url.searchParams.get('limit');
+	const offsetParam = url.searchParams.get('offset');
+
+	const result = ctx.auditService.queryEvents({
+		teamId,
+		actorPubkey: actor,
+		action,
+		since: sinceParam ? Number(sinceParam) : undefined,
+		until: untilParam ? Number(untilParam) : undefined,
+		limit: limitParam ? Number(limitParam) : undefined,
+		offset: offsetParam ? Number(offsetParam) : undefined,
+	});
+
+	return jsonResponse({
+		events: result.events,
+		total: result.total,
+		hasMore: result.hasMore,
+	});
+}
+
+/**
+ * POST /api/admin/teams/:id/audit/prune — Prune old audit events.
+ * Body: { retentionDays?: number }
+ */
+async function handleAdminAuditPrune(request: Request, ctx: RequestContext, teamId: string) {
+	requireAdminAuth(request, ctx);
+
+	// Verify team exists
+	const team = ctx.teamService.getTeam(teamId);
+	if (!team) {
+		throw new NotFoundError(`Team "${teamId}" not found`);
+	}
+
+	let retentionDays: number | undefined;
+	try {
+		const body = (await request.json()) as { retentionDays?: number };
+		retentionDays = body.retentionDays;
+	} catch {
+		// Empty body is fine, use defaults
+	}
+
+	const pruned = ctx.auditService.pruneOldEvents(retentionDays);
+	return jsonResponse({ pruned });
+}
+
+/**
+ * GET /api/admin/teams/:id/audit/summary — Get audit event counts by action.
+ */
+function handleAdminAuditSummary(request: Request, ctx: RequestContext, teamId: string) {
+	requireAdminAuth(request, ctx);
+
+	const counts = ctx.auditService.getEventCounts(teamId);
+	return jsonResponse({ counts });
 }
 
 // --- Utility Functions ---
