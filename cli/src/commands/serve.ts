@@ -18,7 +18,7 @@ export interface ServeOptions {
  *   allows inline styles (needed for embedded UI), and WebSocket connections
  *   for relay communication
  */
-function addSecurityHeaders(headers: Headers, isApiRoute: boolean): void {
+export function addSecurityHeaders(headers: Headers, isApiRoute: boolean): void {
 	headers.set('X-Frame-Options', 'DENY');
 	headers.set('X-Content-Type-Options', 'nosniff');
 	headers.set('X-XSS-Protection', '1; mode=block');
@@ -39,7 +39,7 @@ function addSecurityHeaders(headers: Headers, isApiRoute: boolean): void {
  * Blocks requests from external origins to prevent CSRF and data exfiltration.
  * Only allows requests from 127.0.0.1 and localhost origins.
  */
-function isAllowedOrigin(req: Request, host: string, port: number): boolean {
+export function isAllowedOrigin(req: Request, host: string, port: number): boolean {
 	const origin = req.headers.get('origin');
 	const path = new URL(req.url).pathname;
 

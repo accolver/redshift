@@ -454,7 +454,7 @@ export function parseEnvValue(input: string): string {
 /**
  * Format a secret value for display.
  */
-function formatSecretValue(value: unknown, showRaw: boolean): string {
+export function formatSecretValue(value: unknown, showRaw: boolean): string {
 	if (typeof value === 'string') {
 		if (showRaw) {
 			return value.length > 50 ? `${value.substring(0, 50)}...` : value;
