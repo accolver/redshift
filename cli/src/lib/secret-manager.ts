@@ -98,13 +98,15 @@ export class SecretManager {
 	}
 
 	/**
-	 * Disconnect from relays
+	 * Disconnect from relays and zero private key memory.
+	 * This instance is terminal after disconnect — the key cannot be restored.
 	 */
 	disconnect(): void {
 		if (this.pool) {
 			this.pool.close();
 			this.pool = null;
 		}
+		this.privateKey.fill(0);
 	}
 
 	/**

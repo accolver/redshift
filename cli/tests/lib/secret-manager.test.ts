@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { generateSecretKey } from 'nostr-tools/pure';
 import {
 	SecretManager,
 	extractProjects,
@@ -38,6 +39,21 @@ describe('SecretManager', () => {
 			const unwrapped = await manager.unwrapSecrets(wrapped.event);
 
 			expect(unwrapped).toEqual(secrets);
+		});
+	});
+
+	describe('disconnect', () => {
+		it('zeroes private key memory on disconnect', () => {
+			const privateKey = generateSecretKey();
+			const manager = new SecretManager(privateKey);
+
+			// Key should be non-zero before disconnect
+			expect(privateKey.some((b) => b !== 0)).toBe(true);
+
+			manager.disconnect();
+
+			// After disconnect, the key bytes should be zeroed
+			expect(privateKey.every((b) => b === 0)).toBe(true);
 		});
 	});
 });
