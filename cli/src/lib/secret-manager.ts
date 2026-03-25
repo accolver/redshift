@@ -378,16 +378,9 @@ export function injectSecrets(
 		}
 	}
 
-	// Inject secrets — values should always be strings per SecretBundle type,
-	// but coerce defensively in case unvalidated data reaches this function
+	// Inject secrets — SecretBundle values are always strings
 	for (const [key, value] of Object.entries(secrets)) {
-		if (typeof value === 'string') {
-			result[key] = value;
-		} else if (typeof value === 'object' && value !== null) {
-			result[key] = JSON.stringify(value);
-		} else {
-			result[key] = String(value);
-		}
+		result[key] = value;
 	}
 
 	return result;

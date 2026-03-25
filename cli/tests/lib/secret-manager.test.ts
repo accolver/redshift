@@ -74,35 +74,6 @@ describe('injectSecrets', () => {
 		expect(result.DATABASE_URL).toBe('postgres://localhost');
 	});
 
-	it('converts numbers to strings', () => {
-		// Deliberately passing non-string values to test defensive coercion
-		const result = injectSecrets({}, { PORT: 3000, TIMEOUT: 5000 } as unknown as SecretBundle);
-
-		expect(result.PORT).toBe('3000');
-		expect(result.TIMEOUT).toBe('5000');
-	});
-
-	it('converts booleans to strings', () => {
-		// Deliberately passing non-string values to test defensive coercion
-		const result = injectSecrets({}, { DEBUG: true, VERBOSE: false } as unknown as SecretBundle);
-
-		expect(result.DEBUG).toBe('true');
-		expect(result.VERBOSE).toBe('false');
-	});
-
-	it('JSON.stringifies objects and arrays', () => {
-		// Deliberately passing non-string values to test defensive coercion
-		const secrets = {
-			FEATURE_FLAGS: { new_ui: true, beta: false },
-			ALLOWED_ORIGINS: ['http://localhost', 'https://example.com'],
-		} as unknown as SecretBundle;
-
-		const result = injectSecrets({}, secrets);
-
-		expect(result.FEATURE_FLAGS).toBe('{"new_ui":true,"beta":false}');
-		expect(result.ALLOWED_ORIGINS).toBe('["http://localhost","https://example.com"]');
-	});
-
 	it('does not mutate original environment', () => {
 		const baseEnv = { EXISTING: 'value' };
 		const secrets: SecretBundle = { NEW: 'secret' };
