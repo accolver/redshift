@@ -221,6 +221,17 @@ export function validateRelayUrl(url: string): ValidationResult {
 }
 
 /**
+ * Normalize a secret key to uppercase (environment variable convention).
+ * Call this at command boundaries to match web behavior.
+ *
+ * @param key - The secret key to normalize
+ * @returns Trimmed, uppercased key
+ */
+export function normalizeSecretKey(key: string): string {
+	return key.trim().toUpperCase();
+}
+
+/**
  * Redact a secret value for safe display.
  * Always returns a consistent 4-asterisk mask regardless of input.
  *

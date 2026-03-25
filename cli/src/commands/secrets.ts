@@ -8,6 +8,7 @@ import { getRelays, loadProjectConfig } from '../lib/config';
 import { SecretManager, mergeSecrets } from '../lib/secret-manager';
 import {
 	formatValidationError,
+	normalizeSecretKey,
 	redactValue,
 	validateEnvironment,
 	validateProjectId,
@@ -89,7 +90,7 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 					console.error(formatValidationError('secret key', getKeyValidation));
 					process.exit(1);
 				}
-				await getSecret(manager, projectId, environment, options.key, options);
+				await getSecret(manager, projectId, environment, normalizeSecretKey(options.key), options);
 				break;
 			}
 
@@ -114,7 +115,7 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 					console.error(formatValidationError('secret value', setValueValidation));
 					process.exit(1);
 				}
-				await setSecret(manager, projectId, environment, options.key, options.value);
+				await setSecret(manager, projectId, environment, normalizeSecretKey(options.key), options.value);
 				break;
 			}
 
@@ -129,7 +130,7 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 					console.error(formatValidationError('secret key', deleteKeyValidation));
 					process.exit(1);
 				}
-				await deleteSecret(manager, projectId, environment, options.key);
+				await deleteSecret(manager, projectId, environment, normalizeSecretKey(options.key));
 				break;
 			}
 

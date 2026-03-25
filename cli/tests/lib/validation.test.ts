@@ -4,9 +4,10 @@
  * L1: Syntax-Linter - Code quality validation
  */
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, it, test } from 'bun:test';
 import {
 	formatValidationError,
+	normalizeSecretKey,
 	validateAll,
 	validateEnvironment,
 	validateProjectId,
@@ -69,6 +70,18 @@ describe('validateSecretKey', () => {
 		// Error should mention reserved
 		const result = validateSecretKey('PATH');
 		expect(result.error).toContain('reserved');
+	});
+});
+
+describe('normalizeSecretKey', () => {
+	it('converts to uppercase', () => {
+		expect(normalizeSecretKey('api_key')).toBe('API_KEY');
+	});
+	it('trims whitespace', () => {
+		expect(normalizeSecretKey('  MY_KEY  ')).toBe('MY_KEY');
+	});
+	it('preserves already uppercase', () => {
+		expect(normalizeSecretKey('DATABASE_URL')).toBe('DATABASE_URL');
 	});
 });
 
