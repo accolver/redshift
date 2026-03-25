@@ -8,6 +8,7 @@
 import { chmodSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEFAULT_RELAYS } from '@redshift/crypto';
+import { generateSecretKey } from 'nostr-tools/pure';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { ConfigError } from './errors';
 import { deleteBunkerKeyFromKeychain, deleteNsecFromKeychain, getBunkerKeyFromKeychain, getNsecFromKeychain } from './keychain';
@@ -229,7 +230,7 @@ export async function getAuth(): Promise<AuthResult | null> {
 		const bunkerAuth: BunkerAuth = {
 			bunkerPubkey,
 			relays,
-			clientSecretKey: '', // Will need to generate or retrieve
+			clientSecretKey: Buffer.from(generateSecretKey()).toString('hex'),
 		};
 		if (secret) {
 			bunkerAuth.secret = secret;

@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
 	type Config,
+	getAuth,
 	getConfigDir,
 	getPrivateKey,
 	loadConfig,
@@ -153,6 +154,29 @@ describe('Config Module', () => {
 			await Bun.write(configPath, 'invalid: yaml: content: [');
 
 			await expect(loadProjectConfig(projectDir)).rejects.toThrow();
+		});
+	});
+
+	describe('resolveAuth with REDSHIFT_BUNKER env', () => {
+		const originalBunkerEnv = process.env.REDSHIFT_BUNKER;
+
+		afterEach(() => {
+			if (originalBunkerEnv !== undefined) {
+				process.env.REDSHIFT_BUNKER = originalBunkerEnv;
+			} else {
+				delete process.env.REDSHIFT_BUNKER;
+			}
+		});
+
+		it('generates a non-empty clientSecretKey from bunker env', async () => {
+			process.env.REDSHIFT_BUNKER =
+				'bunker://abc123?relay=wss://relay.test.com&secret=mysecret';
+			const auth = await getAuth();
+
+			expect(auth).not.toBeNull();
+			expect(auth!.method).toBe('bunker');
+			expect(auth!.bunker!.clientSecretKey).toBeTruthy();
+			expect(auth!.bunker!.clientSecretKey.length).toBeGreaterThan(0);
 		});
 	});
 });
