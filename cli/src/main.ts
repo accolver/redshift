@@ -255,6 +255,8 @@ async function handleConfigureCommand(
 ): Promise<void> {
 	const { loadConfig, saveConfig, getConfigDir } = await import('./lib/config');
 
+	const SENSITIVE_KEYS = new Set(['nsec', 'bunker', 'authMethod', 'clientSecretKey']);
+
 	switch (subcommand) {
 		case 'get': {
 			const config = await loadConfig();
@@ -277,7 +279,6 @@ async function handleConfigureCommand(
 
 		case 'set': {
 			const ALLOWED_CONFIG_KEYS = new Set(['relays', 'defaultProject', 'defaultEnvironment']);
-			const SENSITIVE_KEYS = new Set(['nsec', 'bunker', 'authMethod', 'clientSecretKey']);
 			const config = await loadConfig();
 			for (const arg of positionals) {
 				const [key, ...valueParts] = arg.split('=');
@@ -309,6 +310,10 @@ async function handleConfigureCommand(
 		case 'unset': {
 			const config = await loadConfig();
 			for (const key of positionals) {
+				if (SENSITIVE_KEYS.has(key)) {
+					console.error(`Cannot unset '${key}' via configure. Use 'redshift logout' instead.`);
+					continue;
+				}
 				delete (config as Record<string, unknown>)[key];
 				console.log(`Unset ${key}`);
 			}
