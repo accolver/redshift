@@ -4,6 +4,7 @@
  * L5: Journey-Validator - Secret management workflow
  */
 
+import { formatEnvLine, parseEnvFile } from '@redshift/crypto';
 import { getRelays, loadProjectConfig } from '../lib/config';
 import { SecretManager, mergeSecrets } from '../lib/secret-manager';
 import {
@@ -177,10 +178,7 @@ async function listSecrets(
 
 		case 'env':
 			for (const [key, value] of Object.entries(secrets)) {
-				const strValue = typeof value === 'string' ? value : JSON.stringify(value);
-				// Escape quotes and newlines for .env format
-				const escaped = strValue.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-				console.log(`${key}="${escaped}"`);
+				console.log(formatEnvLine(key, value));
 			}
 			break;
 		default: {
@@ -220,11 +218,7 @@ async function getSecret(
 
 	if (options.raw) {
 		// Output raw value (useful for piping)
-		if (typeof value === 'string') {
-			process.stdout.write(value);
-		} else {
-			process.stdout.write(JSON.stringify(value));
-		}
+		process.stdout.write(value);
 	} else {
 		console.log(`${key}=${formatSecretValue(value, true)}`);
 	}
@@ -297,9 +291,7 @@ async function downloadSecrets(
 
 	// Output in .env format
 	for (const [key, value] of Object.entries(secrets)) {
-		const strValue = typeof value === 'string' ? value : JSON.stringify(value);
-		const escaped = strValue.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-		console.log(`${key}="${escaped}"`);
+		console.log(formatEnvLine(key, value));
 	}
 }
 
@@ -363,107 +355,12 @@ async function uploadSecrets(
 }
 
 /**
- * Parse a .env file content into a secrets object.
- * Handles:
- * - KEY=value
- * - KEY="quoted value"
- * - KEY='single quoted'
- * - # comments
- * - Empty lines
- * - Escaped characters in quoted strings
- *
- * Note: All values are stored as strings since environment variables are always strings.
- */
-export function parseEnvFile(content: string): Record<string, string> {
-	const secrets: Record<string, string> = {};
-	const lines = content.split('\n');
-
-	for (const line of lines) {
-		// Skip empty lines and comments
-		const trimmed = line.trim();
-		if (!trimmed || trimmed.startsWith('#')) {
-			continue;
-		}
-
-		// Find the first '=' to split key and value
-		const eqIndex = trimmed.indexOf('=');
-		if (eqIndex === -1) {
-			continue; // Invalid line, skip
-		}
-
-		const key = trimmed.slice(0, eqIndex).trim();
-		let value = trimmed.slice(eqIndex + 1);
-
-		// Skip invalid keys
-		if (!key || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-			continue;
-		}
-
-		// Parse the value (handle quotes and escapes)
-		value = parseEnvValue(value);
-
-		// Store as string (environment variables are always strings)
-		secrets[key] = value;
-	}
-
-	return secrets;
-}
-
-/**
- * Parse a .env value, handling quotes and escapes.
- */
-export function parseEnvValue(input: string): string {
-	let result = input.trim();
-
-	// Handle double-quoted strings
-	if (result.startsWith('"') && result.endsWith('"')) {
-		// Unescape special characters
-		return result
-			.slice(1, -1)
-			.replace(/\\n/g, '\n')
-			.replace(/\\r/g, '\r')
-			.replace(/\\t/g, '\t')
-			.replace(/\\"/g, '"')
-			.replace(/\\\\/g, '\\');
-	}
-
-	// Handle single-quoted strings (no escaping)
-	if (result.startsWith("'") && result.endsWith("'")) {
-		return result.slice(1, -1);
-	}
-
-	// Handle inline comments (only if not quoted)
-	const commentIndex = result.indexOf(' #');
-	if (commentIndex !== -1) {
-		result = result.slice(0, commentIndex).trim();
-	}
-
-	return result;
-}
-
-/**
  * Format a secret value for display.
  */
-function formatSecretValue(value: unknown, showRaw: boolean): string {
-	if (typeof value === 'string') {
-		if (showRaw) {
-			return value.length > 50 ? `${value.substring(0, 50)}...` : value;
-		}
-		// Redact by default
-		return value.length > 0 ? redactValue(value) : '(empty)';
+function formatSecretValue(value: string, showRaw: boolean): string {
+	if (showRaw) {
+		return value.length > 50 ? `${value.substring(0, 50)}...` : value;
 	}
-
-	if (typeof value === 'number' || typeof value === 'boolean') {
-		return String(value);
-	}
-
-	if (typeof value === 'object') {
-		const json = JSON.stringify(value);
-		if (showRaw) {
-			return json.length > 50 ? `${json.substring(0, 50)}...` : json;
-		}
-		return `{...} (${Object.keys(value as object).length} keys)`;
-	}
-
-	return String(value);
+	// Redact by default
+	return value.length > 0 ? redactValue(value) : '(empty)';
 }
