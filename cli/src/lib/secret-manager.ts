@@ -159,18 +159,26 @@ export class SecretManager {
 			expiresAt: Date.now() + FETCH_ALL_CACHE_TTL_MS,
 		};
 
-		// Clear the Promise cache when it settles (success or failure)
-		promise.finally(() => {
-			// Only clear if this is still our cached promise
-			if (this.fetchAllCache?.promise === promise) {
-				// Keep it alive until expiry for deduplication, but mark for cleanup
-				setTimeout(() => {
-					if (this.fetchAllCache?.promise === promise) {
-						this.fetchAllCache = null;
-					}
-				}, FETCH_ALL_CACHE_TTL_MS);
-			}
-		});
+		// Clear the Promise cache when it settles (success or failure).
+		// The .catch() on the finally chain suppresses an unhandled-rejection
+		// warning that Bun/Node emit when a rejected promise has no error handler
+		// attached before the microtask queue drains.
+		promise
+			.finally(() => {
+				// Only clear if this is still our cached promise
+				if (this.fetchAllCache?.promise === promise) {
+					// Keep it alive until expiry for deduplication, but mark for cleanup
+					setTimeout(() => {
+						if (this.fetchAllCache?.promise === promise) {
+							this.fetchAllCache = null;
+						}
+					}, FETCH_ALL_CACHE_TTL_MS);
+				}
+			})
+			.catch(() => {
+				// Rejection is handled by callers of fetchAllSecrets(); suppress here
+				// to avoid an unhandled-rejection event on the .finally() chain.
+			});
 
 		return promise;
 	}
@@ -281,58 +289,13 @@ export class SecretManager {
 
 	/**
 	 * Fetch secrets for a specific project/environment.
-	 * Uses the decryption cache to avoid redundant decryption work.
+	 * Delegates to fetchAllSecrets() to reuse its decryption cache and
+	 * Promise deduplication, then looks up the matching d-tag.
 	 */
 	async fetchSecrets(projectId: string, environment: string): Promise<SecretBundle | null> {
-		if (!this.pool) {
-			throw new NotConnectedError();
-		}
-
+		const allSecrets = await this.fetchAllSecrets();
 		const targetDTag = createDTag(projectId, environment);
-		const filter = filterGiftWraps(this.publicKey);
-		const giftWraps = await this.pool.query(filter);
-
-		// Find the latest event with matching d-tag
-		let latestSecrets: SecretBundle | null = null;
-		let latestTimestamp = 0;
-
-		for (const gw of giftWraps) {
-			// Check decryption cache first
-			if (this.decryptionCache.has(gw.id)) {
-				const cached = this.decryptionCache.get(gw.id);
-				if (cached?.dTag === targetDTag && cached.createdAt > latestTimestamp) {
-					latestTimestamp = cached.createdAt;
-					latestSecrets = cached.secrets;
-				}
-				continue; // Skip decryption (cached null means it failed before)
-			}
-
-			try {
-				const result = unwrapGiftWrap(gw, this.privateKey);
-
-				// Cache the successful decryption
-				this.decryptionCache.set(gw.id, {
-					dTag: result.dTag,
-					secrets: result.secrets,
-					createdAt: result.createdAt,
-				});
-
-				// Only consider events with matching d-tag
-				if (result.dTag !== targetDTag) {
-					continue;
-				}
-
-				if (result.createdAt > latestTimestamp) {
-					latestTimestamp = result.createdAt;
-					latestSecrets = result.secrets;
-				}
-			} catch {
-				// Cache the failure so we don't re-attempt
-				this.decryptionCache.set(gw.id, null);
-			}
-		}
-
-		return latestSecrets;
+		return allSecrets.get(targetDTag) ?? null;
 	}
 
 	/**
