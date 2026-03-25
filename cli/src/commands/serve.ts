@@ -1,3 +1,4 @@
+import { DEFAULT_RELAYS } from '@redshift/crypto';
 import { decodeContent, getEmbeddedFile, hasEmbeddedFiles } from '../lib/embedded-files';
 import { tryAuth } from './login';
 
@@ -18,14 +19,15 @@ export interface ServeOptions {
  *   allows inline styles (needed for embedded UI), and WebSocket connections
  *   for relay communication
  */
-function addSecurityHeaders(headers: Headers, isApiRoute: boolean): void {
+export function addSecurityHeaders(headers: Headers, isApiRoute: boolean): void {
 	headers.set('X-Frame-Options', 'DENY');
 	headers.set('X-Content-Type-Options', 'nosniff');
 	headers.set('X-XSS-Protection', '1; mode=block');
 	headers.set('Referrer-Policy', 'no-referrer');
+	const relayConnectSrc = [...DEFAULT_RELAYS, 'wss://relay.redshiftapp.com'].join(' ');
 	headers.set(
 		'Content-Security-Policy',
-		"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' wss://*.damus.io wss://*.primal.net wss://*.nostr.band wss://nos.lol wss://relay.redshiftapp.com;",
+		`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ${relayConnectSrc};`,
 	);
 
 	// API routes should never be cached to prevent stale sensitive data

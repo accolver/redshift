@@ -8,7 +8,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { addSecurityHeaders } from '../../src/commands/serve';
 import type { ServeOptions } from '../../src/commands/serve';
+import { DEFAULT_RELAYS } from '@redshift/crypto';
 
 // Store original env
 const originalEnv = { ...process.env };
@@ -259,6 +261,43 @@ describe('serve command', () => {
 			} finally {
 				if (server) server.stop();
 			}
+		});
+	});
+
+	describe('addSecurityHeaders', () => {
+		it('CSP connect-src contains no wildcard patterns', () => {
+			const headers = new Headers();
+			addSecurityHeaders(headers, false);
+			const csp = headers.get('Content-Security-Policy')!;
+			expect(csp).not.toContain('*.');
+		});
+
+		it('CSP connect-src includes all DEFAULT_RELAYS', () => {
+			const headers = new Headers();
+			addSecurityHeaders(headers, false);
+			const csp = headers.get('Content-Security-Policy')!;
+			for (const relay of DEFAULT_RELAYS) {
+				expect(csp).toContain(relay);
+			}
+		});
+
+		it('CSP connect-src includes managed relay', () => {
+			const headers = new Headers();
+			addSecurityHeaders(headers, false);
+			const csp = headers.get('Content-Security-Policy')!;
+			expect(csp).toContain('wss://relay.redshiftapp.com');
+		});
+
+		it('sets Cache-Control no-store for API routes', () => {
+			const headers = new Headers();
+			addSecurityHeaders(headers, true);
+			expect(headers.get('Cache-Control')).toBe('no-store');
+		});
+
+		it('does not set Cache-Control for non-API routes', () => {
+			const headers = new Headers();
+			addSecurityHeaders(headers, false);
+			expect(headers.get('Cache-Control')).toBeNull();
 		});
 	});
 
