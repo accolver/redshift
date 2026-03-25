@@ -67,5 +67,8 @@ export type {
 	UnwrapResult,
 } from './types.js';
 
+// Validation
+export { validateSlug, normalizeSlug, type ValidationResult } from './validation.js';
+
 // Constants
 export { NostrKinds, REDSHIFT_TYPE_TAG, DEFAULT_RELAYS } from './types.js';

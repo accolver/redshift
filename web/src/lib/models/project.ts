@@ -4,6 +4,10 @@ import type { EventStore } from 'applesauce-core';
 import type { NostrEvent } from 'nostr-tools';
 import { REDSHIFT_KIND } from '$lib/stores/nostr.svelte';
 import type { Project, Environment } from '$lib/types/nostr';
+import {
+	validateSlug as sharedValidateSlug,
+	normalizeSlug as sharedNormalizeSlug,
+} from '@redshift/crypto';
 
 /**
  * Project metadata stored in Kind 30078 event content
@@ -106,40 +110,25 @@ export function createDefaultEnvironment(): Environment {
 }
 
 /**
- * Validate and normalize a project slug
- * - Lowercase only
- * - Hyphens allowed (no underscores, spaces, etc.)
- * - No leading/trailing hyphens
- * - No consecutive hyphens
+ * Validate and normalize a project slug.
+ * Delegates to shared normalizeSlug from @redshift/crypto,
+ * then strips leading/trailing hyphens for web use.
  */
 export function normalizeSlug(input: string): string {
-	return input
-		.toLowerCase()
-		.replace(/[^a-z0-9-]/g, '-')
-		.replace(/-+/g, '-')
-		.replace(/^-|-$/g, '');
+	return sharedNormalizeSlug(input).replace(/^-|-$/g, '');
 }
 
 /**
- * Validate a project slug
- * Returns error message if invalid, null if valid
+ * Validate a project slug.
+ * Delegates to shared validateSlug from @redshift/crypto,
+ * with additional web-specific constraints (min 2 chars, must start with letter).
+ * Returns error message if invalid, null if valid.
  */
 export function validateSlug(slug: string): string | null {
-	if (!slug) {
-		return 'Slug is required';
-	}
-	if (slug.length < 2) {
-		return 'Slug must be at least 2 characters';
-	}
-	if (slug.length > 50) {
-		return 'Slug must be 50 characters or less';
-	}
-	if (!/^[a-z][a-z0-9-]*[a-z0-9]$/.test(slug) && slug.length > 1) {
-		return 'Slug must start with a letter, end with a letter or number, and contain only lowercase letters, numbers, and hyphens';
-	}
-	if (/--/.test(slug)) {
-		return 'Slug cannot contain consecutive hyphens';
-	}
+	const result = sharedValidateSlug(slug);
+	if (!result.valid) return result.error!;
+	if (slug.length < 2) return 'Slug must be at least 2 characters';
+	if (!/^[a-z]/.test(slug)) return 'Slug must start with a letter';
 	return null;
 }
 

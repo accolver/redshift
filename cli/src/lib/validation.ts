@@ -8,14 +8,9 @@
  */
 
 import { ValidationError } from './errors';
+import { validateSlug as sharedValidateSlug, type ValidationResult } from '@redshift/crypto';
 
-/**
- * Validation result with optional error message
- */
-export interface ValidationResult {
-	valid: boolean;
-	error?: string;
-}
+export type { ValidationResult };
 
 /**
  * Secret key validation rules:
@@ -88,69 +83,30 @@ export function validateSecretKey(key: string): ValidationResult {
 /**
  * Validate a project identifier.
  *
- * Rules:
- * - Must match pattern: ^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$
- * - Cannot be empty
- * - 1-64 characters
- * - Lowercase letters, numbers, and hyphens only
- * - Cannot start or end with a hyphen
+ * Delegates to shared slug validation from @redshift/crypto.
  *
  * @param projectId - The project identifier to validate
  * @returns ValidationResult with valid flag and optional error
  */
 export function validateProjectId(projectId: string): ValidationResult {
-	if (!projectId) {
-		return { valid: false, error: 'Project ID cannot be empty' };
-	}
-
-	if (projectId.length > 64) {
-		return { valid: false, error: 'Project ID cannot exceed 64 characters' };
-	}
-
-	// Must be lowercase alphanumeric with hyphens (not at start/end)
-	if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(projectId)) {
-		return {
-			valid: false,
-			error:
-				'Project ID must contain only lowercase letters, numbers, and hyphens, and cannot start or end with a hyphen',
-		};
-	}
-
-	return { valid: true };
+	return sharedValidateSlug(projectId);
 }
 
 /**
  * Validate an environment name.
  *
- * Rules:
- * - Must match pattern: ^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$
- * - Cannot be empty
- * - 1-32 characters
- * - Lowercase letters, numbers, and hyphens only
- * - Cannot start or end with a hyphen
+ * Delegates to shared slug validation from @redshift/crypto,
+ * with an additional 32-character limit for environments.
  *
  * @param environment - The environment name to validate
  * @returns ValidationResult with valid flag and optional error
  */
 export function validateEnvironment(environment: string): ValidationResult {
-	if (!environment) {
-		return { valid: false, error: 'Environment cannot be empty' };
-	}
-
-	if (environment.length > 32) {
+	const result = sharedValidateSlug(environment);
+	if (result.valid && environment.length > 32) {
 		return { valid: false, error: 'Environment cannot exceed 32 characters' };
 	}
-
-	// Must be lowercase alphanumeric with hyphens (not at start/end)
-	if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(environment)) {
-		return {
-			valid: false,
-			error:
-				'Environment must contain only lowercase letters, numbers, and hyphens, and cannot start or end with a hyphen',
-		};
-	}
-
-	return { valid: true };
+	return result;
 }
 
 /**

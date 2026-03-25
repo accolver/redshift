@@ -148,7 +148,7 @@ describe('Project Model', () => {
 		});
 
 		it('returns error for empty slug', () => {
-			expect(validateSlug('')).toBe('Slug is required');
+			expect(validateSlug('')).toBe('Slug cannot be empty');
 		});
 
 		it('returns error for slug too short', () => {
@@ -156,12 +156,12 @@ describe('Project Model', () => {
 		});
 
 		it('returns error for slug too long', () => {
-			const longSlug = 'a'.repeat(51);
-			expect(validateSlug(longSlug)).toBe('Slug must be 50 characters or less');
+			const longSlug = 'a'.repeat(65);
+			expect(validateSlug(longSlug)).toBe('Slug cannot exceed 64 characters');
 		});
 
 		it('returns error for consecutive hyphens', () => {
-			expect(validateSlug('my--project')).toBe('Slug cannot contain consecutive hyphens');
+			expect(validateSlug('my--project')).toBe('Cannot contain consecutive hyphens');
 		});
 	});
 
