@@ -30,6 +30,9 @@ let activeBunkerSigner: BunkerSigner | null = null;
 // Active bunker pool instance (for cleanup on disconnect or error)
 let activeBunkerPool: SimplePool | null = null;
 
+// Relay URLs used by the active bunker pool (needed for proper cleanup)
+let activeBunkerRelays: string[] = [];
+
 // Auth state using $state rune
 let authState = $state<AuthState>({
 	method: 'none',
@@ -213,6 +216,7 @@ export async function connectWithBunker(bunkerUri: string): Promise<boolean> {
 			// Store the bunker instance, pool, and URI for later cleanup
 			activeBunkerSigner = bunker;
 			activeBunkerPool = pool;
+			activeBunkerRelays = bunkerPointer.relays;
 			if (isSecureStorageAvailable()) {
 				await secureStore(BUNKER_URI_KEY, bunkerUri);
 			}
@@ -259,7 +263,8 @@ export async function disconnect(): Promise<void> {
 	// Clean up bunker pool if active
 	if (activeBunkerPool) {
 		try {
-			activeBunkerPool.close([]);
+			activeBunkerPool.close(activeBunkerRelays);
+			activeBunkerRelays = [];
 		} catch {
 			// Ignore errors during cleanup
 		}
