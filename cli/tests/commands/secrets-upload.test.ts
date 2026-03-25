@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { parseEnvFile } from '../../src/commands/secrets';
+import { parseEnvFile } from '@redshift/crypto';
 
 describe('parseEnvFile', () => {
 	test('parses simple key=value pairs', () => {

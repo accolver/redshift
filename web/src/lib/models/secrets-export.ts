@@ -1,3 +1,4 @@
+import { parseEnvFile } from '@redshift/crypto';
 import type { Secret } from '$lib/types/nostr';
 
 /**
@@ -124,50 +125,11 @@ export function exportToCsv(secrets: Secret[]): string {
 
 /**
  * Parse .env format (KEY=VALUE)
+ * Delegates to @redshift/crypto's shared parser for consistent behavior.
  */
 export function parseEnv(input: string): Secret[] {
-	if (!input.trim()) return [];
-
-	const secrets: Secret[] = [];
-	const lines = input.split('\n');
-
-	for (const line of lines) {
-		const trimmed = line.trim();
-
-		// Skip empty lines and comments
-		if (!trimmed || trimmed.startsWith('#')) continue;
-
-		// Handle "export KEY=VALUE" format
-		const withoutExport = trimmed.startsWith('export ') ? trimmed.slice(7).trim() : trimmed;
-
-		// Find the first = sign
-		const eqIndex = withoutExport.indexOf('=');
-		if (eqIndex === -1) continue;
-
-		const key = withoutExport.slice(0, eqIndex).trim();
-		let value = withoutExport.slice(eqIndex + 1);
-
-		// Handle quoted values
-		if (
-			(value.startsWith('"') && value.endsWith('"')) ||
-			(value.startsWith("'") && value.endsWith("'"))
-		) {
-			// Remove quotes
-			value = value.slice(1, -1);
-			// Unescape escaped characters for double quotes
-			if (withoutExport.slice(eqIndex + 1).startsWith('"')) {
-				value = value.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-			}
-		} else {
-			value = value.trim();
-		}
-
-		if (key) {
-			secrets.push({ key, value });
-		}
-	}
-
-	return secrets;
+	const parsed = parseEnvFile(input);
+	return Object.entries(parsed).map(([key, value]) => ({ key, value }));
 }
 
 /**

@@ -72,3 +72,6 @@ export { validateSlug, normalizeSlug, type ValidationResult } from './validation
 
 // Constants
 export { NostrKinds, REDSHIFT_TYPE_TAG, DEFAULT_RELAYS } from './types.js';
+
+// .env parsing and formatting
+export { parseEnvFile, parseEnvValue, formatEnvLine } from './env-parser.js';
