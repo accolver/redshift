@@ -1,0 +1,19 @@
+name: Redshift deployment demo
+
+on:
+  workflow_dispatch:
+
+jobs:
+  redshift-run:
+    runs-on: [self-hosted, redshift]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run command with Redshift secrets
+        uses: accolver/redshift/actions/redshift-run@main
+        with:
+          project: my-app
+          environment: production
+          command: |
+            env | grep '^PUBLIC_' >/dev/null
+            npm run deploy

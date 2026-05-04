@@ -26,10 +26,15 @@ export interface RunOptions {
  *
  * When the user passes a single string like `"echo 'hello world'"`, we need to
  * split it into `["echo", "hello world"]` rather than `["echo", "'hello", "world'"]`.
- * Multiple tokens are joined first, then re-split respecting single and double quotes.
+ * Already-tokenized command arrays are preserved so shell commands like
+ * `["sh", "-c", "echo hello world"]` keep the full command string intact.
  */
-function parseCommandTokens(parts: string[]): string[] {
-	const input = parts.join(' ');
+export function parseCommandTokens(parts: string[]): string[] {
+	if (parts.length !== 1) {
+		return parts;
+	}
+
+	const input = parts[0] ?? '';
 	const tokens: string[] = [];
 	let current = '';
 	let inSingle = false;

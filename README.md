@@ -49,6 +49,20 @@ redshift secrets set API_KEY sk-xxx
 redshift run -- npm start
 ```
 
+### GitHub Actions
+
+Run CI/CD commands with Redshift-managed secrets and no central secrets SaaS:
+
+```yaml
+- uses: accolver/redshift/actions/redshift-run@main
+  with:
+    project: my-project
+    environment: production
+    command: npm run deploy
+```
+
+See [docs/github-actions.md](docs/github-actions.md) for the security model and setup guide.
+
 ### Project Setup
 
 The `redshift setup` command creates a `redshift.yaml` file in your project
