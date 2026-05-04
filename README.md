@@ -11,6 +11,11 @@ Decentralized, censorship-resistant secret management built on
 - **Doppler-compatible CLI** - Familiar commands like `redshift run`
 - **Censorship-resistant** - Distributed across Nostr relays
 
+## Public Roadmap
+
+- [Grant roadmap and project brief](docs/grants/README.md)
+- [Technical roadmap](ROADMAP.md)
+
 ## Installation
 
 ```bash
