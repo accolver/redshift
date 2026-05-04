@@ -253,11 +253,31 @@ async function handleConfigureCommand(
 	positionals: string[],
 	flags: Record<string, string | boolean | undefined>,
 ): Promise<void> {
-	const { loadConfig, saveConfig, getConfigDir } = await import('./lib/config');
+	const { loadConfig, saveConfig, getConfigDir, getRelayConfigStatus } = await import(
+		'./lib/config'
+	);
 
 	const SENSITIVE_KEYS = new Set(['nsec', 'bunker', 'authMethod', 'clientSecretKey']);
+	const RELAY_USAGE_LINES = [
+		'Set relays: redshift configure set relays=\'["wss://relay.example"]\'',
+		'Or CSV:     redshift configure set relays=wss://relay1.example,wss://relay2.example',
+		'Reset:      redshift configure unset relays',
+	];
 
 	switch (subcommand) {
+		case 'relays': {
+			const status = await getRelayConfigStatus();
+			console.log(`Relay source: ${status.source}`);
+			for (const [index, relay] of status.relays.entries()) {
+				console.log(`  ${index + 1}. ${relay}`);
+			}
+			console.log('');
+			for (const line of RELAY_USAGE_LINES) {
+				console.log(line);
+			}
+			break;
+		}
+
 		case 'get': {
 			const config = await loadConfig();
 			if (positionals.length === 0) {
@@ -294,11 +314,20 @@ async function handleConfigureCommand(
 						continue;
 					}
 					const value = valueParts.join('=');
-					// Try to parse as JSON, fall back to string
-					try {
-						(config as Record<string, unknown>)[key] = JSON.parse(value);
-					} catch {
-						(config as Record<string, unknown>)[key] = value;
+					if (key === 'relays') {
+						const relays = parseRelayConfigValue(value);
+						if (relays.length === 0) {
+							console.error('Relays must be a non-empty JSON array or comma-separated list.');
+							continue;
+						}
+						config.relays = relays;
+					} else {
+						// Try to parse as JSON, fall back to string
+						try {
+							(config as Record<string, unknown>)[key] = JSON.parse(value);
+						} catch {
+							(config as Record<string, unknown>)[key] = value;
+						}
 					}
 					console.log(`Set ${key}`);
 				}
@@ -343,6 +372,7 @@ async function handleConfigureCommand(
 				console.log('');
 				console.log(JSON.stringify(config, null, 2));
 			} else {
+				const relayStatus = await getRelayConfigStatus();
 				console.log(`Config directory: ${configDir}`);
 				console.log('');
 				// Show key settings
@@ -352,13 +382,28 @@ async function handleConfigureCommand(
 				if (config.defaultProject) {
 					console.log(`Default project: ${config.defaultProject}`);
 				}
-				if (config.relays && config.relays.length > 0) {
-					console.log(`Relays: ${config.relays.join(', ')}`);
-				}
+				console.log(`Relays (${relayStatus.source}): ${relayStatus.relays.join(', ')}`);
+				console.log('Run `redshift configure relays` for relay configuration help.');
 			}
 			break;
 		}
 	}
+}
+
+function parseRelayConfigValue(value: string): string[] {
+	try {
+		const parsed: unknown = JSON.parse(value);
+		if (Array.isArray(parsed) && parsed.every((relay) => typeof relay === 'string')) {
+			return parsed.map((relay) => relay.trim()).filter((relay) => relay.length > 0);
+		}
+	} catch {
+		// Fall through to comma-separated parsing.
+	}
+
+	return value
+		.split(',')
+		.map((relay) => relay.trim())
+		.filter((relay) => relay.length > 0);
 }
 
 /**

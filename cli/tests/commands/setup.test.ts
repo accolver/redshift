@@ -262,6 +262,27 @@ relays:
 
 			expect(relays).toEqual(customRelays);
 		});
+
+		it('should report custom relay status', async () => {
+			const { saveConfig, getRelayConfigStatus } = await import('../../src/lib/config');
+
+			const customRelays = ['wss://custom1.relay', 'wss://custom2.relay'];
+			await saveConfig({ relays: customRelays });
+
+			const status = await getRelayConfigStatus();
+
+			expect(status.source).toBe('custom');
+			expect(status.relays).toEqual(customRelays);
+		});
+
+		it('should report default relay status when custom relays are absent', async () => {
+			const { getRelayConfigStatus } = await import('../../src/lib/config');
+
+			const status = await getRelayConfigStatus();
+
+			expect(status.source).toBe('default');
+			expect(status.relays.length).toBeGreaterThan(0);
+		});
 	});
 });
 
