@@ -1,0 +1,70 @@
+name: Redshift Run
+
+description: Run a command in GitHub Actions with secrets injected by a pre-authenticated Redshift runner.
+
+author: Redshift
+
+branding:
+  icon: lock
+  color: purple
+
+inputs:
+  project:
+    description: Redshift project slug.
+    required: true
+  environment:
+    description: Redshift environment/config slug.
+    required: true
+  command:
+    description: Shell command to run with Redshift secrets injected.
+    required: true
+  working-directory:
+    description: Directory where the command should run.
+    required: false
+    default: .
+  allow-pull-request:
+    description: Allow running on pull_request or pull_request_target events. Defaults to false to reduce secret exfiltration risk.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Build Redshift CLI
+      shell: bash
+      working-directory: ${{ github.action_path }}/../..
+      env:
+        REDSHIFT_NSEC: ""
+        REDSHIFT_BUNKER: ""
+      run: |
+        set -euo pipefail
+        if ! command -v bun >/dev/null 2>&1; then
+          echo "Bun must be installed on the self-hosted runner before using this action." >&2
+          exit 1
+        fi
+        bun install --frozen-lockfile --ignore-scripts
+        bun run build:cli
+
+    - name: Run command with Redshift secrets
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        REDSHIFT_PROJECT: ${{ inputs.project }}
+        REDSHIFT_ENVIRONMENT: ${{ inputs.environment }}
+        REDSHIFT_COMMAND: ${{ inputs.command }}
+        REDSHIFT_CLI_PATH: ${{ github.action_path }}/../../dist/redshift
+        REDSHIFT_ALLOW_PULL_REQUEST: ${{ inputs.allow-pull-request }}
+      run: |
+        set -euo pipefail
+
+        if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "pull_request_target" ]]; then
+          if [[ "$REDSHIFT_ALLOW_PULL_REQUEST" != "true" ]]; then
+            echo "Refusing to run Redshift secrets on pull request events. Set allow-pull-request: true only for trusted workflows." >&2
+            exit 1
+          fi
+        fi
+
+        "$REDSHIFT_CLI_PATH" run \
+          --project "$REDSHIFT_PROJECT" \
+          --config "$REDSHIFT_ENVIRONMENT" \
+          --command "$REDSHIFT_COMMAND"

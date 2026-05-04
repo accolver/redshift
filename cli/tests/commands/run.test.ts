@@ -68,6 +68,24 @@ describe('run command', () => {
 		} catch {}
 	});
 
+	describe('parseCommandTokens', () => {
+		it('preserves already-tokenized commands', async () => {
+			const { parseCommandTokens } = await import('../../src/commands/run');
+
+			expect(parseCommandTokens(['sh', '-c', 'echo hello world'])).toEqual([
+				'sh',
+				'-c',
+				'echo hello world',
+			]);
+		});
+
+		it('splits a single command string while respecting quotes', async () => {
+			const { parseCommandTokens } = await import('../../src/commands/run');
+
+			expect(parseCommandTokens(['echo "hello world"'])).toEqual(['echo', 'hello world']);
+		});
+	});
+
 	describe('RunOptions interface', () => {
 		it('should accept command array', () => {
 			// TypeScript interface test - if this compiles, it passes
