@@ -11,7 +11,12 @@ import { DEFAULT_RELAYS } from '@redshift/crypto';
 import { generateSecretKey } from 'nostr-tools/pure';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { ConfigError } from './errors';
-import { deleteBunkerKeyFromKeychain, deleteNsecFromKeychain, getBunkerKeyFromKeychain, getNsecFromKeychain } from './keychain';
+import {
+	deleteBunkerKeyFromKeychain,
+	deleteNsecFromKeychain,
+	getBunkerKeyFromKeychain,
+	getNsecFromKeychain,
+} from './keychain';
 import type { AuthMethod, BunkerAuth, RedshiftConfig } from './types';
 
 /**
@@ -28,6 +33,13 @@ export interface Config {
 	relays?: string[];
 	/** Default project ID */
 	defaultProject?: string;
+}
+
+export interface RelayConfigStatus {
+	/** Relay URLs in effect for CLI operations */
+	relays: string[];
+	/** Whether relays came from user config or built-in defaults */
+	source: 'custom' | 'default';
 }
 
 /**
@@ -190,18 +202,26 @@ export async function loadProjectConfig(projectDir: string): Promise<RedshiftCon
 }
 
 /**
+ * Get relay configuration status, including the source of the active relay set.
+ */
+export async function getRelayConfigStatus(): Promise<RelayConfigStatus> {
+	const config = await loadConfig();
+
+	if (Array.isArray(config.relays) && config.relays.length > 0) {
+		return { relays: config.relays, source: 'custom' };
+	}
+
+	// Default public relays (from shared @redshift/crypto package)
+	return { relays: [...DEFAULT_RELAYS], source: 'default' };
+}
+
+/**
  * Get default relay URLs.
  * Returns config relays or fallback defaults.
  */
 export async function getRelays(): Promise<string[]> {
-	const config = await loadConfig();
-
-	if (config.relays && config.relays.length > 0) {
-		return config.relays;
-	}
-
-	// Default public relays (from shared @redshift/crypto package)
-	return [...DEFAULT_RELAYS];
+	const status = await getRelayConfigStatus();
+	return status.relays;
 }
 
 /**

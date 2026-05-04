@@ -67,6 +67,19 @@ You can also specify options directly:
 redshift setup --project my-project --environment production
 ```
 
+### Relay configuration
+
+Inspect active global relays with `redshift configure relays`. Set custom global
+relays with:
+
+```bash
+redshift configure set relays='["wss://relay.damus.io","wss://nos.lol"]'
+```
+
+Project-specific `redshift.yaml` relays take precedence over global relays. See
+[relay resilience and NIP-78 security](docs/relay-resilience-and-nip78-security.md)
+for privacy and availability tradeoffs.
+
 ## Web Dashboard
 
 Visit [redshiftapp.com/admin](https://redshiftapp.com/admin) to manage secrets

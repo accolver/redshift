@@ -1025,7 +1025,12 @@ function createConfigureCommand(): CommandDef {
 	return {
 		name: 'configure',
 		description: 'View the config file',
-		examples: ['redshift configure', 'redshift configure --all'],
+		examples: [
+			'redshift configure',
+			'redshift configure --all',
+			'redshift configure relays',
+			'redshift configure set relays=\'["wss://relay.example"]\'',
+		],
 		flags: {
 			all: {
 				type: 'boolean',
@@ -1033,6 +1038,10 @@ function createConfigureCommand(): CommandDef {
 			},
 		},
 		subcommands: {
+			relays: {
+				name: 'relays',
+				description: 'Show active relay URLs and how to modify them',
+			},
 			get: {
 				name: 'get',
 				description: 'Get the value of one or more options in the config file',

@@ -5,8 +5,8 @@
  * L4: Integration-Contractor - Doppler-compatible CLI interface
  */
 
-import { describe, expect, it, beforeEach } from 'bun:test';
-import { CLI, createCLI, type CommandDef, type ParsedArgs } from '../../src/lib/cli';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { CLI, createCLI } from '../../src/lib/cli';
 
 describe('CLI Framework', () => {
 	let cli: CLI;
@@ -453,6 +453,13 @@ describe('CLI Framework', () => {
 
 			expect(result.command).toBe('configure');
 			expect(result.flags.all).toBe(true);
+		});
+
+		it('parses configure relays subcommand', () => {
+			const result = cli.parse(['configure', 'relays']);
+
+			expect(result.command).toBe('configure');
+			expect(result.subcommand).toBe('relays');
 		});
 
 		it('parses configure get subcommand', () => {
