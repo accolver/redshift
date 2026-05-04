@@ -72,6 +72,12 @@ redshift setup --project my-project --environment production
 Visit [redshiftapp.com/admin](https://redshiftapp.com/admin) to manage secrets
 visually.
 
+## Security
+
+Read Redshift's [security and threat model](SECURITY.md) for details on what
+client-side encryption protects, what metadata remains visible, and which
+operational risks users still need to manage.
+
 When creating a project in the web UI, you'll set:
 
 - **Display Name** - Human-readable name (can be changed later)
