@@ -3,27 +3,137 @@
 Decentralized, censorship-resistant secret management built on
 [Nostr](https://nostr.com). Learn more at [redshiftapp.com](https://redshiftapp.com).
 
+Redshift gives developers a Doppler-compatible workflow while keeping secrets
+client-side encrypted. Relays store only NIP-59 Gift Wrapped events; your keys
+stay with you.
+
 ## Features
 
-- **Client-side encryption** - Secrets never leave your device unencrypted
+- **Client-side encryption** - secrets never leave your device unencrypted
   (NIP-59 Gift Wrap)
-- **Nostr-based** - Your keys, your data. No vendor lock-in
-- **Doppler-compatible CLI** - Familiar commands like `redshift run`
-- **Censorship-resistant** - Distributed across Nostr relays
+- **Nostr-based storage** - use public or managed relays without vendor lock-in
+- **Doppler-compatible CLI** - familiar commands like `redshift run`
+- **Web dashboard** - browser-based project and secret management
+- **Relay resilience** - configure multiple relays and switch when one fails
 
-## Installation
+## Install the CLI
 
 ```bash
-# Install script
+# Install latest release
 curl -fsSL https://redshiftapp.com/install | sh
 
-# Or build from source
-git clone https://github.com/accolver/redshift.git
-cd redshift && bun install
-bun build cli/src/main.ts --compile --outfile ~/.local/bin/redshift
+# Verify
+redshift --version
 ```
 
-### OpenClaw Skill
+Build from source instead:
+
+```bash
+git clone https://github.com/accolver/redshift.git
+cd redshift
+bun install
+bun run build:cli
+./dist/redshift --version
+```
+
+## Quick Start
+
+```bash
+# 1. Log in with a Nostr identity
+redshift login
+
+# 2. Create redshift.yaml for this app
+redshift setup --project my-project --config dev
+
+# 3. Add a secret to the current project/environment
+redshift secrets set API_KEY sk-test-123
+
+# 4. Run a command with secrets injected
+redshift run -- printenv API_KEY
+```
+
+`redshift setup` writes a local `redshift.yaml`:
+
+```yaml
+project: my-project
+environment: dev
+relays:
+  - wss://relay.damus.io
+  - wss://relay.primal.net
+  - wss://nos.lol
+  - wss://relay.nostr.band
+```
+
+The CLI reads project settings from `redshift.yaml` and auth/global relay
+settings from `~/.redshift/config.json`. For isolated tests or demos, set
+`REDSHIFT_CONFIG_DIR` to a temporary directory.
+
+## Web Dashboard
+
+Use the hosted dashboard at
+[redshiftapp.com/admin](https://redshiftapp.com/admin), or run it locally:
+
+```bash
+bun install
+bun run dev:web
+# open the local URL printed by Vite
+```
+
+The web app supports browser-based Nostr login (for example, NIP-07 extensions)
+and uses the same shared crypto package as the CLI.
+
+## Local Development
+
+Prerequisite: [Bun](https://bun.sh) 1.x. The repo is a Bun workspace with the CLI,
+web app, and shared packages.
+
+```bash
+# Install all workspace dependencies
+bun install
+
+# Run the CLI from source
+bun run dev -- --help
+bun run dev -- login
+
+# Run the web app
+bun run dev:web
+
+# Build
+bun run build:web
+bun run build:cli
+bun run build
+
+# Test/check
+bun run test:crypto
+bun run test:cli
+bun run test:web
+bun run test:all
+bun run typecheck:web
+bun run lint
+```
+
+## Documentation
+
+- [CLI reference](cli/README.md)
+- [Architecture](docs/architecture.md)
+- [Demo walkthrough](docs/demo-walkthrough.md)
+- [Relay deployment](relay/README.md)
+- [OpenClaw skill](skills/redshift/SKILL.md)
+
+## Project Structure
+
+```text
+redshift/
+├── cli/                  # Bun CLI source and tests
+├── web/                  # SvelteKit web dashboard and tests
+├── packages/crypto/      # Shared NIP-59, Nostr, and .env helpers
+├── packages/rate-limiter/# Shared relay rate limiting/backoff helpers
+├── relay/                # Managed Redshift relay deployment assets
+├── docs/                 # Architecture, demos, and plans
+└── dist/                 # Local build output
+```
+
+## OpenClaw Skill
 
 If you use [OpenClaw](https://openclaw.ai), install the Redshift skill for
 natural-language secret management:
@@ -32,115 +142,27 @@ natural-language secret management:
 clawhub install redshift
 ```
 
-## Quick Start
+## Upgrading
 
 ```bash
-
-# Login with your Nostr identity
-redshift login
-
-# Set up a project (creates redshift.yaml)
-redshift setup
-
-# Add secrets
-redshift secrets set API_KEY sk-xxx
-
-# Run with secrets injected
-redshift run -- npm start
-```
-
-### Project Setup
-
-The `redshift setup` command creates a `redshift.yaml` file in your project
-directory:
-
-```yaml
-project: my-project # Project slug (immutable, lowercase with hyphens)
-environment: development # Environment slug
-relays:
-  - wss://relay.damus.io
-```
-
-You can also specify options directly:
-
-```bash
-redshift setup --project my-project --environment production
-```
-
-## Web Dashboard
-
-Visit [redshiftapp.com/admin](https://redshiftapp.com/admin) to manage secrets
-visually.
-
-When creating a project in the web UI, you'll set:
-
-- **Display Name** - Human-readable name (can be changed later)
-- **Slug** - Immutable identifier used by the CLI (lowercase, hyphens only)
-
-## Development
-
-```bash
-# Install dependencies
-bun install
-cd web && bun install
-
-# Run CLI in dev mode
-bun run dev
-
-# Run web dev server
-bun run dev:web
-
-# Run tests
-bun run test:all
-
-# Build everything
-bun run build:all
-```
-
-## Project Structure
-
-```
-redshift/
-├── cli/              # CLI source code
-├── web/              # SvelteKit web dashboard
-├── packages/crypto/  # Shared NIP-59 Gift Wrap encryption
-├── dist/             # Built binaries
-└── .github/          # CI/CD workflows
+redshift upgrade
 ```
 
 ## Release
 
-Releases are automated using
-[Release Please](https://github.com/googleapis/release-please).
+Releases are automated with
+[Release Please](https://github.com/googleapis/release-please). Use
+[Conventional Commits](https://www.conventionalcommits.org/) on `main`:
 
-When you push commits to `main` with
-[Conventional Commits](https://www.conventionalcommits.org/) format:
+- `feat:` - new features, minor version
+- `fix:` - bug fixes, patch version
+- `feat!:` or `BREAKING CHANGE:` - major version
 
-- `feat:` - New features (bumps minor version)
-- `fix:` - Bug fixes (bumps patch version)
-- `feat!:` or `BREAKING CHANGE:` - Breaking changes (bumps major version)
-
-Release Please will automatically:
-
-1. Create/update a release PR with changelog
-2. When merged, create a GitHub release with tag
-3. GitHub Actions builds binaries and attaches them to the release
-
-### Manual Release (if needed)
+Manual release preparation:
 
 ```bash
-# Prepare release (tests + builds)
 bun run release:prepare
-
-# Check built artifacts
 bun run release:list
-```
-
-## Upgrading
-
-```bash
-# Check for updates and upgrade
-redshift upgrade
 ```
 
 ## License

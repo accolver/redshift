@@ -1,38 +1,42 @@
-# sv
+# Redshift Web Dashboard
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+SvelteKit dashboard for managing Redshift projects and secrets in the browser.
+It shares crypto and relay primitives with the CLI through workspace packages.
 
-## Creating a project
+## Development
 
-If you're seeing this, you've probably already done this step. Congrats!
+From the repository root:
 
-```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
+```bash
+bun install
+bun run dev:web
 ```
 
-## Developing
+Or from this directory:
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+```bash
+bun install
+bun run dev
 ```
 
-## Building
+Open the local URL printed by Vite.
 
-To create a production version of your app:
+## Build and Check
 
-```sh
-npm run build
+```bash
+# From repo root
+bun run build:web
+bun run typecheck:web
+bun run test:web
+
+# Or from web/
+bun run build
+bun run check
+bun run test
 ```
 
-You can preview the production build with `npm run preview`.
+## Notes
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+- Browser login depends on a Nostr signer such as a NIP-07 extension.
+- Secrets are encrypted client-side before relay publish.
+- Shared event types and NIP-59 helpers live in `../packages/crypto`.
