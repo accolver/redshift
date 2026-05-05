@@ -272,14 +272,29 @@ cd cli && bun test        # CLI / Bun test
    - Tests live in `web/tests/` and `cli/tests/`
    - Run tests with `bun test` in respective directories
 
+7. **End-to-End Tests Required** - New capabilities MUST include end-to-end coverage in addition to unit tests:
+   - Write E2E tests for every new user-facing workflow, protocol integration, and external-tool interaction.
+   - Prefer real local dependencies over mocks when safe and deterministic. Example: NIP-46 bunker work should include a `nak`-backed E2E test that generates a fresh key, starts a local relay, connects through bunker auth, and exercises supported signer capabilities.
+   - Put CLI E2E tests under `cli/tests/integration/` and keep them isolated with temporary ports/config directories.
+   - E2E tests must clean up subprocesses, relay connections, temp files, and secrets in `afterEach`/`finally` paths.
+   - Run CLI E2E tests with:
+     ```bash
+     cd cli && bun test ./tests/integration
+     ```
+   - Run a single CLI E2E test with:
+     ```bash
+     cd cli && bun test ./tests/integration/<name>.test.ts
+     ```
+   - If an E2E test depends on a local binary (for example `nak`), verify the binary is installed and document the command used by the test. The NIP-46 `nak` E2E test expects `nak` on `PATH`; CI installs it with `go install github.com/fiatjaf/nak@v0.19.7`.
+
 ### TypeScript Standards
 
-7. **No `any` Type** - Never use TypeScript's `any`. Always define proper types:
+8. **No `any` Type** - Never use TypeScript's `any`. Always define proper types:
    - Create interfaces/types in `web/src/lib/types/` or inline
    - Use `unknown` with type guards if truly uncertain
    - Leverage generics for flexible typing
 
-8. **Implicit Return Types** - Prefer implicit return types over explicit ones.
+9. **Implicit Return Types** - Prefer implicit return types over explicit ones.
    Let TypeScript infer return types unless:
    - The function is part of a public API
    - The inferred type is too complex or unclear
@@ -299,13 +314,13 @@ cd cli && bun test        # CLI / Bun test
 
 ### Shared Code & Monorepo
 
-9. **Use Shared Packages** - Code used by both CLI and Web MUST live in
+10. **Use Shared Packages** - Code used by both CLI and Web MUST live in
    `/packages/`:
    - `@redshift/crypto` - NIP-59 Gift Wrap, encryption, types
    - If duplicating code between `cli/` and `web/`, STOP and extract to a shared
      package
 
-10. **Prefer Existing Nostr Libraries** - Before implementing Nostr primitives:
+11. **Prefer Existing Nostr Libraries** - Before implementing Nostr primitives:
     - Check `nostr-tools` first (signing, encryption, relay protocol)
     - Use `applesauce-core` for Web EventStore patterns
     - Use `@redshift/crypto` for Gift Wrap operations
@@ -313,7 +328,7 @@ cd cli && bun test        # CLI / Bun test
 
 ### Error Handling
 
-11. **Use Typed Errors** - All relay and crypto operations use custom error
+12. **Use Typed Errors** - All relay and crypto operations use custom error
     types from `cli/src/lib/errors.ts`:
     - `RelayError` - connection/query/publish failures
     - `DecryptionError` - NIP-59 unwrap failures
@@ -321,7 +336,7 @@ cd cli && bun test        # CLI / Bun test
     - `ConfigError` - missing/invalid configuration
     - `NotConnectedError` - operation requires relay connection
 
-12. **Never Swallow Errors Silently** - Exceptions:
+13. **Never Swallow Errors Silently** - Exceptions:
     - Empty catch blocks OK when decrypting Gift Wraps in loops (events may
       belong to other users)
     - Use `isRetryableError()` for retry decisions
@@ -329,12 +344,12 @@ cd cli && bun test        # CLI / Bun test
 
 ### Nostr Protocol
 
-13. **Gift Wrap with Type Tag** - All secret events use NIP-59 with custom tag:
+14. **Gift Wrap with Type Tag** - All secret events use NIP-59 with custom tag:
     ```typescript
     ["t", "redshift-secrets"]; // Required on outer Gift Wrap
     ```
 
-14. **d-tag Format** - Secret bundles use: `{projectId}|{environment}`
+15. **d-tag Format** - Secret bundles use: `{projectId}|{environment}`
 
-15. **Rate Limiting Required** - All relay operations use rate limiting and
+16. **Rate Limiting Required** - All relay operations use rate limiting and
     exponential backoff by default (see `RateLimiter` class)

@@ -71,7 +71,7 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 
 	// Connect to relays
 	const relays = projectConfig?.relays || (await getRelays());
-	const manager = new SecretManager(auth.privateKey);
+	const manager = new SecretManager(auth.privateKey ?? auth.signer!);
 	manager.connect(relays);
 
 	try {
@@ -149,7 +149,7 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 				process.exit(1);
 		}
 	} finally {
-		manager.disconnect();
+		await manager.close();
 	}
 }
 

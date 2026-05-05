@@ -396,18 +396,11 @@ describe('Keychain edge cases', () => {
 			},
 		});
 
-		// getAuth should still find nsec from keychain (it checks nsec sources first)
+		// Explicit bunker auth in config takes precedence over an old keychain nsec.
 		const result = await getAuth();
 
-		if (available) {
-			// If keychain is available, nsec from keychain takes precedence
-			expect(result?.method).toBe('nsec');
-			expect(result?.source).toBe('keychain');
-		} else {
-			// If no keychain, bunker from config
-			expect(result?.method).toBe('bunker');
-			expect(result?.source).toBe('config');
-		}
+		expect(result?.method).toBe('bunker');
+		expect(result?.source).toBe('config');
 	});
 
 	it('handles rapid auth checks without race conditions', async () => {

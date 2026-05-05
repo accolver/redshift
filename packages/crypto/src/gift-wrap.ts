@@ -376,11 +376,18 @@ export async function unwrapGiftWrapWithSigner(
 	// Decrypt the outer layer (Gift Wrap -> Seal)
 	// This uses the signer because we need our private key to decrypt from ephemeral
 	const sealJson = await decryptFn(ephemeralPubkey, giftWrap.content);
-	let seal: { pubkey: string; content: string };
+	let seal: { id?: string; pubkey: string; created_at?: number; kind?: number; tags?: string[][]; content: string; sig?: string };
 	try {
 		seal = JSON.parse(sealJson);
 	} catch {
 		throw new Error('Failed to decrypt seal: invalid JSON content');
+	}
+
+	if (!seal.id || !seal.pubkey || !seal.sig || seal.kind !== 13) {
+		throw new Error('Invalid seal event: missing id, pubkey, sig, or kind');
+	}
+	if (!verifyEvent(seal as NostrToolsEvent)) {
+		throw new Error('Invalid seal event: signature verification failed');
 	}
 
 	// Decrypt the inner layer (Seal -> Rumor)
@@ -397,6 +404,10 @@ export async function unwrapGiftWrapWithSigner(
 		rumor = JSON.parse(rumorJson);
 	} catch {
 		throw new Error('Failed to decrypt rumor: invalid JSON content');
+	}
+
+	if (rumor.pubkey !== seal.pubkey) {
+		throw new Error('Invalid rumor: pubkey does not match seal author');
 	}
 
 	// Verify the rumor kind matches expected secret bundle kind

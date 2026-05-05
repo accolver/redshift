@@ -106,7 +106,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
 
 	// Connect to relays
 	const relays = projectConfig?.relays || (await getRelays());
-	const manager = new SecretManager(auth.privateKey);
+	const manager = new SecretManager(auth.privateKey ?? auth.signer!);
 	manager.connect(relays);
 
 	try {
@@ -143,7 +143,7 @@ export async function runCommand(options: RunOptions): Promise<void> {
 		});
 
 		// Wrap the child process in a Promise so we can await its completion
-		// before disconnecting from relays. Without this, manager.disconnect()
+		// before disconnecting from relays. Without this, manager.close()
 		// in the finally block would fire while the child is still running.
 		const exitCode = await new Promise<number>((resolve, reject) => {
 			child.on('error', (err) => {
@@ -155,10 +155,10 @@ export async function runCommand(options: RunOptions): Promise<void> {
 			});
 		});
 
-		manager.disconnect();
+		await manager.close();
 		process.exit(exitCode);
 	} catch (error) {
-		manager.disconnect();
+		await manager.close();
 		if (error instanceof Error && error.message.startsWith('Failed to start command:')) {
 			console.error(error.message);
 		} else {
@@ -189,7 +189,7 @@ export async function runDryCommand(options: RunOptions): Promise<void> {
 
 	// Connect to relays
 	const relays = projectConfig?.relays || (await getRelays());
-	const manager = new SecretManager(auth.privateKey);
+	const manager = new SecretManager(auth.privateKey ?? auth.signer!);
 	manager.connect(relays);
 
 	try {
@@ -211,6 +211,6 @@ export async function runDryCommand(options: RunOptions): Promise<void> {
 		console.log('');
 		console.log(`Would execute: ${options.command.join(' ')}`);
 	} finally {
-		manager.disconnect();
+		await manager.close();
 	}
 }

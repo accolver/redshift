@@ -5,6 +5,7 @@
  * L4: Integration-Contractor - NIP-59 protocol compliance
  */
 
+import type { EventTemplate, VerifiedEvent } from 'nostr-tools/core';
 import { getPublicKey } from 'nostr-tools/pure';
 import {
 	createDTag,
@@ -12,14 +13,28 @@ import {
 	createTombstone,
 	parseDTag,
 	unwrapGiftWrap,
+	unwrapGiftWrapWithSigner,
 	unwrapSecrets as unwrapSecretsFromEvent,
 	wrapSecrets as wrapSecretsToEvent,
+	wrapSecretsWithSigner,
 } from './crypto';
-import type { UnwrapResult } from './crypto';
+import type { AsyncGiftWrapResult, GiftWrapResult, UnwrapResult } from './crypto';
 import { NotConnectedError } from './errors';
 import type { RelayPool } from './relay';
 import { createRelayPool, filterGiftWraps } from './relay';
-import type { GiftWrapResult, NostrEvent, SecretBundle } from './types';
+import { NostrKinds, type NostrEvent, type SecretBundle } from './types';
+
+/**
+ * Signer abstraction for auth methods that do not expose a raw private key
+ * (NIP-46 bunker now, NIP-07-style signers later).
+ */
+export interface SecretManagerSigner {
+	getPublicKey(): string;
+	signEvent(event: EventTemplate): Promise<VerifiedEvent | NostrEvent>;
+	nip44Encrypt(pubkey: string, plaintext: string): Promise<string>;
+	nip44Decrypt(pubkey: string, ciphertext: string): Promise<string>;
+	close?(): Promise<void>;
+}
 
 /**
  * Cached secret entry with metadata
@@ -56,7 +71,8 @@ const FETCH_ALL_CACHE_TTL_MS = 5000;
  * encryption, relay communication, and state management.
  */
 export class SecretManager {
-	private privateKey: Uint8Array;
+	private privateKey: Uint8Array | null = null;
+	private signer: SecretManagerSigner | null = null;
 	private publicKey: string;
 	private pool: RelayPool | null = null;
 
@@ -66,9 +82,14 @@ export class SecretManager {
 	/** Short-lived cache for fetchAllSecrets Promise deduplication */
 	private fetchAllCache: FetchAllCache | null = null;
 
-	constructor(privateKey: Uint8Array) {
-		this.privateKey = privateKey;
-		this.publicKey = getPublicKey(privateKey);
+	constructor(auth: Uint8Array | SecretManagerSigner) {
+		if (auth instanceof Uint8Array) {
+			this.privateKey = auth;
+			this.publicKey = getPublicKey(auth);
+		} else {
+			this.signer = auth;
+			this.publicKey = auth.getPublicKey();
+		}
 	}
 
 	/**
@@ -98,15 +119,28 @@ export class SecretManager {
 	}
 
 	/**
-	 * Disconnect from relays and zero private key memory.
-	 * This instance is terminal after disconnect — the key cannot be restored.
+	 * Close relay/signer resources and zero private key memory.
+	 * This instance is terminal after close — the key cannot be restored.
 	 */
-	disconnect(): void {
+	async close(): Promise<void> {
 		if (this.pool) {
 			this.pool.close();
 			this.pool = null;
 		}
-		this.privateKey.fill(0);
+		if (this.privateKey) {
+			this.privateKey.fill(0);
+		}
+		if (this.signer?.close) {
+			await this.signer.close();
+		}
+	}
+
+	/**
+	 * Disconnect from relays and zero private key memory.
+	 * Prefer awaiting close() when command lifecycle permits it.
+	 */
+	disconnect(): void {
+		void this.close();
 	}
 
 	/**
@@ -119,22 +153,45 @@ export class SecretManager {
 	/**
 	 * Wrap secrets into a Gift Wrap event
 	 */
-	wrapSecrets(secrets: SecretBundle, dTag: string): GiftWrapResult {
-		return wrapSecretsToEvent(secrets, this.privateKey, dTag);
+	async wrapSecrets(secrets: SecretBundle, dTag: string): Promise<GiftWrapResult | AsyncGiftWrapResult> {
+		if (this.privateKey) {
+			return wrapSecretsToEvent(secrets, this.privateKey, dTag);
+		}
+		if (!this.signer) {
+			throw new Error('No signing method available');
+		}
+		return wrapSecretsWithSigner(
+			secrets,
+			this.publicKey,
+			dTag,
+			(pubkey, plaintext) => this.signer!.nip44Encrypt(pubkey, plaintext),
+			async (event) => this.signer!.signEvent(event),
+		);
 	}
 
 	/**
 	 * Unwrap a Gift Wrap event to retrieve secrets
 	 */
-	unwrapSecrets(event: NostrEvent): SecretBundle {
-		return unwrapSecretsFromEvent(event, this.privateKey);
+	async unwrapSecrets(event: NostrEvent): Promise<SecretBundle> {
+		if (this.privateKey) {
+			return unwrapSecretsFromEvent(event, this.privateKey);
+		}
+		return (await this.unwrapWithMetadata(event)).secrets;
 	}
 
 	/**
 	 * Unwrap a Gift Wrap event with full metadata
 	 */
-	unwrapWithMetadata(event: NostrEvent): UnwrapResult {
-		return unwrapGiftWrap(event, this.privateKey);
+	async unwrapWithMetadata(event: NostrEvent): Promise<UnwrapResult> {
+		if (this.privateKey) {
+			return unwrapGiftWrap(event, this.privateKey);
+		}
+		if (!this.signer) {
+			throw new Error('No decryption method available');
+		}
+		return unwrapGiftWrapWithSigner(event, (pubkey, ciphertext) =>
+			this.signer!.nip44Decrypt(pubkey, ciphertext),
+		);
 	}
 
 	/**
@@ -216,7 +273,7 @@ export class SecretManager {
 			}
 
 			try {
-				const result = unwrapGiftWrap(gw, this.privateKey);
+				const result = await this.unwrapWithMetadata(gw);
 
 				// Cache the successful decryption
 				this.decryptionCache.set(gw.id, {
@@ -312,7 +369,7 @@ export class SecretManager {
 		}
 
 		const dTag = createDTag(projectId, environment);
-		const { event } = this.wrapSecrets(secrets, dTag);
+		const { event } = await this.wrapSecrets(secrets, dTag);
 
 		await this.pool.publish(event);
 
@@ -332,7 +389,7 @@ export class SecretManager {
 		}
 
 		const dTag = createDTag(projectId, environment);
-		const { event } = createTombstone(this.privateKey, dTag);
+		const { event } = await this.wrapSecrets({}, dTag);
 
 		await this.pool.publish(event);
 
@@ -350,10 +407,30 @@ export class SecretManager {
 			throw new NotConnectedError();
 		}
 
-		const deletion = createDeletionEvent(eventIds, this.privateKey, reason);
+		const deletion = await this.createDeletionEvent(eventIds, reason);
 		await this.pool.publish(deletion);
 
 		return deletion;
+	}
+
+	/**
+	 * Create a NIP-09 deletion request using the active auth method.
+	 */
+	private async createDeletionEvent(eventIds: string[], reason?: string): Promise<NostrEvent> {
+		if (this.privateKey) {
+			return createDeletionEvent(eventIds, this.privateKey, reason);
+		}
+		if (!this.signer) {
+			throw new Error('No signing method available');
+		}
+		const tags: string[][] = [...eventIds.map((id) => ['e', id]), ['k', String(NostrKinds.GIFT_WRAP)]];
+		const signed = await this.signer.signEvent({
+			kind: 5,
+			content: reason ?? '',
+			tags,
+			created_at: Math.floor(Date.now() / 1000),
+		});
+		return signed as NostrEvent;
 	}
 }
 

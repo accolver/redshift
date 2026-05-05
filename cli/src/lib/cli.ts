@@ -633,6 +633,7 @@ export function createCLI(version: string): CLI {
 	cli.registerCommand(createRunCommand());
 	cli.registerCommand(createSecretsCommand());
 	cli.registerCommand(createServeCommand());
+	cli.registerCommand(createBunkerCommand());
 	cli.registerCommand(createConfigureCommand());
 	cli.registerCommand(createMeCommand());
 	cli.registerCommand(createUpgradeCommand());
@@ -685,6 +686,57 @@ function createLoginCommand(): CommandDef {
 						type: 'boolean',
 						short: 'y',
 						description: 'proceed without confirmation',
+					},
+				},
+			},
+		},
+	};
+}
+
+function createBunkerCommand(): CommandDef {
+	return {
+		name: 'bunker',
+		description: 'Run a local NIP-46 bunker prototype',
+		examples: [
+			'redshift bunker start --insecure-plaintext-keys',
+			'redshift bunker start --insecure-plaintext-keys --relay wss://relay.damus.io,wss://nos.lol',
+			'redshift bunker status',
+		],
+		flags: {
+			relay: {
+				type: 'string',
+				description: 'Comma-separated relay URLs for NIP-46 communication',
+				placeholder: 'urls',
+			},
+			'insecure-plaintext-keys': {
+				type: 'boolean',
+				description: 'Acknowledge prototype local keys will be stored in a 0600 plaintext file',
+			},
+		},
+		subcommands: {
+			start: {
+				name: 'start',
+				description: 'Start the local bunker prototype',
+				flags: {
+					relay: {
+						type: 'string',
+						description: 'Comma-separated relay URLs for NIP-46 communication',
+						placeholder: 'urls',
+					},
+					'insecure-plaintext-keys': {
+						type: 'boolean',
+						description: 'Acknowledge prototype local keys will be stored in a 0600 plaintext file',
+					},
+				},
+			},
+			status: {
+				name: 'status',
+				description: 'Show local bunker prototype status and connection URI',
+				flags: {
+					relay: {
+						type: 'string',
+						description: 'Override comma-separated relay URLs in displayed connection URI',
+						placeholder: 'urls',
 					},
 				},
 			},

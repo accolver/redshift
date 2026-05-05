@@ -15,6 +15,8 @@ export {
 	unwrapSecrets,
 	unwrapGiftWrap,
 	createTombstone,
+	wrapSecretsWithSigner,
+	unwrapGiftWrapWithSigner,
 	isRedshiftSecretsEvent,
 	getRedshiftSecretsFilter,
 	toNostrEvent,
@@ -34,6 +36,7 @@ export type {
 	SecretBundle,
 	GiftWrapResult,
 	UnwrapResult,
+	AsyncGiftWrapResult,
 } from '@redshift/crypto';
 
 // Import for local use
@@ -57,8 +60,8 @@ export function createDeletionEvent(
 	privateKey: Uint8Array,
 	reason?: string,
 ): NostrEvent {
-	// Create tags with 'e' for each event ID to delete
-	const tags: string[][] = eventIds.map((id) => ['e', id]);
+	// Create tags with 'e' for each Gift Wrap event ID and 'k' to scope deletion to NIP-59 Gift Wraps.
+	const tags: string[][] = [...eventIds.map((id) => ['e', id]), ['k', String(NostrKinds.GIFT_WRAP)]];
 
 	// Create and sign the deletion event (kind 5)
 	const event = finalizeEvent(

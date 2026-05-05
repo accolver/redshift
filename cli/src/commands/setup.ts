@@ -38,7 +38,7 @@ export async function setupCommand(options: SetupOptions): Promise<void> {
 
 	// Connect to relays and fetch existing projects
 	const relays = await getRelays();
-	const manager = new SecretManager(auth.privateKey);
+	const manager = new SecretManager(auth.privateKey ?? auth.signer!);
 	manager.connect(relays);
 
 	let projectId: string;
@@ -128,7 +128,7 @@ export async function setupCommand(options: SetupOptions): Promise<void> {
 		console.log('  redshift secrets set <KEY> <VALUE>   Set a secret');
 		console.log('  redshift secrets list   List all secrets');
 	} finally {
-		manager.disconnect();
+		await manager.close();
 	}
 }
 

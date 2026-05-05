@@ -566,6 +566,32 @@ describe('CLI Framework', () => {
 		});
 	});
 
+	describe('parse() - bunker command', () => {
+		it('parses bunker start with explicit plaintext-key acknowledgement', () => {
+			const result = cli.parse([
+				'bunker',
+				'start',
+				'--insecure-plaintext-keys',
+				'--relay',
+				'wss://relay.test,wss://relay2.test',
+			]);
+
+			expect(result.command).toBe('bunker');
+			expect(result.subcommand).toBe('start');
+			expect(result.flags['insecure-plaintext-keys']).toBe(true);
+			expect(result.flags.relay).toBe('wss://relay.test,wss://relay2.test');
+		});
+
+		it('parses bunker status without exposing secret flags', () => {
+			const result = cli.parse(['bunker', 'status', '--relay', 'wss://relay.test']);
+
+			expect(result.command).toBe('bunker');
+			expect(result.subcommand).toBe('status');
+			expect(result.flags.relay).toBe('wss://relay.test');
+			expect(result.flags['insecure-plaintext-keys']).toBeUndefined();
+		});
+	});
+
 	describe('parse() - upgrade command', () => {
 		it('parses upgrade with no args', () => {
 			const result = cli.parse(['upgrade']);

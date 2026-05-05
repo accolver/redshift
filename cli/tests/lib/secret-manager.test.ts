@@ -6,19 +6,86 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { generateSecretKey } from 'nostr-tools/pure';
+import { nip44 } from 'nostr-tools';
+import type { EventTemplate } from 'nostr-tools/core';
+import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import {
 	SecretManager,
 	extractProjects,
 	injectSecrets,
 	mergeSecrets,
 } from '../../src/lib/secret-manager';
-import type { SecretBundle } from '../../src/lib/types';
+import { createNip46BunkerHandler } from '../../src/lib/nip46-bunker';
+import type { NostrEvent, SecretBundle } from '../../src/lib/types';
 
 describe('SecretManager', () => {
 	// Generate test keys
 	const testPrivateKey = new Uint8Array(32);
 	crypto.getRandomValues(testPrivateKey);
+
+	function createFakeSigner(privateKey: Uint8Array) {
+		const publicKey = getPublicKey(privateKey);
+		return {
+			getPublicKey: () => publicKey,
+			signEvent: async (event: EventTemplate) => finalizeEvent(event, privateKey) as NostrEvent,
+			nip44Encrypt: async (pubkey: string, plaintext: string) => {
+				const conversationKey = nip44.v2.utils.getConversationKey(privateKey, pubkey);
+				return nip44.v2.encrypt(plaintext, conversationKey);
+			},
+			nip44Decrypt: async (pubkey: string, ciphertext: string) => {
+				const conversationKey = nip44.v2.utils.getConversationKey(privateKey, pubkey);
+				return nip44.v2.decrypt(ciphertext, conversationKey);
+			},
+		};
+	}
+
+	async function createLocalBunkerBackedSigner(userSecretKey: Uint8Array) {
+		const signerSecretKey = new Uint8Array(32).fill(9);
+		const clientSecretKey = new Uint8Array(32).fill(10);
+		const clientPubkey = getPublicKey(clientSecretKey);
+		const handler = createNip46BunkerHandler({
+			signerSecretKey,
+			userSecretKey,
+			relays: ['wss://relay.test'],
+			secret: 'connect-secret',
+		});
+		await handler.handleRequest(clientPubkey, {
+			id: 'connect-1',
+			method: 'connect',
+			params: [handler.getSignerPublicKey(), 'connect-secret'],
+		});
+		return {
+			getPublicKey: () => getPublicKey(userSecretKey),
+			signEvent: async (event: EventTemplate) => {
+				const response = await handler.handleRequest(clientPubkey, {
+					id: 'sign-1',
+					method: 'sign_event',
+					params: [JSON.stringify(event)],
+				});
+				if (!response.result) throw new Error(response.error ?? 'sign failed');
+				return JSON.parse(response.result) as NostrEvent;
+			},
+			nip44Encrypt: async (pubkey: string, plaintext: string) => {
+				const response = await handler.handleRequest(clientPubkey, {
+					id: 'encrypt-1',
+					method: 'nip44_encrypt',
+					params: [pubkey, plaintext],
+				});
+				if (!response.result) throw new Error(response.error ?? 'encrypt failed');
+				return response.result;
+			},
+			nip44Decrypt: async (pubkey: string, ciphertext: string) => {
+				const response = await handler.handleRequest(clientPubkey, {
+					id: 'decrypt-1',
+					method: 'nip44_decrypt',
+					params: [pubkey, ciphertext],
+				});
+				if (!response.result) throw new Error(response.error ?? 'decrypt failed');
+				return response.result;
+			},
+			close: async () => {},
+		};
+	}
 
 	describe('constructor', () => {
 		it('creates manager with private key', () => {
@@ -39,6 +106,38 @@ describe('SecretManager', () => {
 			const unwrapped = await manager.unwrapSecrets(wrapped.event);
 
 			expect(unwrapped).toEqual(secrets);
+		});
+
+		it('wraps and unwraps secrets through a signer without direct private key access', async () => {
+			const signerKey = generateSecretKey();
+			const manager = new SecretManager(createFakeSigner(signerKey));
+			const secrets: SecretBundle = {
+				API_KEY: 'sk_test_123',
+				DEBUG: 'true',
+			};
+
+			const wrapped = await manager.wrapSecrets(secrets, 'proj|dev');
+			const unwrapped = await manager.unwrapSecrets(wrapped.event);
+
+			expect(wrapped.event.pubkey).not.toBe(manager.getPublicKey());
+			expect(unwrapped).toEqual(secrets);
+		});
+
+		it('roundtrips secrets through a local NIP-46 bunker-backed signer', async () => {
+			const userSecretKey = generateSecretKey();
+			const manager = new SecretManager(await createLocalBunkerBackedSigner(userSecretKey));
+			const secrets: SecretBundle = {
+				API_KEY: 'sk_test_123',
+				DATABASE_URL: 'postgres://localhost/redshift',
+			};
+
+			const wrapped = await manager.wrapSecrets(secrets, 'proj|dev');
+			const unwrapped = await manager.unwrapSecrets(wrapped.event);
+
+			expect(manager.getPublicKey()).toBe(getPublicKey(userSecretKey));
+			expect(wrapped.event.pubkey).not.toBe(manager.getPublicKey());
+			expect(unwrapped).toEqual(secrets);
+			await manager.close();
 		});
 	});
 
