@@ -13,6 +13,7 @@ import { type ParsedArgs, createCLI } from './lib/cli';
 import { VERSION } from './version';
 
 // Import command handlers
+import { bunkerCommand } from './commands/bunker';
 import { loginCommand, logoutCommand } from './commands/login';
 import { runCommand } from './commands/run';
 import { type SecretsSubcommand, secretsCommand } from './commands/secrets';
@@ -98,6 +99,8 @@ async function executeCommand(parsed: ParsedArgs): Promise<void> {
 			return handleSecretsCommand(parsed);
 		case 'serve':
 			return handleServeCommand(parsed);
+		case 'bunker':
+			return handleBunkerCommand(parsed);
 		case 'configure':
 			return handleConfigureCommand(parsed.subcommand, parsed.positionals, parsed.flags);
 		case 'me':
@@ -108,6 +111,25 @@ async function executeCommand(parsed: ParsedArgs): Promise<void> {
 			console.error(`Unknown command: ${parsed.command}`);
 			process.exit(1);
 	}
+}
+
+/**
+ * Handle the bunker command
+ */
+async function handleBunkerCommand(parsed: ParsedArgs): Promise<void> {
+	const relayFlag = parsed.flags.relay;
+	const relays =
+		typeof relayFlag === 'string'
+			? relayFlag
+				.split(',')
+				.map((relay) => relay.trim())
+				.filter(Boolean)
+			: undefined;
+	await bunkerCommand({
+		subcommand: parsed.subcommand === 'status' ? 'status' : 'start',
+		relays,
+		insecurePlaintextKeys: parsed.flags['insecure-plaintext-keys'] === true,
+	});
 }
 
 /**

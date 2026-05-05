@@ -13,10 +13,12 @@ import { createInterface } from 'node:readline';
 import { npubEncode } from 'nostr-tools/nip19';
 import { getPublicKey } from 'nostr-tools/pure';
 import {
+	BunkerSecretManager,
 	connectToBunker,
 	createNostrConnectUri,
 	formatBunkerPointer,
 	isValidBunkerUrl,
+	reconnectFromBunkerAuth,
 } from '../lib/bunker';
 import {
 	type AuthResult,
@@ -28,8 +30,9 @@ import {
 	saveConfig,
 } from '../lib/config';
 import { decodeNsec, validateNsec } from '../lib/crypto';
-import { getKeychainServiceName, storeBunkerKeyInKeychain, storeNsecInKeychain } from '../lib/keychain';
+import { deleteNsecFromKeychain, getKeychainServiceName, storeBunkerKeyInKeychain, storeNsecInKeychain } from '../lib/keychain';
 import type { BunkerAuth } from '../lib/types';
+import type { SecretManagerSigner } from '../lib/secret-manager';
 
 export interface LoginOptions {
 	nsec?: string;
@@ -152,16 +155,15 @@ async function loginWithBunker(bunkerUrl: string): Promise<void> {
 		// Store client secret key in keychain if available
 		const clientKeyHex = Buffer.from(connection.clientSecretKey).toString('hex');
 		const storedInKeychain = await storeBunkerKeyInKeychain(clientKeyHex);
+		await deleteNsecFromKeychain();
 
-		// Save bunker auth (omit clientSecretKey from config if stored in keychain)
+		// Save bunker auth (omit clientSecretKey from config if stored in keychain).
+		// Do not persist the bunker URI secret; NIP-46 pairing secrets are single-use.
 		const bunkerAuth: BunkerAuth = {
 			bunkerPubkey: connection.bunkerPointer.pubkey,
 			relays: connection.bunkerPointer.relays,
 			clientSecretKey: storedInKeychain ? '' : clientKeyHex,
 		};
-		if (connection.bunkerPointer.secret) {
-			bunkerAuth.secret = connection.bunkerPointer.secret;
-		}
 		await saveBunkerAuth(bunkerAuth);
 
 		console.log('\n✓ Connected to bunker successfully!');
@@ -201,16 +203,15 @@ async function loginWithNostrConnect(): Promise<void> {
 		// Store client secret key in keychain if available
 		const clientKeyHex = Buffer.from(connection.clientSecretKey).toString('hex');
 		const storedInKeychain = await storeBunkerKeyInKeychain(clientKeyHex);
+		await deleteNsecFromKeychain();
 
-		// Save bunker auth (omit clientSecretKey from config if stored in keychain)
+		// Save bunker auth (omit clientSecretKey from config if stored in keychain).
+		// Do not persist the bunker URI secret; NIP-46 pairing secrets are single-use.
 		const bunkerAuth: BunkerAuth = {
 			bunkerPubkey: connection.bunkerPointer.pubkey,
 			relays: connection.bunkerPointer.relays,
 			clientSecretKey: storedInKeychain ? '' : clientKeyHex,
 		};
-		if (connection.bunkerPointer.secret) {
-			bunkerAuth.secret = connection.bunkerPointer.secret;
-		}
 		await saveBunkerAuth(bunkerAuth);
 
 		console.log('\n✓ Connected successfully!');
@@ -387,26 +388,54 @@ export async function tryAuth(): Promise<{
  * Check if user is logged in and return their credentials.
  * Exits with error if not logged in.
  */
-export async function requireAuth(): Promise<{
-	nsec: string;
+export interface RequiredAuth {
+	/** Present for local nsec auth */
+	nsec?: string;
+	/** User public key encoded as npub */
 	npub: string;
-	privateKey: Uint8Array;
-}> {
+	/** User public key as hex */
+	pubkey: string;
+	/** Present for local nsec auth */
+	privateKey?: Uint8Array;
+	/** Present for signer-backed auth such as NIP-46 bunker */
+	signer?: SecretManagerSigner;
+}
+
+export async function requireAuth(): Promise<RequiredAuth> {
 	const auth = await tryAuth();
 
-	if (!auth) {
-		const storedAuth = await getAuth();
-		if (!storedAuth) {
-			console.error('Not logged in. Run `redshift login` first.');
-			console.error('Or set REDSHIFT_NSEC environment variable for CI/CD.');
-		} else if (storedAuth.method !== 'nsec' || !storedAuth.nsec) {
-			console.error('Bunker auth not yet fully supported for this command.');
-			console.error('Please use nsec authentication for now.');
-		} else {
-			console.error('Invalid nsec stored in config. Please run `redshift login` again.');
-		}
+	if (auth) {
+		return { ...auth, pubkey: getPublicKey(auth.privateKey) };
+	}
+
+	const storedAuth = await getAuth();
+	if (!storedAuth) {
+		console.error('Not logged in. Run `redshift login` first.');
+		console.error('Or set REDSHIFT_NSEC or REDSHIFT_BUNKER for CI/CD.');
 		process.exit(1);
 	}
 
-	return auth;
+	if (storedAuth.method === 'bunker' && storedAuth.bunker) {
+		try {
+			const connection = await reconnectFromBunkerAuth(storedAuth.bunker, {
+				usePairingSecret: storedAuth.source === 'env',
+				onAuth: (url) => {
+					console.log('\n⚠️  Authentication required. Please visit:');
+					console.log(`   ${url}`);
+				},
+			});
+			const signer = new BunkerSecretManager(connection, storedAuth.bunker.relays);
+			return {
+				npub: npubEncode(connection.userPubkey),
+				pubkey: connection.userPubkey,
+				signer,
+			};
+		} catch (error) {
+			console.error('Failed to connect to bunker:', error);
+			process.exit(1);
+		}
+	}
+
+	console.error('Invalid nsec stored in config. Please run `redshift login` again.');
+	process.exit(1);
 }

@@ -9,6 +9,7 @@
  */
 
 import type { EventTemplate, VerifiedEvent } from 'nostr-tools/core';
+import type { BunkerAuth } from './types';
 import {
 	type BunkerPointer,
 	BunkerSigner,
@@ -40,6 +41,8 @@ export interface BunkerConnectOptions {
 	onAuth?: (url: string) => void;
 	/** Timeout for connection in ms */
 	timeout?: number;
+	/** Use a one-shot pairing secret from env auth. Never set for persisted auth. */
+	usePairingSecret?: boolean;
 }
 
 /**
@@ -91,6 +94,7 @@ export async function connectToBunker(
 
 		// Get the user's public key
 		const userPubkey = await signer.getPublicKey();
+		await signer.switchRelays();
 
 		return {
 			signer,
@@ -128,6 +132,7 @@ export async function reconnectToBunker(
 	try {
 		await signer.connect();
 		const userPubkey = await signer.getPublicKey();
+		await signer.switchRelays();
 
 		return {
 			signer,
@@ -139,6 +144,45 @@ export async function reconnectToBunker(
 		await signer.close();
 		throw error;
 	}
+}
+
+/**
+ * Convert stored bunker auth metadata into a nostr-tools BunkerPointer.
+ */
+export function bunkerAuthToPointer(auth: BunkerAuth, includeSecret = false): BunkerPointer {
+	return {
+		pubkey: auth.bunkerPubkey,
+		relays: auth.relays,
+		secret: includeSecret ? (auth.secret ?? null) : null,
+	};
+}
+
+/**
+ * Decode a hex-encoded 32-byte client secret key from config/keychain storage.
+ */
+export function decodeClientSecretKey(hexKey: string): Uint8Array {
+	if (!/^[0-9a-fA-F]{64}$/.test(hexKey)) {
+		throw new Error('Invalid bunker client secret key: expected 64 hex characters');
+	}
+	const key = new Uint8Array(32);
+	for (let i = 0; i < key.length; i++) {
+		key[i] = Number.parseInt(hexKey.slice(i * 2, i * 2 + 2), 16);
+	}
+	return key;
+}
+
+/**
+ * Reconnect from stored bunker auth metadata.
+ */
+export async function reconnectFromBunkerAuth(
+	auth: BunkerAuth,
+	options: BunkerConnectOptions = {},
+): Promise<BunkerConnection> {
+	return reconnectToBunker(
+		bunkerAuthToPointer(auth, options.usePairingSecret === true),
+		decodeClientSecretKey(auth.clientSecretKey),
+		options,
+	);
 }
 
 /**
@@ -176,7 +220,7 @@ export async function createNostrConnectUri(
 	}
 	params.set('secret', secret);
 	params.set('name', name);
-	params.set('perms', 'sign_event:1059,sign_event:30078,sign_event:5,nip44_encrypt,nip44_decrypt');
+	params.set('perms', 'get_public_key,switch_relays,sign_event:13,nip44_encrypt,nip44_decrypt');
 
 	const uri = `nostrconnect://${clientPubkey}?${params.toString()}`;
 
@@ -187,6 +231,7 @@ export async function createNostrConnectUri(
 			const signer = await BunkerSigner.fromURI(clientSecretKey, uri, {}, timeout);
 
 			const userPubkey = await signer.getPublicKey();
+			await signer.switchRelays();
 
 			// Extract bunker pointer from signer
 			const bp = signer.bp;
@@ -238,17 +283,27 @@ export class BunkerSecretManager {
 	}
 
 	/**
-	 * Encrypt content using NIP-44 via bunker
+	 * Encrypt content using NIP-44 via bunker.
 	 */
-	async encrypt(pubkey: string, plaintext: string): Promise<string> {
+	async nip44Encrypt(pubkey: string, plaintext: string): Promise<string> {
 		return this.signer.nip44Encrypt(pubkey, plaintext);
 	}
 
 	/**
-	 * Decrypt content using NIP-44 via bunker
+	 * Decrypt content using NIP-44 via bunker.
 	 */
-	async decrypt(pubkey: string, ciphertext: string): Promise<string> {
+	async nip44Decrypt(pubkey: string, ciphertext: string): Promise<string> {
 		return this.signer.nip44Decrypt(pubkey, ciphertext);
+	}
+
+	/** Backwards-compatible alias for older callers. */
+	async encrypt(pubkey: string, plaintext: string): Promise<string> {
+		return this.nip44Encrypt(pubkey, plaintext);
+	}
+
+	/** Backwards-compatible alias for older callers. */
+	async decrypt(pubkey: string, ciphertext: string): Promise<string> {
+		return this.nip44Decrypt(pubkey, ciphertext);
 	}
 
 	/**

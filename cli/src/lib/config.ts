@@ -243,16 +243,10 @@ export async function getAuth(): Promise<AuthResult | null> {
 		};
 	}
 
-	// 3. Check system keychain (most secure for nsec)
-	const keychainNsec = await getNsecFromKeychain();
-	if (keychainNsec) {
-		return { method: 'nsec', nsec: keychainNsec, source: 'keychain' };
-	}
-
-	// 4. Check config file
+	// 3. Check config for explicit bunker auth before falling back to keychain nsec.
+	// This prevents a previous local nsec from silently overriding a bunker login.
 	const config = await loadConfig();
 
-	// Prefer bunker if configured
 	if (config.authMethod === 'bunker' && config.bunker) {
 		// Try to retrieve client key from keychain if not in config
 		if (!config.bunker.clientSecretKey) {
@@ -266,6 +260,12 @@ export async function getAuth(): Promise<AuthResult | null> {
 			}
 		}
 		return { method: 'bunker', bunker: config.bunker, source: 'config' };
+	}
+
+	// 4. Check system keychain (most secure for nsec)
+	const keychainNsec = await getNsecFromKeychain();
+	if (keychainNsec) {
+		return { method: 'nsec', nsec: keychainNsec, source: 'keychain' };
 	}
 
 	// Fall back to nsec in config file
