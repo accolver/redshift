@@ -1,11 +1,60 @@
 <script lang="ts">
-import { page } from '$app/state';
-import { onMount, untrack } from 'svelte';
-
 import { goto } from '$app/navigation';
-import { getAuthState, supportsEncryption } from '$lib/stores/auth.svelte';
+import { page } from '$app/state';
+import {
+	ArrowDownAZ,
+	ArrowUpAZ,
+	ArrowUpDown,
+	Check,
+	ChevronDown,
+	Circle,
+	CircleCheck,
+	CircleDot,
+	Clipboard,
+	Clock,
+	Download,
+	Ellipsis,
+	Eye,
+	EyeOff,
+	GitBranch,
+	LoaderCircle,
+	Plus,
+	Search,
+	Trash2,
+	TriangleAlert,
+	Upload,
+} from '@lucide/svelte';
+import { onMount, untrack } from 'svelte';
+import { flip } from 'svelte/animate';
+import { fade, slide } from 'svelte/transition';
+import { Motion } from 'svelte-motion';
+
+import AddEnvironmentModal from '$lib/components/AddEnvironmentModal.svelte';
+import CreateProjectModal from '$lib/components/CreateProjectModal.svelte';
+import ExportSecretsModal from '$lib/components/ExportSecretsModal.svelte';
+import ImportSecretsModal from '$lib/components/ImportSecretsModal.svelte';
+import MultiEnvSaveModal from '$lib/components/MultiEnvSaveModal.svelte';
+import { Button } from '$lib/components/ui/button';
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from '$lib/components/ui/dialog';
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from '$lib/components/ui/dropdown-menu';
+import { Input } from '$lib/components/ui/input';
+import { getAuthState, isAuthRestorationAttempted, supportsEncryption } from '$lib/stores/auth.svelte';
 import { deleteEnvironment, deleteProject, getProjectsState } from '$lib/stores/projects.svelte';
 import {
+	clearSaveError,
 	deleteSecret,
 	getMissingSecretsState,
 	getSecretsState,
@@ -14,7 +63,7 @@ import {
 	subscribeToSecrets,
 	unsubscribeFromSecrets,
 } from '$lib/stores/secrets.svelte';
-import type { Environment } from '$lib/types/nostr';
+import type { Environment, Secret } from '$lib/types/nostr';
 import { fuzzyMatch } from '$lib/utils/search';
 
 // Get project slug and environment from route params
@@ -574,10 +623,7 @@ function handleKeydown(e: KeyboardEvent) {
 	}
 }
 
-async function handleImportSecrets(
-	importedSecrets: import('$lib/types/nostr').Secret[],
-	mode: 'merge' | 'replace',
-) {
+async function handleImportSecrets(importedSecrets: Secret[], mode: 'merge' | 'replace') {
 	const auth = getAuthState();
 	if (!auth.isConnected || !auth.pubkey) {
 		console.error('Must be connected to import secrets');
