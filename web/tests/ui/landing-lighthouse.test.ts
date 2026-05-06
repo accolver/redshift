@@ -36,7 +36,9 @@ describe('landing page Lighthouse hygiene', () => {
 		const headers = readWebFile('_headers');
 
 		expect(headers).toContain('Content-Security-Policy:');
-		expect(headers).toContain("script-src 'self'");
+		expect(headers).toContain("script-src 'self' https://static.cloudflareinsights.com");
+		expect(headers).toContain("style-src 'self' 'unsafe-inline'");
+		expect(headers).toContain('https://cloudflareinsights.com');
 		expect(headers).toContain("require-trusted-types-for 'script'");
 		expect(headers).toContain('X-Robots-Tag: index, follow');
 		expect(headers).toContain('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
