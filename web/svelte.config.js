@@ -10,6 +10,22 @@ const config = {
 	preprocess: vitePreprocess(),
 
 	kit: {
+		csp: {
+			mode: 'auto',
+			directives: {
+				'default-src': ['self'],
+				'base-uri': ['self'],
+				'object-src': ['none'],
+				'script-src': ['self'],
+				'style-src': ['self', 'unsafe-inline'],
+				'font-src': ['self'],
+				'connect-src': ['self', 'wss:', 'https://relay.redshiftapp.com'],
+				'img-src': ['self', 'data:', 'https:'],
+				'form-action': ['self'],
+				'frame-ancestors': ['none'],
+				'upgrade-insecure-requests': true
+			}
+		},
 		adapter: useCloudflare
 			? adapterCloudflare()
 			: adapterStatic({

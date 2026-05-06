@@ -1,5 +1,10 @@
 <script lang="ts">
-const { data } = $props();
+import { Badge } from '$lib/components/ui/badge';
+import { Button } from '$lib/components/ui/button';
+import { ArrowLeft, Calendar, Check, Clock, Link } from '@lucide/svelte';
+import type { PageData } from './$types';
+
+const { data }: { data: PageData } = $props();
 const post = $derived(data.post);
 
 let copied = $state(false);

@@ -95,13 +95,8 @@ export async function syncSecretsToManagedRelay(): Promise<{ synced: number; err
 	let synced = 0;
 	let errors = 0;
 
-	// Get all events from the EventStore
-	// Gift-wrapped secrets (kind 1059) and Redshift app data (kind 30078)
-	const allEvents = eventStore.database.getAll();
-
-	const secretEvents = allEvents.filter(
-		(event) => event.kind === 1059 || event.kind === REDSHIFT_KIND,
-	);
+	// Get all gift-wrapped secrets (kind 1059) and Redshift app data (kind 30078)
+	const secretEvents = eventStore.database.getByFilters([{ kinds: [1059, REDSHIFT_KIND] }]);
 
 	console.debug(`Syncing ${secretEvents.length} events to managed relay...`);
 

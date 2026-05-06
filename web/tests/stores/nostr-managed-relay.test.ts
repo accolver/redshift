@@ -27,7 +27,10 @@ vi.mock('applesauce-core', () => {
 				mockEvents.push(event);
 			}
 			database = {
-				getAll: () => mockEvents,
+				getByFilters: (filters: { kinds?: number[] }[]) =>
+					mockEvents.filter((event) =>
+						filters.some((filter) => !filter.kinds || filter.kinds.includes(event.kind)),
+					),
 			};
 			__clearMockEvents() {
 				mockEvents.length = 0;
