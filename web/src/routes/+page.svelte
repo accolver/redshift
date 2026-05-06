@@ -103,7 +103,7 @@ async function copyInstallCommand() {
 							<span class="text-tokyo-green">$</span>
 							<span class="text-foreground/80"> redshift login</span>
 						</div>
-						<div class="text-foreground/60">
+						<div class="text-foreground/75">
 							<span class="text-tokyo-cyan">?</span> Select authentication method
 						</div>
 						<div class="pl-4 text-tokyo-blue">
@@ -119,7 +119,7 @@ async function copyInstallCommand() {
 							<span class="text-tokyo-green">$</span>
 							<span class="text-foreground/80"> redshift run -- npm start</span>
 						</div>
-						<div class="text-foreground/60">
+						<div class="text-foreground/75">
 							<span class="text-tokyo-cyan">info</span> Fetching secrets for
 							<span class="text-tokyo-purple">my-app/production</span>...
 						</div>
@@ -160,7 +160,7 @@ async function copyInstallCommand() {
 					Built for developers who
 					<span class="gradient-text">value sovereignty</span>
 				</h2>
-				<p class="mx-auto max-w-2xl text-foreground/60">
+				<p class="mx-auto max-w-2xl text-foreground/75">
 					Redshift combines the ease of traditional secret managers with the security and freedom of
 					decentralized infrastructure.
 				</p>
@@ -177,7 +177,7 @@ async function copyInstallCommand() {
 						<Shield class="size-6" />
 					</div>
 					<h3 class="mb-2 text-lg font-semibold">Client-Side Encryption</h3>
-					<p class="text-sm text-foreground/60">
+					<p class="text-sm text-foreground/75">
 						Your secrets never leave your device unencrypted. We use NIP-59 Gift Wrap for
 						state-of-the-art encryption.
 					</p>
@@ -193,7 +193,7 @@ async function copyInstallCommand() {
 						<Terminal class="size-6" />
 					</div>
 					<h3 class="mb-2 text-lg font-semibold">Doppler Compatible CLI</h3>
-					<p class="text-sm text-foreground/60">
+					<p class="text-sm text-foreground/75">
 						Familiar commands like <InlineCode class="text-xs">redshift run</InlineCode>.
 						Drop-in replacement for your existing workflow.
 					</p>
@@ -209,7 +209,7 @@ async function copyInstallCommand() {
 						<Globe class="size-6" />
 					</div>
 					<h3 class="mb-2 text-lg font-semibold">Censorship Resistant</h3>
-					<p class="text-sm text-foreground/60">
+					<p class="text-sm text-foreground/75">
 						Built on Nostr protocol. Your secrets are distributed across relays - no single point of
 						failure.
 					</p>
@@ -225,7 +225,7 @@ async function copyInstallCommand() {
 						<Key class="size-6" />
 					</div>
 					<h3 class="mb-2 text-lg font-semibold">Your Keys, Your Data</h3>
-					<p class="text-sm text-foreground/60">
+					<p class="text-sm text-foreground/75">
 						Use your existing Nostr identity. Export anytime. No vendor lock-in, no account
 						required.
 					</p>
@@ -241,7 +241,7 @@ async function copyInstallCommand() {
 						<Zap class="size-6" />
 					</div>
 					<h3 class="mb-2 text-lg font-semibold">Lightning Fast</h3>
-					<p class="text-sm text-foreground/60">
+					<p class="text-sm text-foreground/75">
 						Single binary distribution. No runtime dependencies. Start managing secrets in under 30
 						seconds.
 					</p>
@@ -257,7 +257,7 @@ async function copyInstallCommand() {
 						<Lock class="size-6" />
 					</div>
 					<h3 class="mb-2 text-lg font-semibold">Free Forever</h3>
-					<p class="text-sm text-foreground/60">
+					<p class="text-sm text-foreground/75">
 						Core functionality is completely free for individuals. Unlimited projects, unlimited
 						secrets.
 					</p>
@@ -275,7 +275,7 @@ async function copyInstallCommand() {
 						Get started in
 						<span class="gradient-text">seconds</span>
 					</h2>
-					<p class="mb-8 text-foreground/60">
+					<p class="mb-8 text-foreground/75">
 						Install the CLI, authenticate with your Nostr identity, and start managing secrets
 						immediately. No sign-up required.
 					</p>
@@ -289,7 +289,7 @@ async function copyInstallCommand() {
 							</div>
 							<div>
 								<p class="font-medium">Install the CLI</p>
-								<p class="text-sm text-foreground/60">One command, all platforms supported.</p>
+								<p class="text-sm text-foreground/75">One command, all platforms supported.</p>
 							</div>
 						</div>
 						<div class="flex items-start gap-4">
@@ -300,7 +300,7 @@ async function copyInstallCommand() {
 							</div>
 							<div>
 								<p class="font-medium">Authenticate</p>
-								<p class="text-sm text-foreground/60">
+								<p class="text-sm text-foreground/75">
 									Use NIP-07 extension or enter your nsec directly.
 								</p>
 							</div>
@@ -313,7 +313,7 @@ async function copyInstallCommand() {
 							</div>
 							<div>
 								<p class="font-medium">Manage secrets</p>
-								<p class="text-sm text-foreground/60">
+								<p class="text-sm text-foreground/75">
 									Set, get, and inject secrets into your apps.
 								</p>
 							</div>
@@ -363,7 +363,7 @@ async function copyInstallCommand() {
 			<h2 class="mb-4 text-3xl font-bold sm:text-4xl lg:text-5xl">
 				Ready to own your secrets?
 			</h2>
-			<p class="mx-auto mb-10 max-w-2xl text-lg text-foreground/60">
+			<p class="mx-auto mb-10 max-w-2xl text-lg text-foreground/75">
 				Join developers who trust Redshift for sovereign secret management. Free forever for
 				individuals.
 			</p>
@@ -394,10 +394,10 @@ async function copyInstallCommand() {
 	<footer class="border-t border-border/50 px-6 py-12">
 		<div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 md:flex-row">
 			<div class="flex items-center gap-2">
-				<img src="/favicon.svg" alt="Redshift" width="32" height="32" class="size-8" />
+				<img src="/favicon.svg" alt="" width="32" height="32" class="size-8" />
 				<span class="font-semibold">Redshift</span>
 			</div>
-			<div class="flex gap-8 text-sm text-foreground/60">
+			<div class="flex gap-8 text-sm text-foreground/75">
 				<a href="/docs" class="transition-colors hover:text-foreground">Documentation</a>
 				<a href="/pricing" class="transition-colors hover:text-foreground">Pricing</a>
 				<a href="/blog" class="transition-colors hover:text-foreground">Blog</a>
