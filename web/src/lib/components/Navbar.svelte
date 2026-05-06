@@ -17,7 +17,7 @@ function isActive(href: string) {
 <nav class="glass fixed left-0 right-0 top-0 z-50 border-b border-border/50">
 	<div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
 		<a href="/" class="flex items-center gap-1.5">
-			<img src="/favicon.svg" alt="Redshift" width="32" height="32" class="size-8" />
+			<img src="/favicon.svg" alt="" width="32" height="32" class="size-8" />
 			<span class="text-lg font-semibold">Redshift</span>
 		</a>
 		<div class="hidden items-center gap-8 md:flex">

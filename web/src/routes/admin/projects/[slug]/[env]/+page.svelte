@@ -24,7 +24,7 @@ import {
 	TriangleAlert,
 	Upload,
 } from '@lucide/svelte';
-import { onMount, untrack } from 'svelte';
+import { untrack } from 'svelte';
 import { flip } from 'svelte/animate';
 import { fade, slide } from 'svelte/transition';
 import { Motion } from 'svelte-motion';
@@ -371,22 +371,14 @@ $effect(() => {
 	}
 });
 
-// Warn before leaving with unsaved changes
-function handleBeforeUnload(e: BeforeUnloadEvent) {
-	if (hasUnsavedChanges) {
-		e.preventDefault();
-		// Modern browsers ignore custom messages, but we need to return something
-		return 'You have unsaved changes. Are you sure you want to leave?';
-	}
-}
+// Cleanup when the subscribed environment changes or the route unmounts.
+$effect(() => {
+	const currentProjectSlug = project?.slug;
+	const currentEnvSlug = selectedEnv?.slug;
 
-// Cleanup on unmount
-onMount(() => {
-	// Add beforeunload listener
-	window.addEventListener('beforeunload', handleBeforeUnload);
+	if (!currentProjectSlug || !currentEnvSlug) return;
 
 	return () => {
-		window.removeEventListener('beforeunload', handleBeforeUnload);
 		unsubscribeFromSecrets();
 	};
 });

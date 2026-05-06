@@ -26,19 +26,19 @@ describe('landing page Lighthouse hygiene', () => {
 		expect(layout).not.toContain('fonts.gstatic.com');
 	});
 
-	test('configures CSP through SvelteKit so inline bootstrap scripts receive hashes', () => {
-		const config = readWebFile('svelte.config.js');
+	test('serves the homepage as static HTML without hydration scripts', () => {
+		const pageOptions = readWebFile('src/routes/+page.ts');
 
-		expect(config).toContain('csp:');
-		expect(config).toContain("mode: 'auto'");
-		expect(config).toContain("'script-src': ['self']");
-		expect(config).toContain("'font-src': ['self']");
-		expect(config).toContain("'upgrade-insecure-requests': true");
+		expect(pageOptions).toContain('export const csr = false');
 	});
 
 	test('ships static security headers used by Cloudflare Pages', () => {
 		const headers = readWebFile('_headers');
 
+		expect(headers).toContain('Content-Security-Policy:');
+		expect(headers).toContain("script-src 'self'");
+		expect(headers).toContain("require-trusted-types-for 'script'");
+		expect(headers).toContain('X-Robots-Tag: index, follow');
 		expect(headers).toContain('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
 		expect(headers).toContain('Cross-Origin-Opener-Policy: same-origin');
 		expect(headers).toContain('Permissions-Policy: camera=(), microphone=(), geolocation=()');
@@ -48,5 +48,22 @@ describe('landing page Lighthouse hygiene', () => {
 		const page = readWebFile('src/routes/+page.svelte');
 
 		expect(page).not.toContain('text-foreground/50');
+		expect(page).not.toContain('text-foreground/60');
+	});
+
+	test('keeps decorative logo images hidden from accessible names', () => {
+		const page = readWebFile('src/routes/+page.svelte');
+		const navbar = readWebFile('src/lib/components/Navbar.svelte');
+
+		expect(page).toContain('img src="/favicon.svg" alt=""');
+		expect(navbar).toContain('img src="/favicon.svg" alt=""');
+	});
+
+	test('does not register unload handlers that block bfcache', () => {
+		const adminPage = readWebFile('src/routes/admin/projects/[slug]/[env]/+page.svelte');
+
+		expect(adminPage).not.toContain('beforeunload');
+		expect(adminPage).not.toContain('addEventListener(\'unload');
+		expect(adminPage).not.toContain('addEventListener("unload');
 	});
 });
