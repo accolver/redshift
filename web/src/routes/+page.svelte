@@ -103,14 +103,12 @@ async function copyInstallCommand() {
 							<span class="text-tokyo-green">$</span>
 							<span class="text-foreground/80"> redshift login</span>
 						</div>
-						<div class="text-foreground/75">
-							<span class="text-tokyo-cyan">?</span> Select authentication method
-						</div>
-						<div class="pl-4 text-tokyo-blue">
-							<span class="text-tokyo-green">></span> NIP-07 Browser Extension (recommended)
-						</div>
-						<div class="pl-4 text-foreground/70">Enter nsec manually</div>
-						<div class="pl-4 text-foreground/70">Use bunker URL</div>
+						<div class="text-foreground/75">Redshift Login</div>
+						<div class="text-foreground/75">Choose authentication method:</div>
+						<div class="pl-4 text-foreground/70">1. Enter nsec directly</div>
+						<div class="pl-4 text-tokyo-blue">2. Connect via bunker URL (bunker://...)</div>
+						<div class="pl-4 text-foreground/70">3. Generate NostrConnect QR code</div>
+						<div class="text-foreground/75">Select option [1-3]: 2</div>
 						<div class="mt-4">
 							<span class="text-tokyo-green">✓</span>
 							<span class="text-foreground"> Connected as npub1abc...xyz</span>
