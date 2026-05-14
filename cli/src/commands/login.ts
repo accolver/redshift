@@ -34,6 +34,7 @@ import { formatError } from '../lib/errors';
 import { deleteNsecFromKeychain, getKeychainServiceName, storeBunkerKeyInKeychain, storeNsecInKeychain } from '../lib/keychain';
 import type { BunkerAuth } from '../lib/types';
 import type { SecretManagerSigner } from '../lib/secret-manager';
+import { renderTerminalQr } from '../lib/terminal-qr';
 
 export interface LoginOptions {
 	nsec?: string;
@@ -199,7 +200,8 @@ async function loginWithNostrConnect(): Promise<void> {
 	const { uri, waitForConnection } = await createNostrConnectUri(relays, 'Redshift CLI');
 
 	console.log('Scan this QR code or paste the URI in your bunker app:\n');
-	console.log(`  ${uri}\n`);
+	console.log(renderTerminalQr(uri));
+	console.log(`\nURI: ${uri}\n`);
 	console.log('Waiting for connection (timeout: 2 minutes)...');
 
 	try {
