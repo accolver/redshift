@@ -30,6 +30,7 @@ import {
 	saveConfig,
 } from '../lib/config';
 import { decodeNsec, validateNsec } from '../lib/crypto';
+import { formatError } from '../lib/errors';
 import { deleteNsecFromKeychain, getKeychainServiceName, storeBunkerKeyInKeychain, storeNsecInKeychain } from '../lib/keychain';
 import type { BunkerAuth } from '../lib/types';
 import type { SecretManagerSigner } from '../lib/secret-manager';
@@ -178,7 +179,7 @@ async function loginWithBunker(bunkerUrl: string): Promise<void> {
 
 		await connection.signer.close();
 	} catch (error) {
-		console.error('Failed to connect to bunker:', error);
+		console.error(`Failed to connect to bunker: ${formatError(error)}`);
 		process.exit(1);
 	}
 }
@@ -431,7 +432,7 @@ export async function requireAuth(): Promise<RequiredAuth> {
 				signer,
 			};
 		} catch (error) {
-			console.error('Failed to connect to bunker:', error);
+			console.error(`Failed to connect to bunker: ${formatError(error)}`);
 			process.exit(1);
 		}
 	}
