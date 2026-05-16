@@ -19,6 +19,29 @@ import {
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { getRelays } from './config';
 
+const DEFAULT_BUNKER_CONNECT_TIMEOUT_MS = 15000;
+
+/**
+ * Run an async bunker operation with a timeout so relay or bunker outages do not hang CLI commands.
+ */
+export async function withBunkerTimeout<T>(
+	operation: Promise<T>,
+	timeoutMs = DEFAULT_BUNKER_CONNECT_TIMEOUT_MS,
+	message = 'Timed out connecting to bunker',
+): Promise<T> {
+	let timeout: ReturnType<typeof setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			operation,
+			new Promise<T>((_, reject) => {
+				timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+			}),
+		]);
+	} finally {
+		if (timeout) clearTimeout(timeout);
+	}
+}
+
 /**
  * Result of bunker connection
  */
@@ -90,11 +113,15 @@ export async function connectToBunker(
 
 	try {
 		// Connect to the bunker
-		await signer.connect();
+		await withBunkerTimeout(signer.connect(), options.timeout, 'Timed out connecting to bunker');
 
 		// Get the user's public key
-		const userPubkey = await signer.getPublicKey();
-		await signer.switchRelays();
+		const userPubkey = await withBunkerTimeout(
+			signer.getPublicKey(),
+			options.timeout,
+			'Timed out fetching bunker public key',
+		);
+		await withBunkerTimeout(signer.switchRelays(), options.timeout, 'Timed out switching bunker relays');
 
 		return {
 			signer,
@@ -130,9 +157,13 @@ export async function reconnectToBunker(
 	const signer = BunkerSigner.fromBunker(clientSecretKey, bp, params);
 
 	try {
-		await signer.connect();
-		const userPubkey = await signer.getPublicKey();
-		await signer.switchRelays();
+		await withBunkerTimeout(signer.connect(), options.timeout, 'Timed out connecting to bunker');
+		const userPubkey = await withBunkerTimeout(
+			signer.getPublicKey(),
+			options.timeout,
+			'Timed out fetching bunker public key',
+		);
+		await withBunkerTimeout(signer.switchRelays(), options.timeout, 'Timed out switching bunker relays');
 
 		return {
 			signer,

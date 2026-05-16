@@ -15,9 +15,22 @@ import {
 	decodeClientSecretKey,
 	formatBunkerPointer,
 	isValidBunkerUrl,
+	withBunkerTimeout,
 } from '../../src/lib/bunker';
 
 describe('Bunker Module', () => {
+	describe('withBunkerTimeout', () => {
+		it('rejects when a bunker operation does not complete before the timeout', async () => {
+			const never = new Promise<string>(() => {});
+
+			expect(withBunkerTimeout(never, 5, 'bunker timeout')).rejects.toThrow('bunker timeout');
+		});
+
+		it('returns the operation result when it completes before the timeout', async () => {
+			expect(await withBunkerTimeout(Promise.resolve('connected'), 100)).toBe('connected');
+		});
+	});
+
 	describe('isValidBunkerUrl', () => {
 		it('validates bunker:// URLs', () => {
 			expect(isValidBunkerUrl(`bunker://${'a'.padEnd(64, '0')}?relay=wss://relay.test`)).toBe(true);
