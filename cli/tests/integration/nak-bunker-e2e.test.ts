@@ -6,7 +6,6 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
-import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createServer } from 'node:net';
 import { generateSecretKey, getPublicKey, verifyEvent } from 'nostr-tools/pure';
 import { connectToBunker, BunkerSecretManager } from '../../src/lib/bunker';
@@ -58,23 +57,35 @@ async function waitForRelay(url: string) {
 	throw new Error(`nak relay did not start: ${String(lastError)}`);
 }
 
+function runNak(args: string[]) {
+	const result = Bun.spawnSync({
+		cmd: ['nak', ...args],
+		stdout: 'pipe',
+		stderr: 'pipe',
+	});
+	if (result.exitCode !== 0) {
+		throw new Error(new TextDecoder().decode(result.stderr).trim() || `nak ${args.join(' ')} failed`);
+	}
+	return new TextDecoder().decode(result.stdout).trim();
+}
+
 function createNakNsec() {
-	const hexSecret = execFileSync('nak', ['key', 'generate'], { encoding: 'utf8' }).trim();
-	const nsec = execFileSync('nak', ['encode', 'nsec', hexSecret], { encoding: 'utf8' }).trim();
+	const hexSecret = runNak(['key', 'generate']);
+	const nsec = runNak(['encode', 'nsec', hexSecret]);
 	expect(nsec).toStartWith('nsec1');
 	return nsec;
 }
 
 describe('nak-backed bunker E2E', () => {
-	let relayProcess: ChildProcessWithoutNullStreams | null = null;
+	let relayProcess: Bun.Subprocess<'ignore', 'pipe', 'pipe'> | null = null;
 	let service: Nip46BunkerService | null = null;
 
 	afterEach(async () => {
 		service?.close();
 		service = null;
 		if (relayProcess) {
-			relayProcess.kill('SIGTERM');
-			await new Promise((resolve) => relayProcess?.once('exit', resolve));
+			relayProcess.kill();
+			await relayProcess.exited;
 			relayProcess = null;
 		}
 	});
@@ -88,8 +99,10 @@ describe('nak-backed bunker E2E', () => {
 		const port = await getFreePort();
 		const relay = `ws://127.0.0.1:${port}`;
 
-		relayProcess = spawn('nak', ['serve', '--hostname', '127.0.0.1', '--port', String(port)], {
-			stdio: ['ignore', 'pipe', 'pipe'],
+		relayProcess = Bun.spawn(['nak', 'serve', '--hostname', '127.0.0.1', '--port', String(port)], {
+			stdin: 'ignore',
+			stdout: 'pipe',
+			stderr: 'pipe',
 		});
 		await waitForRelay(relay);
 
