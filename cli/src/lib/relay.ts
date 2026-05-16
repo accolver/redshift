@@ -97,7 +97,9 @@ export function createRelayPool(relayUrls: string[], options: RelayPoolOptions =
 				if (enableRateLimiting) {
 					await rateLimiter.waitForSlot();
 				}
-				await Promise.all(pool.publish(relayUrls, event));
+				// A write is usable once at least one configured relay accepts it. Public relays may
+				// rate-limit independently, so requiring every relay to accept causes false failures.
+				await Promise.any(pool.publish(relayUrls, event));
 			};
 
 			if (enableRetry) {

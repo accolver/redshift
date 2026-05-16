@@ -260,7 +260,7 @@ export class SecretManager {
 				const cached = this.decryptionCache.get(gw.id);
 				if (cached?.dTag) {
 					const existing = latestByDTag.get(cached.dTag);
-					if (!existing || cached.createdAt > existing.createdAt) {
+					if (!existing || cached.createdAt >= existing.createdAt) {
 						latestByDTag.set(cached.dTag, {
 							secrets: cached.secrets,
 							dTag: cached.dTag,
@@ -287,7 +287,7 @@ export class SecretManager {
 				}
 
 				const existing = latestByDTag.get(result.dTag);
-				if (!existing || result.createdAt > existing.createdAt) {
+				if (!existing || result.createdAt >= existing.createdAt) {
 					latestByDTag.set(result.dTag, {
 						secrets: result.secrets,
 						dTag: result.dTag,

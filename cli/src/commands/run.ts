@@ -4,6 +4,7 @@
  * L5: Journey-Validator - Secret injection workflow
  */
 
+import { rm } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { getRelays, loadProjectConfig } from '../lib/config';
 import { SecretManager, injectSecrets } from '../lib/secret-manager';
@@ -19,6 +20,12 @@ export interface RunOptions {
 	environment?: string;
 	/** Preserve color output */
 	preserveColor?: boolean;
+	/** Write secrets to a temporary file and expose its path */
+	mount?: string;
+	/** File format for mounted secrets */
+	mountFormat?: 'json' | 'env';
+	/** Existing environment variables that should not be overwritten */
+	preserveEnv?: string[];
 }
 
 /**
@@ -121,7 +128,14 @@ export async function runCommand(options: RunOptions): Promise<void> {
 		}
 
 		// Inject secrets into environment
-		const env = injectSecrets(process.env as Record<string, string>, secrets || {});
+		let env = injectSecrets(process.env as Record<string, string>, secrets || {});
+		if (options.preserveEnv && options.preserveEnv.length > 0) {
+			env = preserveExistingEnvironmentValues(env, process.env as Record<string, string>, options.preserveEnv);
+		}
+		if (options.mount) {
+			await writeMountedSecrets(options.mount, secrets || {}, options.mountFormat || 'json');
+			env.REDSHIFT_CLI_SECRETS_PATH = options.mount;
+		}
 
 		// Execute the command
 		// Parse command tokens, respecting quoted strings to avoid shell injection
@@ -156,7 +170,8 @@ export async function runCommand(options: RunOptions): Promise<void> {
 		});
 
 		await manager.close();
-		process.exit(exitCode);
+		process.exitCode = exitCode;
+		return;
 	} catch (error) {
 		await manager.close();
 		if (error instanceof Error && error.message.startsWith('Failed to start command:')) {
@@ -165,12 +180,50 @@ export async function runCommand(options: RunOptions): Promise<void> {
 			console.error('Error fetching secrets:', error);
 		}
 		process.exit(1);
+	} finally {
+		if (options.mount) {
+			await rm(options.mount, { force: true }).catch(() => undefined);
+		}
+		if (process.exitCode !== undefined) {
+			process.exit(Number(process.exitCode));
+		}
 	}
 }
 
 /**
  * Dry run - show what would be injected without executing.
  */
+async function writeMountedSecrets(path: string, secrets: Record<string, string>, format: 'json' | 'env') {
+	const content = format === 'json'
+		? JSON.stringify(secrets, null, 2)
+		: Object.entries(secrets).map(([key, value]) => `${key}=${value}`).join('\n');
+	await Bun.write(path, content.endsWith('\n') ? content : `${content}\n`);
+}
+
+function preserveExistingEnvironmentValues(
+	env: Record<string, string>,
+	originalEnv: Record<string, string>,
+	keys: string[],
+) {
+	const next = { ...env };
+	for (const key of keys) {
+		const existing = originalEnv[key];
+		if (existing !== undefined) {
+			next[key] = existing;
+		}
+	}
+	return next;
+}
+
+export async function cleanRunArtifacts(mountPath?: string) {
+	if (mountPath) {
+		await rm(mountPath, { force: true });
+		console.log(`✓ Removed ${mountPath}`);
+		return;
+	}
+	console.log('No run artifacts to clean.');
+}
+
 export async function runDryCommand(options: RunOptions): Promise<void> {
 	// Load project config
 	const cwd = process.cwd();

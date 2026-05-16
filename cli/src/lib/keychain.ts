@@ -22,12 +22,16 @@ const KEYCHAIN_SERVICE = 'com.redshiftapp.cli';
 const KEYCHAIN_NSEC = 'nsec';
 const KEYCHAIN_BUNKER_CLIENT_KEY = 'bunker-client-secret-key';
 
+function isKeychainDisabled(): boolean {
+	return process.env.REDSHIFT_DISABLE_KEYCHAIN === '1';
+}
+
 /**
  * Check if keychain is available on this system
  */
 export async function isKeychainAvailable(): Promise<boolean> {
 	// Bun.secrets is only available in Bun runtime
-	if (typeof Bun === 'undefined' || !Bun.secrets) {
+	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
 		return false;
 	}
 
@@ -49,7 +53,7 @@ export async function isKeychainAvailable(): Promise<boolean> {
  * @returns true if stored successfully, false if keychain unavailable
  */
 export async function storeNsecInKeychain(nsec: string): Promise<boolean> {
-	if (typeof Bun === 'undefined' || !Bun.secrets) {
+	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
 		return false;
 	}
 
@@ -73,7 +77,7 @@ export async function storeNsecInKeychain(nsec: string): Promise<boolean> {
  * @returns The nsec if found, null if not found or keychain unavailable
  */
 export async function getNsecFromKeychain(): Promise<string | null> {
-	if (typeof Bun === 'undefined' || !Bun.secrets) {
+	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
 		return null;
 	}
 
@@ -95,7 +99,7 @@ export async function getNsecFromKeychain(): Promise<string | null> {
  * @returns true if deleted (or didn't exist), false if keychain unavailable
  */
 export async function deleteNsecFromKeychain(): Promise<boolean> {
-	if (typeof Bun === 'undefined' || !Bun.secrets) {
+	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
 		return false;
 	}
 
@@ -118,7 +122,7 @@ export async function deleteNsecFromKeychain(): Promise<boolean> {
  * @returns true if stored successfully, false if keychain unavailable
  */
 export async function storeBunkerKeyInKeychain(hexKey: string): Promise<boolean> {
-	if (typeof Bun === 'undefined' || !Bun.secrets) {
+	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
 		return false;
 	}
 
@@ -141,7 +145,7 @@ export async function storeBunkerKeyInKeychain(hexKey: string): Promise<boolean>
  * @returns The hex-encoded key if found, null if not found or keychain unavailable
  */
 export async function getBunkerKeyFromKeychain(): Promise<string | null> {
-	if (typeof Bun === 'undefined' || !Bun.secrets) {
+	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
 		return null;
 	}
 
@@ -162,7 +166,7 @@ export async function getBunkerKeyFromKeychain(): Promise<string | null> {
  * @returns true if deleted (or didn't exist), false if keychain unavailable
  */
 export async function deleteBunkerKeyFromKeychain(): Promise<boolean> {
-	if (typeof Bun === 'undefined' || !Bun.secrets) {
+	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
 		return false;
 	}
 

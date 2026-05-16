@@ -112,6 +112,28 @@ describe('Bunker Module', () => {
 	});
 
 	describe('BunkerSecretManager', () => {
+		it('times out signer-compatible operations that do not return', async () => {
+			const signer = {
+				signEvent: () => new Promise<VerifiedEvent>(() => {}),
+				nip44Encrypt: () => new Promise<string>(() => {}),
+				nip44Decrypt: () => new Promise<string>(() => {}),
+				close: async () => {},
+			} as unknown as BunkerSigner;
+			const connection: BunkerConnection = {
+				signer,
+				userPubkey: 'user-pubkey',
+				bunkerPointer: { pubkey: 'ab'.repeat(32), relays: ['wss://relay.test'], secret: null },
+				clientSecretKey: new Uint8Array(32),
+			};
+			const manager = new BunkerSecretManager(connection, ['wss://relay.test'], 5);
+
+			await expect(manager.nip44Encrypt('peer', 'hello')).rejects.toThrow('Timed out waiting for bunker to encrypt');
+			await expect(manager.nip44Decrypt('peer', 'ciphertext')).rejects.toThrow('Timed out waiting for bunker to decrypt');
+			await expect(manager.signEvent({ kind: 1059, content: '', tags: [], created_at: 1 })).rejects.toThrow(
+				'Timed out waiting for bunker to sign event',
+			);
+		});
+
 		it('exposes signer-compatible NIP-44 methods for SecretManager', async () => {
 			const calls: string[] = [];
 			const signer = {

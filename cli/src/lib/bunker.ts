@@ -130,8 +130,8 @@ export async function connectToBunker(
 			clientSecretKey,
 		};
 	} catch (error) {
-		// Clean up on error
-		await signer.close();
+		// Clean up on error without masking the original connection failure.
+		await signer.close().catch(() => undefined);
 		throw error;
 	}
 }
@@ -172,7 +172,7 @@ export async function reconnectToBunker(
 			clientSecretKey,
 		};
 	} catch (error) {
-		await signer.close();
+		await signer.close().catch(() => undefined);
 		throw error;
 	}
 }
@@ -285,11 +285,13 @@ export class BunkerSecretManager {
 	private signer: BunkerSigner;
 	private userPubkey: string;
 	private relays: string[];
+	private timeoutMs: number;
 
-	constructor(connection: BunkerConnection, relays: string[]) {
+	constructor(connection: BunkerConnection, relays: string[], timeoutMs = DEFAULT_BUNKER_CONNECT_TIMEOUT_MS) {
 		this.signer = connection.signer;
 		this.userPubkey = connection.userPubkey;
 		this.relays = relays;
+		this.timeoutMs = timeoutMs;
 	}
 
 	/**
@@ -310,21 +312,33 @@ export class BunkerSecretManager {
 	 * Sign an event using the bunker
 	 */
 	async signEvent(event: EventTemplate): Promise<VerifiedEvent> {
-		return this.signer.signEvent(event);
+		return withBunkerTimeout(
+			this.signer.signEvent(event),
+			this.timeoutMs,
+			'Timed out waiting for bunker to sign event',
+		);
 	}
 
 	/**
 	 * Encrypt content using NIP-44 via bunker.
 	 */
 	async nip44Encrypt(pubkey: string, plaintext: string): Promise<string> {
-		return this.signer.nip44Encrypt(pubkey, plaintext);
+		return withBunkerTimeout(
+			this.signer.nip44Encrypt(pubkey, plaintext),
+			this.timeoutMs,
+			'Timed out waiting for bunker to encrypt',
+		);
 	}
 
 	/**
 	 * Decrypt content using NIP-44 via bunker.
 	 */
 	async nip44Decrypt(pubkey: string, ciphertext: string): Promise<string> {
-		return this.signer.nip44Decrypt(pubkey, ciphertext);
+		return withBunkerTimeout(
+			this.signer.nip44Decrypt(pubkey, ciphertext),
+			this.timeoutMs,
+			'Timed out waiting for bunker to decrypt',
+		);
 	}
 
 	/** Backwards-compatible alias for older callers. */

@@ -15,7 +15,7 @@ import { VERSION } from './version';
 // Import command handlers
 import { bunkerCommand } from './commands/bunker';
 import { loginCommand, logoutCommand } from './commands/login';
-import { runCommand } from './commands/run';
+import { cleanRunArtifacts, runCommand } from './commands/run';
 import { type SecretsSubcommand, secretsCommand } from './commands/secrets';
 import { serveCommand } from './commands/serve';
 import { setupCommand } from './commands/setup';
@@ -139,14 +139,15 @@ async function handleLoginCommand(parsed: ParsedArgs): Promise<void> {
 	if (parsed.subcommand === 'revoke') {
 		// Revoke is essentially logout
 		await logoutCommand();
-		return;
+		process.exit(0);
 	}
 	await loginCommand({
 		nsec: typeof parsed.flags.nsec === 'string' ? parsed.flags.nsec : undefined,
 		bunker: typeof parsed.flags.bunker === 'string' ? parsed.flags.bunker : undefined,
 		connect: parsed.flags.connect === true,
-		force: parsed.flags.overwrite === true,
+		force: parsed.flags.overwrite === true || parsed.flags.force === true,
 	});
+	process.exit(0);
 }
 
 /**
@@ -165,6 +166,11 @@ async function handleSetupCommand(parsed: ParsedArgs): Promise<void> {
  * Handle the run command
  */
 async function handleRunCommand(parsed: ParsedArgs): Promise<void> {
+	if (parsed.subcommand === 'clean') {
+		await cleanRunArtifacts(typeof parsed.flags.mount === 'string' ? parsed.flags.mount : undefined);
+		return;
+	}
+
 	let commandToRun: string[] = [];
 
 	if (typeof parsed.flags.command === 'string') {
@@ -186,7 +192,23 @@ async function handleRunCommand(parsed: ParsedArgs): Promise<void> {
 		command: commandToRun,
 		project: typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined,
 		environment: typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined,
+		mount: typeof parsed.flags.mount === 'string' ? parsed.flags.mount : undefined,
+		mountFormat: parseMountFormat(parsed.flags['mount-format']),
+		preserveEnv: parsePreserveEnv(parsed.flags['preserve-env']),
 	});
+}
+
+function parseMountFormat(value: unknown): 'json' | 'env' | undefined {
+	if (value === undefined) return undefined;
+	if (value === 'json' || value === 'env') return value;
+	console.error(`Invalid mount format: ${String(value)}`);
+	console.error('Expected one of: json, env');
+	process.exit(1);
+}
+
+function parsePreserveEnv(value: unknown): string[] | undefined {
+	if (typeof value !== 'string' || value.trim() === '') return undefined;
+	return value.split(',').map((key) => key.trim()).filter(Boolean);
 }
 
 /**
@@ -199,38 +221,25 @@ async function handleSecretsCommand(parsed: ParsedArgs): Promise<void> {
 	// Build options based on subcommand
 	const secretsOpts: Parameters<typeof secretsCommand>[0] = {
 		subcommand: secretsSubcommand,
-		raw: parsed.flags.raw === true,
+		raw: parsed.flags.raw === true || parsed.flags.plain === true,
+		onlyNames: parsed.flags['only-names'] === true,
+		noExitOnMissingSecret: parsed.flags['no-exit-on-missing-secret'] === true,
+		noFile: parsed.flags['no-file'] === true,
 		project: typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined,
 		environment: typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined,
-		format: parsed.globalFlags.json ? 'json' : undefined,
+		format: parseSecretsFormat(parsed.globalFlags.json ? 'json' : parsed.flags.format),
 	};
 
 	// Handle positionals based on subcommand
 	switch (secretsSubcommand) {
 		case 'get':
-			// First positional is the key
-			if (parsed.positionals[0]) {
-				secretsOpts.key = parsed.positionals[0];
-			}
+			secretsOpts.keys = parsed.positionals;
 			break;
 		case 'set':
-			// Support both "set KEY VALUE" and "set KEY=VALUE"
-			if (parsed.positionals.length >= 2) {
-				secretsOpts.key = parsed.positionals[0];
-				secretsOpts.value = parsed.positionals[1];
-			} else if (parsed.positionals[0]?.includes('=')) {
-				const [key, ...valueParts] = parsed.positionals[0].split('=');
-				secretsOpts.key = key;
-				secretsOpts.value = valueParts.join('=');
-			} else if (parsed.positionals[0]) {
-				secretsOpts.key = parsed.positionals[0];
-				// Value might be provided interactively
-			}
+			secretsOpts.values = parseSecretAssignments(parsed.positionals);
 			break;
 		case 'delete':
-			if (parsed.positionals[0]) {
-				secretsOpts.key = parsed.positionals[0];
-			}
+			secretsOpts.keys = parsed.positionals;
 			break;
 		case 'download':
 		case 'upload':
@@ -241,6 +250,43 @@ async function handleSecretsCommand(parsed: ParsedArgs): Promise<void> {
 	}
 
 	await secretsCommand(secretsOpts);
+	process.exit(0);
+}
+
+function parseSecretsFormat(value: unknown): Parameters<typeof secretsCommand>[0]['format'] {
+	if (typeof value !== 'string') return undefined;
+	if (['table', 'json', 'env', 'yaml', 'docker', 'env-no-quotes'].includes(value)) {
+		return value as Parameters<typeof secretsCommand>[0]['format'];
+	}
+	console.error(`Invalid secrets format: ${value}`);
+	console.error('Expected one of: json, env, yaml, docker, env-no-quotes');
+	process.exit(1);
+}
+
+function parseSecretAssignments(positionals: string[]): Record<string, string> | undefined {
+	if (positionals.length === 0) return undefined;
+	const values: Record<string, string> = {};
+
+	if (positionals.length === 2 && !positionals[0]?.includes('=')) {
+		values[positionals[0] as string] = positionals[1] as string;
+		return values;
+	}
+
+	for (const positional of positionals) {
+		if (!positional.includes('=')) {
+			console.error(`Invalid secret assignment: ${positional}`);
+			console.error('Use KEY VALUE for one secret or KEY=VALUE for one or more secrets.');
+			process.exit(1);
+		}
+		const [key, ...valueParts] = positional.split('=');
+		if (!key) {
+			console.error(`Invalid secret assignment: ${positional}`);
+			process.exit(1);
+		}
+		values[key] = valueParts.join('=');
+	}
+
+	return values;
 }
 
 /**

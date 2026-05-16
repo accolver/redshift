@@ -676,6 +676,11 @@ function createLoginCommand(): CommandDef {
 				type: 'boolean',
 				description: 'overwrite existing token if one exists',
 			},
+			force: {
+				type: 'boolean',
+				description: 'alias for --overwrite',
+				aliasOf: 'overwrite',
+			},
 		},
 		subcommands: {
 			revoke: {

@@ -32,14 +32,9 @@ export async function setupCommand(options: SetupOptions): Promise<void> {
 		return;
 	}
 
-	// Require authentication
-	const auth = await requireAuth();
-	console.log(`\nAuthenticated as ${auth.npub}\n`);
-
-	// Connect to relays and fetch existing projects
 	const relays = await getRelays();
-	const manager = new SecretManager(auth.privateKey ?? auth.signer!);
-	manager.connect(relays);
+	const canConfigureDirectly = Boolean(options.project && options.environment);
+	let manager: SecretManager | null = null;
 
 	let projectId: string;
 	let environment: string;
@@ -48,20 +43,30 @@ export async function setupCommand(options: SetupOptions): Promise<void> {
 		console.log('Redshift Setup');
 		console.log('==============\n');
 
-		// Fetch existing projects from relays
-		console.log('Fetching existing projects from relays...');
 		let existingProjects: string[] = [];
 		let existingEnvironments: string[] = [];
 
-		try {
-			existingProjects = await manager.listProjects();
-			if (existingProjects.length > 0) {
-				console.log(`Found ${existingProjects.length} existing project(s)\n`);
-			} else {
-				console.log('No existing projects found\n');
+		if (!canConfigureDirectly) {
+			// Require authentication only when setup needs to discover existing projects/environments.
+			// Non-interactive setup with explicit project and environment can write redshift.yaml offline.
+			const auth = await requireAuth();
+			console.log(`\nAuthenticated as ${auth.npub}\n`);
+
+			manager = new SecretManager(auth.privateKey ?? auth.signer!);
+			manager.connect(relays);
+
+			// Fetch existing projects from relays
+			console.log('Fetching existing projects from relays...');
+			try {
+				existingProjects = await manager.listProjects();
+				if (existingProjects.length > 0) {
+					console.log(`Found ${existingProjects.length} existing project(s)\n`);
+				} else {
+					console.log('No existing projects found\n');
+				}
+			} catch {
+				console.log('Could not fetch projects (will use manual input)\n');
 			}
-		} catch (err) {
-			console.log('Could not fetch projects (will use manual input)\n');
 		}
 
 		// Select or create project
@@ -83,7 +88,7 @@ export async function setupCommand(options: SetupOptions): Promise<void> {
 		}
 
 		// Fetch environments for selected project
-		if (existingProjects.includes(projectId)) {
+		if (manager && existingProjects.includes(projectId)) {
 			try {
 				existingEnvironments = await manager.listEnvironments(projectId);
 			} catch {
@@ -128,7 +133,7 @@ export async function setupCommand(options: SetupOptions): Promise<void> {
 		console.log('  redshift secrets set <KEY> <VALUE>   Set a secret');
 		console.log('  redshift secrets list   List all secrets');
 	} finally {
-		await manager.close();
+		await manager?.close();
 	}
 }
 
