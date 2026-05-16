@@ -207,6 +207,9 @@ describe('spawned CLI bunker workflows', () => {
 		expect(await Bun.file(envFile).text()).toContain('API_KEY=dev-123');
 
 		await writeFile(join(fixture.projectDir, 'upload.env'), 'FEATURE_FLAG=true\nAPI_KEY=uploaded\n');
+		// Nostr replaceable events use second-level created_at timestamps.
+		// Ensure the uploaded bundle supersedes the earlier set bundle deterministically.
+		await new Promise((resolve) => setTimeout(resolve, 2100));
 		result = await fixture.run(['secrets', 'upload', 'upload.env']);
 		expectSuccess(result);
 		expect(result.stdout).toContain('Uploaded 2 secrets');

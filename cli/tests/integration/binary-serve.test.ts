@@ -29,6 +29,17 @@ const CLI_ENTRY = join(import.meta.dir, '../../src/main.ts');
 // Check if binary exists
 const hasBinary = existsSync(BINARY_PATH);
 
+function testEnv() {
+	const env: Record<string, string> = {};
+	for (const [key, value] of Object.entries(process.env)) {
+		if (value !== undefined && key !== 'REDSHIFT_NSEC' && key !== 'REDSHIFT_BUNKER') {
+			env[key] = value;
+		}
+	}
+	env.BROWSER = 'none';
+	return env;
+}
+
 // Helper to wait for server to be ready
 async function waitForServer(url: string, maxAttempts = 20, delayMs = 100): Promise<boolean> {
 	for (let i = 0; i < maxAttempts; i++) {
@@ -78,21 +89,14 @@ describe.skipIf(IS_CI)('Binary Serve Integration Tests', () => {
 			return Bun.spawn([BINARY_PATH, ...args], {
 				stdout: 'pipe',
 				stderr: 'pipe',
-				env: {
-					...process.env,
-					// Don't open browser during tests
-					BROWSER: 'none',
-				},
+				env: testEnv(),
 			});
 		}
 		// Use bun to run the CLI entry point
 		return Bun.spawn(['bun', 'run', CLI_ENTRY, ...args], {
 			stdout: 'pipe',
 			stderr: 'pipe',
-			env: {
-				...process.env,
-				BROWSER: 'none',
-			},
+			env: testEnv(),
 		});
 	}
 
@@ -220,8 +224,8 @@ describe.skipIf(IS_CI)('Binary Process Management', () => {
 
 		const args = ['serve', '--port', String(port)];
 		const proc = hasBinary
-			? Bun.spawn([BINARY_PATH, ...args], { stdout: 'pipe', stderr: 'pipe' })
-			: Bun.spawn(['bun', 'run', CLI_ENTRY, ...args], { stdout: 'pipe', stderr: 'pipe' });
+			? Bun.spawn([BINARY_PATH, ...args], { stdout: 'pipe', stderr: 'pipe', env: testEnv() })
+			: Bun.spawn(['bun', 'run', CLI_ENTRY, ...args], { stdout: 'pipe', stderr: 'pipe', env: testEnv() });
 
 		try {
 			// Wait for server to start

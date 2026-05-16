@@ -46,12 +46,15 @@ export interface LoginOptions {
  * Execute the login command.
  */
 export async function loginCommand(options: LoginOptions): Promise<void> {
-	// Check if already logged in
-	const existingAuth = await getAuth();
-	if (existingAuth && !options.force) {
-		await showCurrentAuth(existingAuth);
-		console.log('\nUse --force to re-authenticate.');
-		return;
+	// Check if already logged in. Skip this entirely for --force so users can recover
+	// from stale or incomplete stored auth (for example, a missing bunker client key).
+	if (!options.force) {
+		const existingAuth = await getAuth();
+		if (existingAuth) {
+			await showCurrentAuth(existingAuth);
+			console.log('\nUse --force to re-authenticate.');
+			return;
+		}
 	}
 
 	// Determine auth method
@@ -158,12 +161,14 @@ async function loginWithBunker(bunkerUrl: string): Promise<void> {
 		const storedInKeychain = await storeBunkerKeyInKeychain(clientKeyHex);
 		await deleteNsecFromKeychain();
 
-		// Save bunker auth (omit clientSecretKey from config if stored in keychain).
+		// Save the NIP-46 client key in config as a reliability fallback. It is not the
+		// user's Nostr private key, but it is still sensitive because it authorizes this
+		// Redshift client with the bunker. Config files are written with 0600 perms.
 		// Do not persist the bunker URI secret; NIP-46 pairing secrets are single-use.
 		const bunkerAuth: BunkerAuth = {
 			bunkerPubkey: connection.bunkerPointer.pubkey,
 			relays: connection.bunkerPointer.relays,
-			clientSecretKey: storedInKeychain ? '' : clientKeyHex,
+			clientSecretKey: clientKeyHex,
 		};
 		await saveBunkerAuth(bunkerAuth);
 
@@ -171,7 +176,7 @@ async function loginWithBunker(bunkerUrl: string): Promise<void> {
 		console.log(`  User: ${npub}`);
 		console.log(`  Bunker: ${formatBunkerPointer(connection.bunkerPointer)}`);
 		if (storedInKeychain) {
-			console.log(`\nClient key stored securely in system keychain.`);
+			console.log(`\nClient key stored in system keychain and ~/.redshift/config.json fallback.`);
 			console.log(`  Service: ${getKeychainServiceName()}`);
 		} else {
 			console.log('\n⚠️  System keychain unavailable. Client key stored in ~/.redshift/config.json');
@@ -206,12 +211,14 @@ async function loginWithNostrConnect(): Promise<void> {
 		const storedInKeychain = await storeBunkerKeyInKeychain(clientKeyHex);
 		await deleteNsecFromKeychain();
 
-		// Save bunker auth (omit clientSecretKey from config if stored in keychain).
+		// Save the NIP-46 client key in config as a reliability fallback. It is not the
+		// user's Nostr private key, but it is still sensitive because it authorizes this
+		// Redshift client with the bunker. Config files are written with 0600 perms.
 		// Do not persist the bunker URI secret; NIP-46 pairing secrets are single-use.
 		const bunkerAuth: BunkerAuth = {
 			bunkerPubkey: connection.bunkerPointer.pubkey,
 			relays: connection.bunkerPointer.relays,
-			clientSecretKey: storedInKeychain ? '' : clientKeyHex,
+			clientSecretKey: clientKeyHex,
 		};
 		await saveBunkerAuth(bunkerAuth);
 
@@ -219,7 +226,7 @@ async function loginWithNostrConnect(): Promise<void> {
 		console.log(`  User: ${npub}`);
 		console.log(`  Bunker: ${formatBunkerPointer(connection.bunkerPointer)}`);
 		if (storedInKeychain) {
-			console.log(`\nClient key stored securely in system keychain.`);
+			console.log(`\nClient key stored in system keychain and ~/.redshift/config.json fallback.`);
 			console.log(`  Service: ${getKeychainServiceName()}`);
 		} else {
 			console.log('\n⚠️  System keychain unavailable. Client key stored in ~/.redshift/config.json');

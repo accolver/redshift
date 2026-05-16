@@ -279,6 +279,12 @@ export async function getAuth(): Promise<AuthResult | null> {
 				};
 			}
 		}
+		if (!config.bunker.clientSecretKey) {
+			throw new ConfigError(
+				'Bunker client key is missing. Run `redshift login --force --bunker <url>` to re-authenticate.',
+				join(getConfigDir(), CONFIG_FILE),
+			);
+		}
 		return { method: 'bunker', bunker: config.bunker, source: 'config' };
 	}
 
