@@ -9,10 +9,22 @@
  */
 
 import { readdir, stat } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { extname, join, relative } from 'node:path';
 
-const WEB_DIST_DIR = join(import.meta.dir, '../../web/dist');
+const REPOSITORY_ROOT = join(import.meta.dir, '../..');
+const WEB_DIST_DIR = join(REPOSITORY_ROOT, 'web/dist');
 const OUTPUT_FILE = join(import.meta.dir, '../src/lib/embedded-files.ts');
+const SOURCE_INPUTS = [
+	'web/src',
+	'web/static',
+	'web/package.json',
+	'web/svelte.config.js',
+	'web/vite.config.ts',
+	'packages/crypto/src',
+	'packages/rate-limiter/src',
+	'cli/scripts/generate-embeds.ts',
+	'bun.lock',
+];
 
 // MIME types for common file extensions
 const MIME_TYPES: Record<string, string> = {
@@ -45,7 +57,7 @@ interface EmbeddedFile {
  */
 async function collectFiles(dir: string, basePath = ''): Promise<string[]> {
 	const files: string[] = [];
-	const entries = (await readdir(dir)).sort((a, b) => a.localeCompare(b));
+	const entries = (await readdir(dir)).sort();
 
 	for (const entry of entries) {
 		const fullPath = join(dir, entry);
@@ -89,6 +101,36 @@ function getUrlPath(filePath: string): string {
 	}
 
 	return urlPath;
+}
+
+async function calculateSourceDigest() {
+	const hasher = new Bun.CryptoHasher('sha256');
+	for (const input of SOURCE_INPUTS) {
+		const absoluteInput = join(REPOSITORY_ROOT, input);
+		const inputStats = await stat(absoluteInput);
+		const files = inputStats.isDirectory()
+			? (await collectFiles(absoluteInput)).map((file) => join(absoluteInput, file))
+			: [absoluteInput];
+		for (const file of files.sort()) {
+			const normalizedPath = relative(REPOSITORY_ROOT, file).replace(/\\/g, '/');
+			hasher.update(normalizedPath);
+			hasher.update(new Uint8Array([0]));
+			hasher.update(await Bun.file(file).arrayBuffer());
+		}
+	}
+	return hasher.digest('hex');
+}
+
+async function verifySourceDigest() {
+	const expected = await calculateSourceDigest();
+	const generated = await Bun.file(OUTPUT_FILE).text();
+	const actual = generated.match(/EMBEDDED_SOURCE_DIGEST = "([0-9a-f]{64})"/)?.[1];
+	if (actual !== expected) {
+		throw new Error(
+			'Embedded dashboard source digest is stale; run `bun run build:web && bun run build:embeds`.',
+		);
+	}
+	console.log(`Embedded dashboard source digest verified: ${expected}`);
 }
 
 /**
@@ -180,7 +222,8 @@ async function generateEmbeds(): Promise<void> {
 	}
 
 	// Generate TypeScript module
-	const tsContent = generateTypeScriptModule(embeddedFiles);
+	const sourceDigest = await calculateSourceDigest();
+	const tsContent = generateTypeScriptModule(embeddedFiles, sourceDigest);
 
 	// Write output file
 	await Bun.write(OUTPUT_FILE, tsContent);
@@ -192,7 +235,7 @@ async function generateEmbeds(): Promise<void> {
 /**
  * Generate the TypeScript module content.
  */
-function generateTypeScriptModule(files: EmbeddedFile[]): string {
+function generateTypeScriptModule(files: EmbeddedFile[], sourceDigest: string): string {
 	const fileEntries = files
 		.map((file) => {
 			return `  ${JSON.stringify(file.path)}: {
@@ -211,6 +254,8 @@ function generateTypeScriptModule(files: EmbeddedFile[]): string {
  * This file contains the SvelteKit build output embedded as strings,
  * allowing the CLI binary to serve the admin UI without external files.
  */
+
+export const EMBEDDED_SOURCE_DIGEST = ${JSON.stringify(sourceDigest)};
 
 export interface EmbeddedFile {
   contentType: string;
@@ -282,7 +327,8 @@ function formatBytes(bytes: number): string {
 }
 
 // Run the script
-generateEmbeds().catch((err) => {
+const operation = process.argv.includes('--check-source') ? verifySourceDigest() : generateEmbeds();
+operation.catch((err) => {
 	console.error('Error generating embeds:', err);
 	process.exit(1);
 });

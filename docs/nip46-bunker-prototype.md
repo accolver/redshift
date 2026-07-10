@@ -90,7 +90,8 @@ bunker://<signer-pubkey>?relay=<relay>&secret=<secret>
 Then connect from the CLI:
 
 ```bash
-redshift login --bunker "bunker://..."
+redshift login --bunker-stdin
+# Paste the one-time bunker URI at the hidden prompt.
 redshift secrets list
 redshift secrets set API_KEY abc123
 redshift run -- npm test

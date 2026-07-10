@@ -25,10 +25,10 @@ import DocsPage from '$lib/components/DocsPage.svelte';
 	<CodeBlock language="bash" code={`# Hidden interactive nsec entry
 redshift login
 
-# Direct options (avoid --nsec in shared shell history)
+# Direct options (avoid secret-bearing values in shared shell history)
 redshift login --nsec nsec1...
-redshift login --bunker 'bunker://...?relay=wss://...'
-redshift login --bunker-stdin
+redshift login --bunker-stdin # Paste a one-time bunker URI through hidden input
+redshift login --bunker 'bunker://...?relay=wss://...' # Secret-free pointer only
 redshift login --connect
 
 # Non-persistent CI authentication

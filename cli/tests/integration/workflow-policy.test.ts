@@ -33,11 +33,21 @@ describe('GitHub Actions policy', () => {
 		}
 	});
 
-	it('keeps generated embeds and relay worker synchronized in CI and release gates', () => {
+	it('keeps generated sources, formatting, and release-critical E2E explicit', () => {
 		for (const path of ['.github/workflows/ci.yml', '.github/workflows/release.yml']) {
 			const workflow = readWorkflow(path);
-			expect(workflow).toContain('git diff --exit-code -- cli/src/lib/embedded-files.ts');
+			expect(workflow).toContain('bun run verify:embeds');
+			expect(workflow).toContain('cmp /tmp/embedded-files.ts cli/src/lib/embedded-files.ts');
 			expect(workflow).toContain('bun run verify:generated');
+			expect(workflow).toContain('bunx biome format cli/src packages web/src web/tests');
+			for (const testPath of [
+				'tests/integration/binary-cli.test.ts',
+				'tests/integration/upgrade-binary-e2e.test.ts',
+				'tests/integration/installer-integrity.test.ts',
+				'tests/integration/nak-bunker-e2e.test.ts',
+			]) {
+				expect(workflow).toContain(testPath);
+			}
 		}
 	});
 

@@ -14,6 +14,16 @@ const REPO = 'accolver/redshift';
 const BINARY_NAME = 'redshift';
 const RELEASE_WORKFLOW = `${REPO}/.github/workflows/release.yml`;
 
+function githubApiBase() {
+	if (
+		process.env.REDSHIFT_ENABLE_TEST_OVERRIDES === '1' &&
+		process.env.REDSHIFT_TEST_GITHUB_API_BASE
+	) {
+		return process.env.REDSHIFT_TEST_GITHUB_API_BASE.replace(/\/$/, '');
+	}
+	return 'https://api.github.com';
+}
+
 export interface UpgradeOptions {
 	force?: boolean;
 	version?: string;
@@ -86,7 +96,7 @@ export function detectArch(): string {
  * Fetch the latest release info from GitHub.
  */
 async function fetchLatestRelease(): Promise<GitHubRelease> {
-	const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
+	const response = await fetch(`${githubApiBase()}/repos/${REPO}/releases/latest`);
 
 	if (!response.ok) {
 		throw new Error(`Failed to fetch latest release: ${response.statusText}`);
@@ -99,7 +109,7 @@ async function fetchLatestRelease(): Promise<GitHubRelease> {
  * Fetch a specific release by tag.
  */
 async function fetchReleaseByTag(tag: string): Promise<GitHubRelease> {
-	const response = await fetch(`https://api.github.com/repos/${REPO}/releases/tags/${tag}`);
+	const response = await fetch(`${githubApiBase()}/repos/${REPO}/releases/tags/${tag}`);
 
 	if (!response.ok) {
 		throw new Error(`Failed to fetch release ${tag}: ${response.statusText}`);
@@ -110,7 +120,7 @@ async function fetchReleaseByTag(tag: string): Promise<GitHubRelease> {
 
 async function fetchReleaseSourceDigest(tag: string) {
 	const response = await fetch(
-		`https://api.github.com/repos/${REPO}/commits/${encodeURIComponent(tag)}`,
+		`${githubApiBase()}/repos/${REPO}/commits/${encodeURIComponent(tag)}`,
 	);
 	if (!response.ok) {
 		throw new Error(`Failed to resolve source digest for release ${tag}: ${response.statusText}`);

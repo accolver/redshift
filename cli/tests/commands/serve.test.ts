@@ -13,6 +13,7 @@ import {
 	addSecurityHeaders,
 	injectRuntimeConfig,
 	injectScriptNonce,
+	removeEmbeddedCspMeta,
 } from '../../src/commands/serve';
 import type { ServeOptions } from '../../src/commands/serve';
 
@@ -297,6 +298,14 @@ describe('serve command', () => {
 			for (const relay of DEFAULT_RELAYS) {
 				expect(csp).toContain(relay);
 			}
+		});
+
+		it('removes static CSP metadata before applying the authoritative runtime nonce policy', () => {
+			const html =
+				'<head><meta http-equiv="content-security-policy" content="script-src \'self\' \'sha256-old\'"><script>boot()</script></head>';
+			const stripped = removeEmbeddedCspMeta(html);
+			expect(stripped).not.toContain('http-equiv="content-security-policy"');
+			expect(stripped).toContain('<script>boot()</script>');
 		});
 
 		it('includes validated custom runtime relays in CSP and nonce-protected config', () => {

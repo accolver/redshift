@@ -32,16 +32,23 @@ describe('landing page Lighthouse hygiene', () => {
 		expect(pageOptions).toContain('export const csr = false');
 	});
 
-	test('ships static security headers used by Cloudflare Pages', () => {
+	test('centralizes CSP in SvelteKit without broad inline script permission', () => {
 		const headers = readWebFile('_headers');
+		const hooks = readWebFile('src/hooks.server.ts');
+		const svelteConfig = readWebFile('svelte.config.js');
 
-		expect(headers).toContain('Content-Security-Policy:');
-		expect(headers).toContain("script-src 'self' https://static.cloudflareinsights.com");
-		expect(headers).toContain("style-src 'self' 'unsafe-inline'");
-		expect(headers).toContain('https://cloudflareinsights.com');
-		expect(headers).toContain("require-trusted-types-for 'script'");
+		expect(headers).not.toContain('Content-Security-Policy:');
+		expect(hooks).not.toContain('Content-Security-Policy');
+		expect(svelteConfig).toContain('name: `redshift-web-${webPackage.version}`');
+		expect(svelteConfig).toContain("mode: 'auto'");
+		expect(svelteConfig).toContain(
+			"'script-src': ['self', 'https://static.cloudflareinsights.com']",
+		);
+		expect(svelteConfig).not.toMatch(/'script-src': \[[^\]]*unsafe-inline/);
 		expect(headers).toContain('X-Robots-Tag: index, follow');
-		expect(headers).toContain('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
+		expect(headers).toContain(
+			'Strict-Transport-Security: max-age=31536000; includeSubDomains; preload',
+		);
 		expect(headers).toContain('Cross-Origin-Opener-Policy: same-origin');
 		expect(headers).toContain('Permissions-Policy: camera=(), microphone=(), geolocation=()');
 	});
@@ -65,7 +72,7 @@ describe('landing page Lighthouse hygiene', () => {
 		const adminPage = readWebFile('src/routes/admin/projects/[slug]/[env]/+page.svelte');
 
 		expect(adminPage).not.toContain('beforeunload');
-		expect(adminPage).not.toContain('addEventListener(\'unload');
+		expect(adminPage).not.toContain("addEventListener('unload");
 		expect(adminPage).not.toContain('addEventListener("unload');
 	});
 });

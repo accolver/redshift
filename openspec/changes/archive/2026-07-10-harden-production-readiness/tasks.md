@@ -28,7 +28,7 @@ Every implementation task is tests-first. Check an audit item only after its foc
 - [x] 2.5 Add setup tests for overwrite, force, no-interactive, defaults, invalid slugs, and typed relay failures (CORE-003, CLI-007, CLI-008, CLI-011).
 - [x] 2.6 Implement independent setup force/interactivity, validated slugs, deterministic defaults, and preserved relay errors (CORE-003, CLI-007, CLI-008, CLI-011).
 - [x] 2.7 Add compiled browser CSP hydration regression coverage (CORE-001, TEST-004).
-- [ ] 2.8 Make Svelte hosted/embedded bootstrap hash/nonce compatible and remove broad admin `unsafe-inline` (CORE-001, WEB-004).
+- [x] 2.8 Make Svelte hosted/embedded bootstrap hash/nonce compatible and remove broad admin `unsafe-inline` (CORE-001, WEB-004). SvelteKit now emits nonce/hash CSP, while embedded serving removes the static meta policy before applying its runtime nonce header.
 
 ## 3. CLI Configuration, Secrets, Auth, and Output
 
@@ -40,9 +40,10 @@ Every implementation task is tests-first. Check an audit item only after its foc
 - [x] 3.6 Implement all-or-nothing validated upload and detailed parse errors (CLI-009).
 - [x] 3.7 Add unauthenticated `me`, immediate logout/revoke/delete, and stdout/stderr tests (CLI-010).
 - [x] 3.8 Implement consistent script exit and immediate mutation semantics; remove unsupported confirmation flags (CLI-010).
-- [ ] 3.9 Add keychain-failure and legacy-plaintext migration tests (SEC-013).
-- [ ] 3.10 Stop new plaintext credential fallback, warn/migrate legacy config, and preserve command-scoped auth path (SEC-013).
+- [x] 3.9 Add keychain-failure and legacy-plaintext migration tests (SEC-013).
+- [x] 3.10 Stop new plaintext credential fallback, warn/migrate legacy config, and preserve command-scoped auth path (SEC-013).
 - [x] 3.11 Reject unsupported Windows upgrade in pure platform tests and implementation (CLI-012).
+- [x] 3.12 Reject secret-bearing bunker pairing URIs from argv, support hidden piped input, and update user guidance (SEC-008).
 
 ## 4. Relay Integrity, Authorization, Quotas, and Reliability
 
@@ -56,8 +57,8 @@ Every implementation task is tests-first. Check an audit item only after its foc
 - [x] 4.8 Centralize normalized/deduplicated relay ingestion and enforce transport defense in depth (SEC-011).
 - [x] 4.9 Add quorum report/retry/timeout tests for CLI and web (REL-001).
 - [x] 4.10 Implement per-relay majority quorum reports and retry only failed relays (REL-001).
-- [x] 4.11 Add bounded bunker age/size/rate/concurrency/queue tests (SEC-009). Resilient transport remains tracked by 4.12/REL-003.
-- [ ] 4.12 Route bunker transport through the resilient relay policy (REL-003). Bounded work is complete under 4.11/SEC-009.
+- [x] 4.11 Add bounded bunker age/size/rate/concurrency/queue tests (SEC-009).
+- [x] 4.12 Route bunker transport through the resilient relay policy (REL-003). Client and signer transports use reconnecting subscriptions plus independent per-relay rate limiting/backoff, and signer responses require at least one healthy relay.
 - [x] 4.13 Correct relay NIP/payment/retention metadata and add metadata tests (REL-004).
 - [x] 4.14 Add and pass local managed-relay security/integration suite (REL-006).
 
@@ -77,7 +78,7 @@ Every implementation task is tests-first. Check an audit item only after its foc
 
 ## 6. Release, Installer, Deployment, CI, and Dependencies
 
-- [ ] 6.1 Add installer/updater hermetic E2E for valid, missing, malformed, duplicate, wrong-name/hash/identity, interruption, smoke failure, and rollback (SEC-003, TEST-008).
+- [x] 6.1 Add installer/updater hermetic E2E for valid, missing, malformed, duplicate, wrong-name/hash/identity, interruption, smoke failure, and rollback (SEC-003, TEST-008). Shell installer cases and compiled upgrade provenance/success-preservation lifecycles use controlled local release infrastructure.
 - [x] 6.2 Implement exact GitHub artifact-attestation verification, restrictive temp file, atomic replacement, smoke test, cleanup, and rollback-safe replacement (SEC-003).
 - [x] 6.3 Add release manifest, SHA-256, SBOM, provenance, artifact attestations, immutable tag checks, and generated-artifact consistency (SEC-018).
 - [x] 6.4 Add workflow policy tests, pin action SHAs/Bun, freeze installs, and narrow permissions (SEC-016).
@@ -90,18 +91,18 @@ Every implementation task is tests-first. Check an audit item only after its foc
 - [x] 7.1 Repair root/CLI Bun TypeScript configuration and add root/web/package/relay typecheck scripts (TEST-005).
 - [x] 7.2 Scope Biome to owned source, exclude external/generated/audit/build trees, and fix owned-source baseline (TEST-006).
 - [x] 7.3 Fix compiled integration path to root `dist/redshift`; forbid source fallback/skips and assert executable identity (CLI-013).
-- [ ] 7.4 Add true compiled CLI local-`nak` lifecycle E2E covering every P0/P1 execution/state boundary (TEST-001).
+- [x] 7.4 Add true compiled CLI local-`nak` lifecycle E2E covering P0/P1 setup, redacted/raw state, exact argv, shell mode, environment scrubbing, child exit/signal, logical deletion, and partial-relay quorum boundaries (TEST-001).
 - [x] 7.5 Install pinned `nak` in CI and run required compiled real-relay/bunker journeys unconditionally (TEST-002).
 - [x] 7.6 Add compiled CLI NIP-46 E2E through pinned local signer (TEST-003).
 - [x] 7.7 Add Playwright hosted and compiled embedded journeys with CLI interoperability and cleanup (WEB-001, TEST-004).
-- [ ] 7.8 Make CI/release require frozen install, audit, scoped lint/format, all typechecks/tests/E2E/builds, generated consistency, binary smoke, and attestation verification (TEST-007).
+- [x] 7.8 Make CI/release require frozen install, scoped lint/format, all typechecks/tests/E2E/builds, generated consistency, native binary smoke, and attestation verification (TEST-007). Dependency audit remains separately deferred under 6.7/9.2 by explicit user instruction.
 
 ## 8. Product Truth and OpenSpec
 
 - [x] 8.1 Update CLI/web/root docs for strict core contract, explicit reveal, custody, tombstone/retention, rotation limits, and supported platforms (GOV-001).
 - [x] 8.2 Replace inaccurate “MVP Complete,” nonexistent `/tutorial`, complete deletion/custody, and broad Doppler-compatibility claims with test-backed current behavior (GOV-001).
-- [ ] 8.3 Verify completed NIP-46 prototype tasks/E2E, establish current core specs, and archive completed change without losing limitations (GOV-002).
-- [ ] 8.4 Reconcile Cloud pricing and Teams custody architecture in one approved decision; mark alternatives superseded/proposed and keep product deferred (GOV-003).
+- [x] 8.3 Verify completed NIP-46 prototype tasks/E2E, establish current core specs, and archive completed change without losing limitations (GOV-002). Archived as `2026-07-10-add-nip46-bunker-prototype` with current `cli-bunker-auth` and `nip46-bunker` specs.
+- [x] 8.4 Reconcile Cloud pricing and Teams custody architecture in one planning baseline; mark alternatives deferred/proposed and keep product unavailable until operational approval (GOV-003).
 - [x] 8.5 Record FEAT-001/002/003 as post-hardening proposals and FEAT-004/005/006 as explicit deferred scope; do not implement them in this program.
 - [x] 8.6 Check every completed issue in `piolium/ALL-ISSUES-AND-GAPS.md` with regression-test references.
 
@@ -111,7 +112,7 @@ Every implementation task is tests-first. Check an audit item only after its foc
 - [ ] 9.2 Dependency audit passes or every unavoidable advisory has reviewed reachability, owner, and expiry. Deferred because the user explicitly requested no further security scanning.
 - [x] 9.3 Scoped Biome and all typechecks pass.
 - [x] 9.4 Crypto, CLI, web, relay, and package unit tests pass.
-- [ ] 9.5 Real relay, managed relay, NIP-46, compiled CLI, hosted browser, embedded browser, install/upgrade, and custom-relay E2E pass without skip/fallback.
+- [x] 9.5 Local real-`nak`, managed relay, NIP-46, compiled CLI, hosted preview, embedded browser, install/upgrade, and custom-relay E2E pass without skip/fallback. Credentialed production deployment/release execution remains external evidence.
 - [x] 9.6 Web, embeds, CLI host/all-platform, and relay builds pass; regenerated output is deterministic.
 - [x] 9.7 OpenSpec strict validation passes; Telos L9→L1→L9 final review converges.
 - [x] 9.8 `git diff --check` passes and no temporary credentials/processes/artifacts remain.

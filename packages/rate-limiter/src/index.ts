@@ -8,6 +8,8 @@
  */
 
 import { type BackoffOptions, backOff } from 'exponential-backoff';
+import type { Event, EventTemplate, VerifiedEvent } from 'nostr-tools/core';
+import { SimplePool } from 'nostr-tools/pool';
 
 export interface QuorumReport<T> {
 	operationId: string;
@@ -302,4 +304,72 @@ export function createResilientOperation<T extends unknown[], R>(
 		await limiter.waitForSlot();
 		return withBackoff(() => fn(...args), backoffOptions);
 	};
+}
+
+interface PublishParams {
+	onauth?: (event: EventTemplate) => Promise<VerifiedEvent>;
+	maxWait?: number;
+	abort?: AbortSignal;
+}
+
+export interface ResilientSimplePoolOptions {
+	maxRequestsPerWindow?: number;
+	windowMs?: number;
+	minDelayMs?: number;
+	backoff?: Partial<BackoffOptions>;
+	/** Deterministic transport seam for tests; production delegates to SimplePool. */
+	publishRelay?: (relay: string, event: Event, params?: PublishParams) => Promise<string>;
+}
+
+/**
+ * Nostr pool used for ephemeral NIP-46 transport.
+ *
+ * Subscriptions use nostr-tools reconnect support, while each relay publish is independently
+ * rate-limited and retried. One unavailable relay therefore does not suppress healthy relay paths.
+ */
+export class ResilientSimplePool extends SimplePool {
+	private readonly limiters = new Map<string, RateLimiter>();
+	private readonly policy: ResilientSimplePoolOptions;
+	private closed = false;
+
+	constructor(options: ResilientSimplePoolOptions = {}) {
+		super({ enableReconnect: true });
+		this.policy = options;
+	}
+
+	override publish(relays: string[], event: Event, params?: PublishParams): Promise<string>[] {
+		return [...new Set(relays)].map((relay) =>
+			withPublishBackoff(async () => {
+				if (this.closed) throw new Error('forbidden: relay pool is closed');
+				const limiter = this.getLimiter(relay);
+				await limiter.waitForSlot();
+				if (this.closed) throw new Error('forbidden: relay pool is closed');
+				if (this.policy.publishRelay) return this.policy.publishRelay(relay, event, params);
+				const publication = super.publish([relay], event, params)[0];
+				if (!publication) throw new Error(`No publication promise created for ${relay}`);
+				return publication;
+			}, this.policy.backoff),
+		);
+	}
+
+	override destroy() {
+		if (this.closed) return;
+		this.closed = true;
+		for (const limiter of this.limiters.values()) limiter.reset();
+		this.limiters.clear();
+		super.destroy();
+	}
+
+	private getLimiter(relay: string) {
+		let limiter = this.limiters.get(relay);
+		if (!limiter) {
+			limiter = new RateLimiter(
+				this.policy.maxRequestsPerWindow,
+				this.policy.windowMs,
+				this.policy.minDelayMs,
+			);
+			this.limiters.set(relay, limiter);
+		}
+		return limiter;
+	}
 }

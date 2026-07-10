@@ -8,9 +8,9 @@
  * L4: Integration-Contractor - NIP-46 request/response contract
  */
 
+import { ResilientSimplePool } from '@redshift/rate-limiter';
 import { nip44 } from 'nostr-tools';
 import type { Event, EventTemplate } from 'nostr-tools/core';
-import { SimplePool } from 'nostr-tools/pool';
 import { finalizeEvent, getPublicKey, verifyEvent } from 'nostr-tools/pure';
 
 export const NIP46_KIND = 24133;
@@ -55,6 +55,7 @@ export interface Nip46RelayPool {
 	): { close(): void };
 	publish(relays: string[], event: Event): Promise<unknown>[];
 	close(relays: string[]): void;
+	destroy?(): void;
 }
 
 export interface Nip46BunkerHandlerOptions {
@@ -68,7 +69,7 @@ export interface Nip46BunkerHandlerOptions {
 	secret?: string;
 	/** Event kinds the prototype is allowed to sign. Defaults to Redshift secret kinds. */
 	allowedSignEventKinds?: number[];
-	/** Injectable relay pool for tests. Defaults to nostr-tools SimplePool. */
+	/** Injectable relay pool for tests. Defaults to resilient NIP-46 transport. */
 	relayPool?: Nip46RelayPool;
 }
 
@@ -452,7 +453,7 @@ export function createNip46BunkerHandler(options: Nip46BunkerHandlerOptions): Ni
  */
 export function startNip46BunkerService(options: Nip46BunkerHandlerOptions): Nip46BunkerService {
 	const handler = createNip46BunkerHandler(options);
-	const pool = options.relayPool ?? (new SimplePool() as Nip46RelayPool);
+	const pool = options.relayPool ?? (new ResilientSimplePool() as Nip46RelayPool);
 	const signerPubkey = handler.getSignerPublicKey();
 	const tasks = new BoundedTaskQueue(MAX_NIP46_CONCURRENCY, MAX_NIP46_QUEUE);
 
@@ -491,7 +492,7 @@ export function startNip46BunkerService(options: Nip46BunkerHandlerOptions): Nip
 								},
 								options.signerSecretKey,
 							);
-							await Promise.all(pool.publish(options.relays, responseEvent));
+							await Promise.any(pool.publish(options.relays, responseEvent));
 						} catch {
 							// Ignore malformed or unrelated NIP-46 events on shared relays.
 						}
@@ -506,7 +507,8 @@ export function startNip46BunkerService(options: Nip46BunkerHandlerOptions): Nip
 	return {
 		close() {
 			sub.close();
-			pool.close(options.relays);
+			if (pool.destroy) pool.destroy();
+			else pool.close(options.relays);
 		},
 	};
 }

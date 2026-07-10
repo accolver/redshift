@@ -686,7 +686,7 @@ function createLoginCommand(): CommandDef {
 			bunker: {
 				type: 'string',
 				short: 'b',
-				description: 'NIP-46 bunker URL (argv may expose one-time secrets)',
+				description: 'secret-free NIP-46 bunker pointer (pairing secrets are rejected)',
 				placeholder: 'url',
 			},
 			'bunker-stdin': {

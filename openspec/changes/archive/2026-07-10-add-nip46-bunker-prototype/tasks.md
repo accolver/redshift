@@ -15,7 +15,7 @@
 - [x] 1.3 Refactor CLI secret read/write paths to use signer-backed Gift Wrap helpers when no raw private key is available.
 - [x] 1.4 Update `requireAuth()` or add a replacement auth resolver that returns either a private-key signer or bunker signer.
 - [x] 1.5 Wire stored bunker auth and keychain client key retrieval into command execution.
-- [x] 1.6 Add tests for `redshift login --bunker`, `redshift login --connect`, `secrets list/get/set/delete`, and `run` with bunker auth.
+- [x] 1.6 Add tests for hidden-input bunker login, `redshift login --connect`, singular secret operations, and `run` with bunker auth.
 
 ## 2. Minimal Bunker Prototype
 

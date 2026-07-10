@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { nsecEncode } from 'nostr-tools/nip19';
+import { generateSecretKey } from 'nostr-tools/pure';
 import {
 	type Config,
 	getAuth,
@@ -21,31 +23,39 @@ import {
 	saveConfig,
 	saveProjectConfig,
 } from '../../src/lib/config';
+import {
+	deleteBunkerKeyFromKeychain,
+	deleteNsecFromKeychain,
+	getBunkerKeyFromKeychain,
+	getNsecFromKeychain,
+	storeBunkerKeyInKeychain,
+	storeNsecInKeychain,
+} from '../../src/lib/keychain';
+
+async function writeLegacyConfig(configDir: string, config: object) {
+	await Bun.write(join(configDir, 'config.json'), JSON.stringify(config));
+}
 
 describe('Config Module', () => {
 	const testDir = join(tmpdir(), `redshift-test-${Date.now()}`);
 	const originalEnv = { ...process.env };
 
-	beforeEach(() => {
-		// Clean test directory
-		if (existsSync(testDir)) {
-			rmSync(testDir, { recursive: true });
-		}
+	beforeEach(async () => {
+		if (existsSync(testDir)) rmSync(testDir, { recursive: true });
 		mkdirSync(testDir, { recursive: true });
-
-		// Set test config directory
 		process.env.REDSHIFT_CONFIG_DIR = testDir;
-		// Clear any existing nsec env var
-		process.env.REDSHIFT_NSEC = undefined;
+		delete process.env.REDSHIFT_NSEC;
+		delete process.env.REDSHIFT_BUNKER;
+		delete process.env.REDSHIFT_DISABLE_KEYCHAIN;
+		await deleteNsecFromKeychain();
+		await deleteBunkerKeyFromKeychain();
 	});
 
-	afterEach(() => {
-		// Restore environment
+	afterEach(async () => {
 		process.env = { ...originalEnv };
-		// Clean up
-		if (existsSync(testDir)) {
-			rmSync(testDir, { recursive: true });
-		}
+		if (existsSync(testDir)) rmSync(testDir, { recursive: true });
+		await deleteNsecFromKeychain();
+		await deleteBunkerKeyFromKeychain();
 	});
 
 	describe('getConfigDir', () => {
@@ -62,9 +72,8 @@ describe('Config Module', () => {
 	});
 
 	describe('saveConfig / loadConfig', () => {
-		it('saves and loads config correctly', async () => {
+		it('saves and loads non-secret config correctly', async () => {
 			const config: Config = {
-				nsec: 'nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5',
 				relays: ['wss://relay.damus.io', 'wss://nos.lol'],
 				defaultProject: 'my-project',
 			};
@@ -78,6 +87,22 @@ describe('Config Module', () => {
 			});
 		});
 
+		it('rejects every plaintext credential field', async () => {
+			await expect(saveConfig({ nsec: nsecEncode(generateSecretKey()) })).rejects.toThrow(
+				'Plaintext credentials',
+			);
+			await expect(
+				saveConfig({
+					authMethod: 'bunker',
+					bunker: {
+						bunkerPubkey: 'a'.repeat(64),
+						relays: ['wss://relay.test'],
+						clientSecretKey: 'b'.repeat(64),
+					},
+				}),
+			).rejects.toThrow('Plaintext credentials');
+		});
+
 		it('returns empty config when file does not exist', async () => {
 			const loaded = await loadConfig();
 			expect(loaded).toEqual({});
@@ -87,7 +112,7 @@ describe('Config Module', () => {
 			const nestedDir = join(testDir, 'nested', 'config');
 			process.env.REDSHIFT_CONFIG_DIR = nestedDir;
 
-			await saveConfig({ nsec: 'nsec1test' });
+			await saveConfig({ defaultProject: 'test-project' });
 
 			expect(existsSync(nestedDir)).toBe(true);
 		});
@@ -137,9 +162,9 @@ describe('Config Module', () => {
 			});
 		});
 
-		it('resets auth, relays, and defaults', async () => {
-			await saveConfig({
-				nsec: 'nsec-secret',
+		it('resets legacy auth, relays, and defaults', async () => {
+			await writeLegacyConfig(testDir, {
+				nsec: nsecEncode(generateSecretKey()),
 				relays: ['wss://relay.example'],
 				defaultProject: 'project',
 				defaultEnvironment: 'dev',
@@ -159,13 +184,38 @@ describe('Config Module', () => {
 			expect(result).toEqual({ nsec: envNsec, source: 'env' });
 		});
 
-		it('returns nsec from config file when env var not set', async () => {
-			const configNsec = 'nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5';
-			await saveConfig({ nsec: configNsec });
+		it('migrates a valid legacy nsec to keychain and sanitizes config', async () => {
+			const configNsec = nsecEncode(generateSecretKey());
+			await writeLegacyConfig(testDir, {
+				authMethod: 'nsec',
+				nsec: configNsec,
+				defaultProject: 'preserved',
+			});
 
 			const result = await getPrivateKey();
 
-			expect(result).toEqual({ nsec: configNsec, source: 'config' });
+			expect(result).toEqual({ nsec: configNsec, source: 'keychain' });
+			expect(await getNsecFromKeychain()).toBe(configNsec);
+			expect(await loadConfig()).toEqual({ authMethod: 'nsec', defaultProject: 'preserved' });
+		});
+
+		it('replaces an invalid keychain nsec from a valid legacy recovery value', async () => {
+			const configNsec = nsecEncode(generateSecretKey());
+			await storeNsecInKeychain('invalid-keychain-nsec');
+			await writeLegacyConfig(testDir, { authMethod: 'nsec', nsec: configNsec });
+
+			expect(await getPrivateKey()).toEqual({ nsec: configNsec, source: 'keychain' });
+			expect(await getNsecFromKeychain()).toBe(configNsec);
+			expect((await loadConfig()).nsec).toBeUndefined();
+		});
+
+		it('fails closed without deleting a legacy nsec when keychain is unavailable', async () => {
+			const configNsec = nsecEncode(generateSecretKey());
+			await writeLegacyConfig(testDir, { authMethod: 'nsec', nsec: configNsec });
+			process.env.REDSHIFT_DISABLE_KEYCHAIN = '1';
+
+			await expect(getPrivateKey()).rejects.toThrow('REDSHIFT_NSEC');
+			expect((await loadConfig()).nsec).toBe(configNsec);
 		});
 
 		it('returns null when no nsec available', async () => {
@@ -178,12 +228,72 @@ describe('Config Module', () => {
 			const configNsec = 'nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5';
 
 			process.env.REDSHIFT_NSEC = envNsec;
-			await saveConfig({ nsec: configNsec });
+			await writeLegacyConfig(testDir, { nsec: configNsec });
 
 			const result = await getPrivateKey();
 
 			expect(result?.nsec).toBe(envNsec);
 			expect(result?.source).toBe('env');
+		});
+	});
+
+	describe('legacy bunker credential migration', () => {
+		it('moves a legacy client key to keychain and removes all bunker secrets from config', async () => {
+			const clientSecretKey = 'b'.repeat(64);
+			await writeLegacyConfig(testDir, {
+				authMethod: 'bunker',
+				defaultProject: 'preserved',
+				bunker: {
+					bunkerPubkey: 'a'.repeat(64),
+					relays: ['wss://relay.test'],
+					clientSecretKey,
+					secret: 'pairing-secret',
+				},
+			});
+
+			const auth = await getAuth();
+
+			expect(auth?.source).toBe('keychain');
+			expect(auth?.bunker?.clientSecretKey).toBe(clientSecretKey);
+			expect(await getBunkerKeyFromKeychain()).toBe(clientSecretKey);
+			expect(await loadConfig()).toEqual({
+				authMethod: 'bunker',
+				defaultProject: 'preserved',
+				bunker: { bunkerPubkey: 'a'.repeat(64), relays: ['wss://relay.test/'] },
+			});
+		});
+
+		it('replaces an invalid keychain bunker key from a valid legacy recovery value', async () => {
+			const clientSecretKey = 'b'.repeat(64);
+			await storeBunkerKeyInKeychain('invalid-keychain-key');
+			await writeLegacyConfig(testDir, {
+				authMethod: 'bunker',
+				bunker: {
+					bunkerPubkey: 'a'.repeat(64),
+					relays: ['wss://relay.test'],
+					clientSecretKey,
+				},
+			});
+
+			expect((await getAuth())?.bunker?.clientSecretKey).toBe(clientSecretKey);
+			expect(await getBunkerKeyFromKeychain()).toBe(clientSecretKey);
+			expect((await loadConfig()).bunker?.clientSecretKey).toBeUndefined();
+		});
+
+		it('fails closed and preserves a legacy client key when keychain is unavailable', async () => {
+			const clientSecretKey = 'b'.repeat(64);
+			await writeLegacyConfig(testDir, {
+				authMethod: 'bunker',
+				bunker: {
+					bunkerPubkey: 'a'.repeat(64),
+					relays: ['wss://relay.test'],
+					clientSecretKey,
+				},
+			});
+			process.env.REDSHIFT_DISABLE_KEYCHAIN = '1';
+
+			await expect(getAuth()).rejects.toThrow('REDSHIFT_BUNKER');
+			expect((await loadConfig()).bunker?.clientSecretKey).toBe(clientSecretKey);
 		});
 	});
 
@@ -236,8 +346,9 @@ describe('Config Module', () => {
 
 			expect(auth).not.toBeNull();
 			expect(auth!.method).toBe('bunker');
-			expect(auth!.bunker!.clientSecretKey).toBeTruthy();
-			expect(auth!.bunker!.clientSecretKey.length).toBeGreaterThan(0);
+			const clientSecretKey = auth?.bunker?.clientSecretKey;
+			expect(clientSecretKey).toBeTruthy();
+			expect(clientSecretKey?.length).toBeGreaterThan(0);
 		});
 	});
 });

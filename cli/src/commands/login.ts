@@ -66,8 +66,7 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
 
 	// Determine auth method
 	if (options.bunker) {
-		console.log('Warning: Passing a bunker URI via argv can expose its one-time pairing secret.');
-		console.log('Prefer --bunker-stdin or REDSHIFT_BUNKER.\n');
+		validateBunkerArgSafety(options.bunker);
 		await loginWithBunker(options.bunker);
 	} else if (options.bunkerStdin) {
 		const bunkerUrl = await promptHidden('Enter bunker URI: ');
@@ -149,11 +148,54 @@ export function sanitizeBunkerError(error: unknown): string {
 		.replace(/([?&]secret=)[^&\s"']+/gi, '$1[REDACTED]');
 }
 
+/** Secret-bearing pairing URIs must never be exposed through process argv. */
+export function validateBunkerArgSafety(bunkerUrl: string) {
+	if (/[?&]secret=/i.test(bunkerUrl)) {
+		throw new ValidationError(
+			'Secret-bearing bunker URIs are not accepted via --bunker; use --bunker-stdin or REDSHIFT_BUNKER.',
+		);
+	}
+	try {
+		const parsed = new URL(bunkerUrl);
+		if (parsed.protocol === 'bunker:' && parsed.searchParams.has('secret')) {
+			throw new ValidationError(
+				'Secret-bearing bunker URIs are not accepted via --bunker; use --bunker-stdin or REDSHIFT_BUNKER.',
+			);
+		}
+	} catch (error) {
+		if (error instanceof ValidationError) throw error;
+		// Normal bunker parsing reports malformed URLs with redacted errors later.
+	}
+}
+
+type StoreBunkerCredential = (clientKeyHex: string) => Promise<boolean>;
+
+export async function persistBunkerCredential(
+	bunkerPointer: Pick<BunkerAuth, 'bunkerPubkey' | 'relays'>,
+	clientKeyHex: string,
+	storeCredential: StoreBunkerCredential = storeBunkerKeyInKeychain,
+) {
+	if (!/^[0-9a-f]{64}$/i.test(clientKeyHex)) {
+		throw new ValidationError('Invalid NIP-46 client secret key.');
+	}
+	if (!(await storeCredential(clientKeyHex))) {
+		throw new AuthError(
+			'System keychain unavailable; the bunker client key was not persisted. Use REDSHIFT_BUNKER for command-scoped authentication.',
+			'bunker',
+		);
+	}
+	await saveBunkerAuth({
+		bunkerPubkey: bunkerPointer.bunkerPubkey,
+		relays: bunkerPointer.relays,
+	});
+}
+
 /** Login with a bunker pointer while retaining the client key only in keychain. */
 async function loginWithBunker(bunkerUrl: string): Promise<void> {
 	console.log('Connecting to bunker...');
+	let connection: Awaited<ReturnType<typeof connectToBunker>> | null = null;
 	try {
-		const connection = await connectToBunker(bunkerUrl, {
+		connection = await connectToBunker(bunkerUrl, {
 			onAuth: (url) => {
 				console.log('\n⚠️  Authentication required. Please visit:');
 				console.log(`   ${url}`);
@@ -161,30 +203,27 @@ async function loginWithBunker(bunkerUrl: string): Promise<void> {
 		});
 		const npub = npubEncode(connection.userPubkey);
 		const clientKeyHex = Buffer.from(connection.clientSecretKey).toString('hex');
-		const storedInKeychain = await storeBunkerKeyInKeychain(clientKeyHex);
+		await persistBunkerCredential(
+			{
+				bunkerPubkey: connection.bunkerPointer.pubkey,
+				relays: connection.bunkerPointer.relays,
+			},
+			clientKeyHex,
+		);
 		await deleteNsecFromKeychain();
-		// Retain the NIP-46 client key as a 0600 config fallback. Never persist the
-		// one-time pairing secret from the bunker URI.
-		const bunkerAuth: BunkerAuth = {
-			bunkerPubkey: connection.bunkerPointer.pubkey,
-			relays: connection.bunkerPointer.relays,
-			clientSecretKey: clientKeyHex,
-		};
-		await saveBunkerAuth(bunkerAuth);
 		console.log('\n✓ Connected to bunker successfully!');
 		console.log(`  User: ${npub}`);
 		console.log(`  Bunker: ${formatBunkerPointer(connection.bunkerPointer)}`);
-		if (storedInKeychain) {
-			console.log('\nClient key stored in the system keychain and 0600 config fallback.');
-			console.log(`  Service: ${getKeychainServiceName()}`);
-		} else {
-			console.log('\n⚠️  System keychain unavailable. Client key stored in 0600 config fallback.');
-		}
-		await closeBunkerSigner(connection.signer);
-		connection.clientSecretKey.fill(0);
+		console.log('\nClient key stored only in the system keychain.');
+		console.log(`  Service: ${getKeychainServiceName()}`);
 	} catch (error) {
 		if (error instanceof AuthError) throw error;
 		throw new AuthError(`Failed to connect to bunker: ${sanitizeBunkerError(error)}`, 'bunker');
+	} finally {
+		if (connection) {
+			await closeBunkerSigner(connection.signer).catch(() => undefined);
+			connection.clientSecretKey.fill(0);
+		}
 	}
 }
 
@@ -195,41 +234,40 @@ async function loginWithNostrConnect(): Promise<void> {
 	console.log('Creating NostrConnect URI...\n');
 
 	const relays = await getRelays();
-	const { uri, waitForConnection } = await createNostrConnectUri(relays, 'Redshift CLI');
+	const { uri, clientSecretKey, waitForConnection } = await createNostrConnectUri(
+		relays,
+		'Redshift CLI',
+	);
 
 	console.log('Scan this QR code or paste the URI in your bunker app:\n');
 	console.log(renderTerminalQr(uri));
 	console.log(`\nURI: ${uri}\n`);
 	console.log('Waiting for connection (timeout: 2 minutes)...');
 
+	let connection: Awaited<ReturnType<typeof waitForConnection>> | null = null;
 	try {
-		const connection = await waitForConnection(120000);
+		connection = await waitForConnection(120000);
 		const npub = npubEncode(connection.userPubkey);
 		const clientKeyHex = Buffer.from(connection.clientSecretKey).toString('hex');
-		const storedInKeychain = await storeBunkerKeyInKeychain(clientKeyHex);
+		await persistBunkerCredential(
+			{
+				bunkerPubkey: connection.bunkerPointer.pubkey,
+				relays: connection.bunkerPointer.relays,
+			},
+			clientKeyHex,
+		);
 		await deleteNsecFromKeychain();
-		// Retain the NIP-46 client key as a 0600 config fallback. Never persist the
-		// one-time pairing secret from the nostrconnect URI.
-		const bunkerAuth: BunkerAuth = {
-			bunkerPubkey: connection.bunkerPointer.pubkey,
-			relays: connection.bunkerPointer.relays,
-			clientSecretKey: clientKeyHex,
-		};
-		await saveBunkerAuth(bunkerAuth);
 		console.log('\n✓ Connected successfully!');
 		console.log(`  User: ${npub}`);
 		console.log(`  Bunker: ${formatBunkerPointer(connection.bunkerPointer)}`);
-		if (storedInKeychain) {
-			console.log('\nClient key stored in the system keychain and 0600 config fallback.');
-			console.log(`  Service: ${getKeychainServiceName()}`);
-		} else {
-			console.log('\n⚠️  System keychain unavailable. Client key stored in 0600 config fallback.');
-		}
-		await closeBunkerSigner(connection.signer);
-		connection.clientSecretKey.fill(0);
+		console.log('\nClient key stored only in the system keychain.');
+		console.log(`  Service: ${getKeychainServiceName()}`);
 	} catch (error) {
 		if (error instanceof AuthError) throw error;
 		throw new AuthError(`Connection timed out or failed: ${sanitizeBunkerError(error)}`, 'bunker');
+	} finally {
+		if (connection) await closeBunkerSigner(connection.signer).catch(() => undefined);
+		clientSecretKey.fill(0);
 	}
 }
 
@@ -249,39 +287,40 @@ async function promptHidden(prompt: string): Promise<string> {
 		process.stdin.setEncoding('utf8');
 
 		let input = '';
+		let settled = false;
 
-		const onData = (char: string) => {
-			// Handle Ctrl+C
-			if (char === '\u0003') {
-				process.stdout.write('\n');
-				process.exit(0);
-			}
+		const finish = () => {
+			if (settled) return;
+			settled = true;
+			if (process.stdin.isTTY) process.stdin.setRawMode(false);
+			process.stdin.pause();
+			process.stdin.removeListener('data', onData);
+			process.stdin.removeListener('end', finish);
+			process.stdout.write('\n');
+			resolve(input.trim());
+		};
 
-			// Handle Enter
-			if (char === '\r' || char === '\n') {
-				if (process.stdin.isTTY) {
-					process.stdin.setRawMode(false);
+		const onData = (chunk: string) => {
+			// Pipes commonly deliver the whole line in one chunk; process it character by character.
+			for (const char of chunk) {
+				if (char === '\u0003') {
+					process.stdout.write('\n');
+					process.exit(0);
 				}
-				process.stdin.pause();
-				process.stdin.removeListener('data', onData);
-				process.stdout.write('\n');
-				resolve(input.trim());
-				return;
-			}
-
-			// Handle Backspace
-			if (char === '\u007F' || char === '\b') {
-				if (input.length > 0) {
-					input = input.slice(0, -1);
+				if (char === '\r' || char === '\n') {
+					finish();
+					return;
 				}
-				return;
+				if (char === '\u007F' || char === '\b') {
+					if (input.length > 0) input = input.slice(0, -1);
+					continue;
+				}
+				input += char;
 			}
-
-			// Accumulate character (don't echo)
-			input += char;
 		};
 
 		process.stdin.on('data', onData);
+		process.stdin.once('end', finish);
 	});
 }
 

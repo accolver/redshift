@@ -1,5 +1,9 @@
 # Change: Add Teams Bunker Service
 
+## Status
+
+**Proposed and deferred.** The canonical research baseline is a bunker-held team key with signer-layer RBAC. MLS and FROSTR remain explicit later custody research. Teams, OAuth, shared-key recovery, audit logging, and managed deployment are not implemented or approved for production.
+
 ## Why
 
 Redshift Teams requires shared secret management without distributing a raw team private key to every member. After `add-nip46-bunker-prototype` proves the NIP-46 signing/decryption foundation, this phase turns that foundation into a Teams product with team key custody, RBAC, OAuth onboarding, audit logs, and managed/self-hosted deployment.

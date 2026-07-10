@@ -42,15 +42,15 @@ Setup SHALL validate slugs before side effects, distinguish overwrite force from
 - **THEN** nothing is written and the command exits nonzero
 
 ### Requirement: Consistent Secret Operations
-The CLI SHALL support validated batch get/set/delete, names/plain/missing handling, confirmed destructive operations, and env/JSON exports to stdout or an explicit path. Unsupported clipboard, mount, fallback, and encrypted-export claims SHALL be removed.
+The CLI SHALL support one validated secret per get/set/delete invocation, redacted listing, explicit raw reveal, and env upload/download to stdout or an explicit path. Unsupported batch mutation, clipboard, mount, fallback, and encrypted-export claims SHALL be removed.
 
-#### Scenario: Batch mutation
-- **WHEN** one entry in a batch is invalid
-- **THEN** no entry is published
+#### Scenario: Invalid mutation
+- **WHEN** a secret name or value is invalid
+- **THEN** no bundle is published
 
-#### Scenario: Noninteractive delete
-- **WHEN** stdin is not a TTY and `--yes` is absent
-- **THEN** deletion refuses without publishing
+#### Scenario: Explicit delete
+- **WHEN** a user invokes `secrets delete <name>`
+- **THEN** the CLI publishes a logical tombstone update for that one secret
 
 #### Scenario: Upload validation
 - **WHEN** an env upload contains malformed, reserved, duplicate-after-normalization, or invalid entries
@@ -72,7 +72,23 @@ The CLI SHALL not write new plaintext nsec or bunker client keys when the keycha
 
 #### Scenario: Keychain failure
 - **WHEN** persistent login cannot store a key securely
-- **THEN** the credential is not written to config and the user receives a non-secret fallback instruction
+- **THEN** the credential is not written to config and the user receives a non-secret command-scoped authentication instruction
+
+#### Scenario: Legacy plaintext migration
+- **WHEN** a valid legacy nsec or bunker client key exists in config
+- **THEN** the CLI stores it in the system keychain before removing every plaintext credential field from config
+
+#### Scenario: Legacy migration failure
+- **WHEN** the system keychain is unavailable during legacy migration
+- **THEN** the CLI fails closed, preserves the legacy bytes for manual recovery, and never authenticates from plaintext config
+
+#### Scenario: One-time bunker pairing
+- **WHEN** a bunker URI contains a `secret=` pairing credential
+- **THEN** the CLI rejects it from argv and accepts it only through hidden stdin or command-scoped environment input
+
+#### Scenario: Piped hidden input
+- **WHEN** a complete pairing URI and newline arrive in one stdin chunk
+- **THEN** the CLI processes the line without echoing or truncating it
 
 #### Scenario: Manager disconnect
 - **WHEN** SecretManager disconnects

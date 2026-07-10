@@ -48,6 +48,10 @@ export function injectScriptNonce(html: string, nonce: string): string {
 	return html.replace(/<script\b(?![^>]*\bnonce=)/gi, `<script nonce="${nonce}"`);
 }
 
+export function removeEmbeddedCspMeta(html: string) {
+	return html.replace(/<meta\b(?=[^>]*http-equiv=["']content-security-policy["'])[^>]*>\s*/gi, '');
+}
+
 export function injectRuntimeConfig(html: string, nonce: string, relays: string[]) {
 	const serialized = JSON.stringify({ relays }).replaceAll('<', '\\u003c');
 	const script = `<script nonce="${nonce}">globalThis.__REDSHIFT_RUNTIME_CONFIG__=${serialized};</script>`;
@@ -59,7 +63,11 @@ export function injectRuntimeConfig(html: string, nonce: string, relays: string[
 function prepareHtmlResponse(content: string, headers: Headers, relays: string[]) {
 	const nonce = randomBytes(18).toString('base64url');
 	addSecurityHeaders(headers, false, nonce, relays);
-	return injectRuntimeConfig(injectScriptNonce(content, nonce), nonce, relays);
+	return injectRuntimeConfig(
+		injectScriptNonce(removeEmbeddedCspMeta(content), nonce),
+		nonce,
+		relays,
+	);
 }
 
 /**

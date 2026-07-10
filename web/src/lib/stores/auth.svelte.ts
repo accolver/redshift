@@ -1,4 +1,5 @@
 import type { AuthState, EventTemplate, ProfileMetadata, SignedEvent } from '$lib/types/nostr';
+import { ResilientSimplePool } from '@redshift/rate-limiter';
 import { getPublicKey, nip19 } from 'nostr-tools';
 import { type BunkerPointer, BunkerSigner, parseBunkerInput } from 'nostr-tools/nip46';
 import { SimplePool } from 'nostr-tools/pool';
@@ -90,10 +91,7 @@ function parseStoredBunkerConnection(value: string): StoredBunkerConnection | nu
 let activeBunkerSigner: BunkerSigner | null = null;
 
 // Active bunker pool instance (for cleanup on disconnect or error)
-let activeBunkerPool: SimplePool | null = null;
-
-// Relay URLs used by the active bunker pool (needed for proper cleanup)
-let activeBunkerRelays: string[] = [];
+let activeBunkerPool: ResilientSimplePool | null = null;
 
 // Auth state using $state rune
 let authState = $state<AuthState>({
@@ -269,7 +267,7 @@ export async function connectWithBunker(bunkerUri: string): Promise<boolean> {
 		}
 
 		// Create the bunker signer instance
-		const pool = new SimplePool();
+		const pool = new ResilientSimplePool();
 		let bunker: BunkerSigner;
 		try {
 			bunker = BunkerSigner.fromBunker(localSecretKey, bunkerPointer, { pool });
@@ -283,7 +281,6 @@ export async function connectWithBunker(bunkerUri: string): Promise<boolean> {
 			// Persist only the reusable pointer. Never retain a one-time `secret=` value.
 			activeBunkerSigner = bunker;
 			activeBunkerPool = pool;
-			activeBunkerRelays = bunkerPointer.relays;
 			if (isSecureStorageAvailable()) {
 				await secureStore(BUNKER_CONNECTION_KEY, serializeBunkerConnection(bunkerPointer));
 				secureRemove(LEGACY_BUNKER_URI_KEY);
@@ -304,7 +301,7 @@ export async function connectWithBunker(bunkerUri: string): Promise<boolean> {
 
 			return true;
 		} catch (error) {
-			pool.close(bunkerPointer.relays);
+			pool.destroy();
 			throw error;
 		}
 	} catch (err) {
@@ -331,8 +328,7 @@ export async function disconnect(): Promise<void> {
 	// Clean up bunker pool if active
 	if (activeBunkerPool) {
 		try {
-			activeBunkerPool.close(activeBunkerRelays);
-			activeBunkerRelays = [];
+			activeBunkerPool.destroy();
 		} catch {
 			// Ignore errors during cleanup
 		}

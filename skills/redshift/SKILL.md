@@ -35,7 +35,7 @@ Docs: https://redshiftapp.com/docs
 ```bash
 redshift login                    # Interactive (recommended)
 redshift login --nsec nsec1...    # Direct private key (use env var in CI instead)
-redshift login --bunker "bunker://pubkey?relay=wss://relay.example&secret=xxx"  # NIP-46 (ALWAYS quote the URL)
+redshift login --bunker-stdin       # NIP-46 one-time pairing URI via hidden input
 redshift login --connect          # Generate NostrConnect URI for bunker app
 redshift login --overwrite        # Overwrite existing credentials
 redshift me                       # Check current identity (alias: whoami)

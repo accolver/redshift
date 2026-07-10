@@ -21,4 +21,4 @@
 
 ## Intentionally open
 
-The final reviewers confirmed or did not supersede these open gates: secret-bearing bunker argv (`SEC-008`), legacy plaintext credential fallback/local bunker custody (`SEC-013`), fresh dependency audit (`SEC-017`, skipped per user instruction), resilient NIP-46 relay transport (`REL-003`), hosted admin CSP (`WEB-004`), broader all-boundary compiled/installer E2E (`TEST-001`, `TEST-008`), full combined CI gate (`TEST-007`), OpenSpec archival/current truth (`GOV-002`), and final Cloud/Teams architecture approval (`GOV-003`). Credentialed deployment/release and operational backup/SLA evidence remain external.
+Follow-up work closed bunker pairing argv exposure and credential fallback (`SEC-008`, `SEC-013`), resilient NIP-46 transport (`REL-003`), hosted/embedded script CSP (`WEB-004`), compiled/install/release gates (`TEST-001`, `TEST-007`, `TEST-008`), and OpenSpec/commercial custody truth (`GOV-002`, `GOV-003`). The remaining local audit gate is `SEC-017`, explicitly deferred because the user requested no further dependency/security scanning. Credentialed deployment/release and operational backup/SLA evidence remain external.
