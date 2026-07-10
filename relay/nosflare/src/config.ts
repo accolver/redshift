@@ -5,38 +5,39 @@ import { RelayInfo } from './types';
 // Specialized relay for encrypted secrets storage (NIP-59 Gift Wrapped NIP-78 events)
 
 // Pay to relay - One-time payment via Lightning zaps
-export const relayNpub = "npub14lcrmzysc0fsxyf46c60mmw7a3jj6akc9zewl0futhjrplqhu6uslc4x3q";
-export const relayLnAddress = "alan@minibits.cash";
+export const relayNpub = 'npub14lcrmzysc0fsxyf46c60mmw7a3jj6akc9zewl0futhjrplqhu6uslc4x3q';
+export const relayLnAddress = 'alan@minibits.cash';
 export const PAY_TO_RELAY_ENABLED = true;
 export const RELAY_ACCESS_PRICE_SATS = 12121;
 
 // NIP-42 Authentication - REQUIRED for paid relay access
 export const AUTH_REQUIRED = true;
 export const AUTH_TIMEOUT_MS = 600000; // 10 minutes
+export const MAX_PRINCIPAL_SUBSCRIPTIONS = 100;
 
 // Relay info
 export const relayInfo: RelayInfo = {
-  name: "Redshift Cloud Relay",
-  description: "Managed relay for Redshift Cloud subscribers. Encrypted secrets storage only.",
-  pubkey: "aff03d8890c3d3031135d634fdeddeec652d76d828b2efbd3c5de430fc17e6b9",
-  contact: "support@redshiftapp.com",
-  supported_nips: [1, 9, 11, 33, 40, 42, 59, 78],
-  software: "https://github.com/Spl0itable/nosflare",
-  version: "8.0.0",
-  icon: "https://redshiftapp.com/logo-dark.png",
-  privacy_policy: "https://redshiftapp.com/relay/privacy-policy",
-  terms_of_service: "https://redshiftapp.com/relay/terms-of-service",
+	name: 'Redshift Managed Relay',
+	description: 'Managed relay for Redshift Cloud subscribers. Encrypted secrets storage only.',
+	pubkey: 'aff03d8890c3d3031135d634fdeddeec652d76d828b2efbd3c5de430fc17e6b9',
+	contact: 'support@redshiftapp.com',
+	supported_nips: [1, 11, 40, 42, 59],
+	software: 'https://github.com/Spl0itable/nosflare',
+	version: '8.0.0',
+	icon: 'https://redshiftapp.com/logo-dark.png',
+	privacy_policy: 'https://redshiftapp.com/relay/privacy-policy',
+	terms_of_service: 'https://redshiftapp.com/relay/terms-of-service',
 
-  limitation: {
-    max_message_length: 524288,
-    max_subscriptions: 100,
-    max_limit: 1000,
-    max_event_tags: 100,
-    max_content_length: 70000,
-    auth_required: AUTH_REQUIRED,
-    payment_required: false,
-    restricted_writes: true,
-  },
+	limitation: {
+		max_message_length: 524288,
+		max_subscriptions: MAX_PRINCIPAL_SUBSCRIPTIONS,
+		max_limit: 1000,
+		max_event_tags: 100,
+		max_content_length: 70000,
+		auth_required: AUTH_REQUIRED,
+		payment_required: PAY_TO_RELAY_ENABLED,
+		restricted_writes: true,
+	},
 };
 
 // NIP-05 users - not used
@@ -45,7 +46,7 @@ export const nip05Users: Record<string, string> = {};
 // Anti-spam
 export const enableAntiSpam = true;
 export const enableGlobalDuplicateCheck = false;
-export const antiSpamKinds = new Set([1059, 30078]);
+export const antiSpamKinds = new Set([1059]);
 
 // Access control - handled via NIP-42 + external token validation
 export const blockedPubkeys = new Set<string>([]);
@@ -54,8 +55,7 @@ export const blockedEventKinds = new Set<number>([]);
 
 // IMPORTANT: Only allow our specific event kinds
 export const allowedEventKinds = new Set<number>([
-  1059,  // NIP-59 Gift Wrap
-  30078, // NIP-78 App Data
+	1059, // NIP-59 Gift Wrap
 ]);
 
 export const blockedContent = new Set<string>([]);
@@ -75,34 +75,37 @@ export const DB_PRUNING_ENABLED = true;
 export const DB_SIZE_THRESHOLD_GB = 9;
 export const DB_PRUNE_BATCH_SIZE = 1000;
 export const DB_PRUNE_TARGET_GB = 8;
-export const pruneProtectedKinds = new Set<number>([0, 3, 10002, 30078]);
+export const pruneProtectedKinds = new Set<number>([1059]);
 
 // Helper functions
 import { NostrEvent } from './types';
 
 export function isPubkeyAllowed(pubkey: string): boolean {
-  if (allowedPubkeys.size > 0 && !allowedPubkeys.has(pubkey)) return false;
-  return !blockedPubkeys.has(pubkey);
+	if (allowedPubkeys.size > 0 && !allowedPubkeys.has(pubkey)) return false;
+	return !blockedPubkeys.has(pubkey);
 }
 
 export function isEventKindAllowed(kind: number): boolean {
-  if (allowedEventKinds.size > 0 && !allowedEventKinds.has(kind)) return false;
-  return !blockedEventKinds.has(kind);
+	if (allowedEventKinds.size > 0 && !allowedEventKinds.has(kind)) return false;
+	return !blockedEventKinds.has(kind);
 }
 
 export function containsBlockedContent(event: NostrEvent): boolean {
-  const lowercaseContent = (event.content || "").toLowerCase();
-  const lowercaseTags = event.tags.map(tag => tag.join("").toLowerCase());
-  for (const blocked of blockedContent) {
-    const blockedLower = blocked.toLowerCase();
-    if (lowercaseContent.includes(blockedLower) || lowercaseTags.some(tag => tag.includes(blockedLower))) {
-      return true;
-    }
-  }
-  return false;
+	const lowercaseContent = (event.content || '').toLowerCase();
+	const lowercaseTags = event.tags.map((tag) => tag.join('').toLowerCase());
+	for (const blocked of blockedContent) {
+		const blockedLower = blocked.toLowerCase();
+		if (
+			lowercaseContent.includes(blockedLower) ||
+			lowercaseTags.some((tag) => tag.includes(blockedLower))
+		) {
+			return true;
+		}
+	}
+	return false;
 }
 
 export function isTagAllowed(tag: string): boolean {
-  if (allowedTags.size > 0 && !allowedTags.has(tag)) return false;
-  return !blockedTags.has(tag);
+	if (allowedTags.size > 0 && !allowedTags.has(tag)) return false;
+	return !blockedTags.has(tag);
 }

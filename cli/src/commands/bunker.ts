@@ -9,7 +9,7 @@ import { chmodSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { getConfigDir, getRelays } from '../lib/config';
-import { startNip46BunkerService, type Nip46RelayPool } from '../lib/nip46-bunker';
+import { type Nip46RelayPool, startNip46BunkerService } from '../lib/nip46-bunker';
 
 interface StoredBunkerPrototypeConfig {
 	signerSecretKey: string;
@@ -145,7 +145,9 @@ export async function bunkerCommand(options: BunkerCommandOptions): Promise<void
 	console.log('Connect with:');
 	console.log(`  redshift login --bunker "${bunkerUri(config)}"`);
 	console.log('');
-	console.log('Security note: this prototype stores local keys in a 0600 plaintext file under ~/.redshift/bunker.');
+	console.log(
+		'Security note: this prototype stores local keys in a 0600 plaintext file under ~/.redshift/bunker.',
+	);
 	console.log('Press Ctrl+C to stop.');
 
 	const service = startNip46BunkerService({
@@ -153,7 +155,7 @@ export async function bunkerCommand(options: BunkerCommandOptions): Promise<void
 		userSecretKey,
 		relays: config.relays,
 		secret: config.secret,
-		relayPool: options.relayPool,
+		...(options.relayPool ? { relayPool: options.relayPool } : {}),
 	});
 
 	if (options.runOnceForTest) {

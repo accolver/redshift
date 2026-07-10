@@ -7,10 +7,18 @@
  * with exponential backoff for transient failures.
  */
 
+import type { EventTemplate, VerifiedEvent } from 'nostr-tools/core';
 import type { Filter } from 'nostr-tools/filter';
 import { SimplePool } from 'nostr-tools/pool';
+import { compareSecretVersions } from './crypto';
 import { RelayError } from './errors';
-import { RateLimiter, withPublishBackoff, withQueryBackoff } from './rate-limiter';
+import {
+	QuorumError,
+	RateLimiter,
+	executeWithQuorum,
+	withPublishBackoff,
+	withQueryBackoff,
+} from './rate-limiter';
 import type { NostrEvent, UnsignedEvent } from './types';
 import { NostrKinds, REDSHIFT_TYPE_TAG } from './types';
 
@@ -20,6 +28,59 @@ import { NostrKinds, REDSHIFT_TYPE_TAG } from './types';
  * - Minimum 100ms between requests
  */
 const defaultRateLimiter = new RateLimiter(10, 1000, 100);
+
+export interface PublishReport {
+	eventId: string;
+	required: number;
+	accepted: string[];
+	failed: Array<{ relay: string; reason: string }>;
+}
+
+export class PublishQuorumError extends RelayError {
+	readonly report: PublishReport;
+
+	constructor(report: PublishReport) {
+		super(
+			`Publish quorum failed: ${report.accepted.length}/${report.required} relays accepted event ${report.eventId}`,
+			'publish',
+		);
+		this.name = 'PublishQuorumError';
+		this.report = report;
+	}
+}
+
+export async function publishWithQuorum(
+	relays: string[],
+	event: NostrEvent,
+	publishOne: (relay: string, event: NostrEvent) => Promise<void>,
+	required = Math.floor(relays.length / 2) + 1,
+): Promise<PublishReport> {
+	try {
+		const shared = await executeWithQuorum(
+			relays,
+			event.id,
+			(relay) => publishOne(relay, event),
+			required,
+		);
+		return {
+			eventId: shared.operationId,
+			required: shared.required,
+			accepted: shared.accepted,
+			failed: shared.failed.map(({ target, reason }) => ({ relay: target, reason })),
+		};
+	} catch (error) {
+		if (!(error instanceof QuorumError)) throw error;
+		throw new PublishQuorumError({
+			eventId: error.report.operationId,
+			required: error.report.required,
+			accepted: error.report.accepted as string[],
+			failed: error.report.failed.map(({ target, reason }) => ({
+				relay: String(target),
+				reason,
+			})),
+		});
+	}
+}
 
 /**
  * Relay pool wrapper for managing connections with rate limiting
@@ -38,7 +99,7 @@ export interface RelayPool {
 	/**
 	 * Publish an event to all relays (with rate limiting and retry)
 	 */
-	publish(event: NostrEvent): Promise<void>;
+	publish(event: NostrEvent): Promise<PublishReport>;
 	/**
 	 * Query events and wait for EOSE (with rate limiting and retry)
 	 */
@@ -57,6 +118,8 @@ export interface RelayPool {
  * Options for creating a relay pool
  */
 export interface RelayPoolOptions {
+	/** Sign a NIP-42 AUTH template when a relay challenges this client. */
+	authSigner?: (event: EventTemplate) => Promise<VerifiedEvent>;
 	/** Custom rate limiter instance (optional) */
 	rateLimiter?: RateLimiter;
 	/** Whether to enable rate limiting (default: true) */
@@ -69,7 +132,15 @@ export interface RelayPoolOptions {
  * Create a relay pool for the given URLs with rate limiting and retry support.
  */
 export function createRelayPool(relayUrls: string[], options: RelayPoolOptions = {}): RelayPool {
-	const pool = new SimplePool();
+	type AuthCapableSimplePoolConstructor = new (options?: {
+		automaticallyAuth?: (
+			relayUrl: string,
+		) => null | ((event: EventTemplate) => Promise<VerifiedEvent>);
+	}) => SimplePool;
+	const PoolConstructor = SimplePool as unknown as AuthCapableSimplePoolConstructor;
+	const pool = new PoolConstructor(
+		options.authSigner ? { automaticallyAuth: () => options.authSigner ?? null } : undefined,
+	);
 	const {
 		rateLimiter = defaultRateLimiter,
 		enableRateLimiting = true,
@@ -92,21 +163,17 @@ export function createRelayPool(relayUrls: string[], options: RelayPoolOptions =
 		},
 
 		async publish(event) {
-			const publishOperation = async () => {
-				// Rate limit before publishing
-				if (enableRateLimiting) {
-					await rateLimiter.waitForSlot();
+			return publishWithQuorum(relayUrls, event, async (relay) => {
+				const publishOperation = async () => {
+					if (enableRateLimiting) await rateLimiter.waitForSlot();
+					await Promise.all(pool.publish([relay], event));
+				};
+				if (enableRetry) {
+					await withPublishBackoff(publishOperation);
+				} else {
+					await publishOperation();
 				}
-				// A write is usable once at least one configured relay accepts it. Public relays may
-				// rate-limit independently, so requiring every relay to accept causes false failures.
-				await Promise.any(pool.publish(relayUrls, event));
-			};
-
-			if (enableRetry) {
-				await withPublishBackoff(publishOperation);
-			} else {
-				await publishOperation();
-			}
+			});
 		},
 
 		async query(filter, timeout = 5000) {
@@ -185,7 +252,18 @@ export function getLatestByDTag(
 		if (!dTag) continue;
 
 		const existing = latest[dTag];
-		if (!existing || event.created_at > existing.created_at) {
+		if (!existing) {
+			latest[dTag] = event;
+			continue;
+		}
+		const eventId = 'id' in event ? event.id : JSON.stringify(event);
+		const existingId = 'id' in existing ? existing.id : JSON.stringify(existing);
+		if (
+			compareSecretVersions(
+				{ createdAt: event.created_at, eventId },
+				{ createdAt: existing.created_at, eventId: existingId },
+			) > 0
+		) {
 			latest[dTag] = event;
 		}
 	}

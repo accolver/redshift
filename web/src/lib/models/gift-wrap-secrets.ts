@@ -12,7 +12,9 @@
 import {
 	type DecryptFn,
 	NostrKinds,
+	type SecretVersion,
 	type UnwrapResult,
+	compareSecretVersions,
 	isRedshiftSecretsEvent,
 	parseDTag,
 	unwrapGiftWrap,
@@ -29,7 +31,7 @@ import { map, shareReplay, switchMap } from 'rxjs/operators';
  */
 export type Decryptor =
 	| { type: 'privateKey'; key: Uint8Array }
-	| { type: 'decryptFn'; fn: DecryptFn };
+	| { type: 'decryptFn'; expectedAuthor: string; fn: DecryptFn };
 
 /**
  * Module-level decryption cache keyed by event ID.
@@ -85,7 +87,7 @@ async function unwrapEvents(
 			if (decryptor.type === 'privateKey') {
 				result = unwrapGiftWrap(event, decryptor.key);
 			} else {
-				result = await unwrapGiftWrapWithSigner(event, decryptor.fn);
+				result = await unwrapGiftWrapWithSigner(event, decryptor.expectedAuthor, decryptor.fn);
 			}
 			// Cache successful decryption
 			decryptionCache.set(event.id, result);
@@ -97,6 +99,21 @@ async function unwrapEvents(
 	}
 
 	return results;
+}
+
+function selectLatestByDTag(unwrappedEvents: Array<{ event: NostrEvent; result: UnwrapResult }>) {
+	const latest = new Map<string, UnwrapResult>();
+	for (const { result } of unwrappedEvents) {
+		const existing = latest.get(result.dTag);
+		if (!existing || compareSecretVersions(result, existing) > 0) {
+			latest.set(result.dTag, result);
+		}
+	}
+	return latest;
+}
+
+function isNewerVersion(candidate: SecretVersion, current: SecretVersion | null) {
+	return current === null || compareSecretVersions(candidate, current) > 0;
 }
 
 /**
@@ -155,24 +172,13 @@ export function GiftWrapSecretsModel(
 
 	return source$.pipe(
 		map((unwrappedEvents) => {
-			// Find the latest for our target d-tag
-			let latestSecrets: Secret[] = [];
-			let latestTimestamp = 0;
-
+			let latest: UnwrapResult | null = null;
 			for (const { result } of unwrappedEvents) {
-				// Only consider events matching our target d-tag
-				if (result.dTag !== targetDTag) {
-					continue;
-				}
-
-				// Keep the latest
-				if (result.createdAt > latestTimestamp) {
-					latestTimestamp = result.createdAt;
-					latestSecrets = bundleToSecrets(result.secrets);
+				if (result.dTag === targetDTag && isNewerVersion(result, latest)) {
+					latest = result;
 				}
 			}
-
-			return latestSecrets;
+			return latest ? bundleToSecrets(latest.secrets) : [];
 		}),
 	);
 }
@@ -205,37 +211,22 @@ export function AllGiftWrapSecretsModel(
 
 	return source$.pipe(
 		map((unwrappedEvents) => {
-			// Track latest for each environment
-			const latestByEnv = new Map<string, { secrets: Secret[]; timestamp: number }>();
+			const latestByEnv = new Map<string, UnwrapResult>();
 
 			for (const { result } of unwrappedEvents) {
-				// Only consider events matching our target d-tags
-				if (!result.dTag || !targetDTags.has(result.dTag)) {
-					continue;
-				}
-
-				// Parse the d-tag to get environment slug
+				if (!targetDTags.has(result.dTag)) continue;
 				const parsed = parseDTag(result.dTag);
-				if (!parsed || !parsed.environment) {
-					continue;
-				}
+				if (!parsed?.environment) continue;
 
-				const envSlug = parsed.environment;
-				const existing = latestByEnv.get(envSlug);
-
-				// Keep the latest for each environment
-				if (!existing || result.createdAt > existing.timestamp) {
-					latestByEnv.set(envSlug, {
-						secrets: bundleToSecrets(result.secrets),
-						timestamp: result.createdAt,
-					});
+				const existing = latestByEnv.get(parsed.environment) ?? null;
+				if (isNewerVersion(result, existing)) {
+					latestByEnv.set(parsed.environment, result);
 				}
 			}
 
-			// Convert to final map format
 			const envMap = new Map<string, Secret[]>();
-			for (const [slug, data] of latestByEnv) {
-				envMap.set(slug, data.secrets);
+			for (const [slug, result] of latestByEnv) {
+				envMap.set(slug, bundleToSecrets(result.secrets));
 			}
 
 			// Add empty arrays for environments with no secrets
@@ -266,16 +257,11 @@ export function ListGiftWrapProjectsModel(
 	return source$.pipe(
 		map((unwrappedEvents) => {
 			const projects = new Set<string>();
-
-			for (const { result } of unwrappedEvents) {
-				if (result.dTag) {
-					const parsed = parseDTag(result.dTag);
-					if (parsed?.projectId) {
-						projects.add(parsed.projectId);
-					}
-				}
+			for (const result of selectLatestByDTag(unwrappedEvents).values()) {
+				if (Object.keys(result.secrets).length === 0) continue;
+				const parsed = parseDTag(result.dTag);
+				if (parsed?.projectId) projects.add(parsed.projectId);
 			}
-
 			return Array.from(projects);
 		}),
 	);
@@ -300,16 +286,13 @@ export function ListGiftWrapEnvironmentsModel(
 	return source$.pipe(
 		map((unwrappedEvents) => {
 			const environments = new Set<string>();
-
-			for (const { result } of unwrappedEvents) {
-				if (result.dTag) {
-					const parsed = parseDTag(result.dTag);
-					if (parsed?.projectId === projectName && parsed.environment) {
-						environments.add(parsed.environment);
-					}
+			for (const result of selectLatestByDTag(unwrappedEvents).values()) {
+				if (Object.keys(result.secrets).length === 0) continue;
+				const parsed = parseDTag(result.dTag);
+				if (parsed?.projectId === projectName && parsed.environment) {
+					environments.add(parsed.environment);
 				}
 			}
-
 			return Array.from(environments);
 		}),
 	);

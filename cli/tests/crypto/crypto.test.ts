@@ -8,21 +8,20 @@
 import { describe, expect, it } from 'bun:test';
 import { generateSecretKey } from 'nostr-tools/pure';
 import {
+	NostrKinds,
+	REDSHIFT_TYPE_TAG,
 	createDTag,
-	createDeletionEvent,
 	createTombstone,
 	decodeNpub,
 	decodeNsec,
-	isRedshiftSecretsEvent,
 	getRedshiftSecretsFilter,
+	isRedshiftSecretsEvent,
 	parseDTag,
 	unwrapGiftWrap,
 	unwrapSecrets,
 	validateNpub,
 	validateNsec,
 	wrapSecrets,
-	NostrKinds,
-	REDSHIFT_TYPE_TAG,
 } from '../../src/lib/crypto';
 import type { SecretBundle } from '../../src/lib/types';
 
@@ -172,7 +171,7 @@ describe('isRedshiftSecretsEvent', () => {
 
 describe('getRedshiftSecretsFilter', () => {
 	it('returns correct relay filter', () => {
-		const pubkey = 'abc123';
+		const pubkey = 'a'.repeat(64);
 		const filter = getRedshiftSecretsFilter(pubkey);
 
 		expect(filter.kinds).toEqual([NostrKinds.GIFT_WRAP]);
@@ -212,33 +211,6 @@ describe('Tombstone (Logical Deletion)', () => {
 
 		const unwrappedTombstone = unwrapSecrets(tombstoneEvent, testPrivateKey);
 		expect(unwrappedTombstone).toEqual({});
-	});
-});
-
-describe('NIP-09 Deletion', () => {
-	const testPrivateKey = generateSecretKey();
-
-	it('creates a valid deletion event', () => {
-		const eventIds = ['abc123', 'def456'];
-
-		const deletionEvent = createDeletionEvent(eventIds, testPrivateKey);
-
-		expect(deletionEvent.kind).toBe(NostrKinds.DELETION);
-		expect(deletionEvent.sig).toBeDefined();
-
-		const eTags = deletionEvent.tags.filter((t) => t[0] === 'e');
-		expect(eTags.length).toBe(2);
-		expect(eTags.map((t) => t[1])).toContain('abc123');
-		expect(eTags.map((t) => t[1])).toContain('def456');
-	});
-
-	it('includes reason when provided', () => {
-		const eventIds = ['xyz789'];
-		const reason = 'Project deleted';
-
-		const deletionEvent = createDeletionEvent(eventIds, testPrivateKey, reason);
-
-		expect(deletionEvent.content).toBe(reason);
 	});
 });
 

@@ -4,10 +4,11 @@
  * L5: Journey-Validator - Secret management workflow
  */
 
-import { formatEnvLine, parseEnvFile } from '@redshift/crypto';
-import { stringify as stringifyYaml } from 'yaml';
+import { chmodSync } from 'node:fs';
+import { formatEnvLine, parseEnvFileDetailed } from '@redshift/crypto';
 import { getRelays, loadProjectConfig } from '../lib/config';
-import { SecretManager, mergeSecrets } from '../lib/secret-manager';
+import { ValidationError } from '../lib/errors';
+import { SecretManager, mergeSecrets, validateInjectableSecretName } from '../lib/secret-manager';
 import {
 	formatValidationError,
 	normalizeSecretKey,
@@ -23,28 +24,18 @@ export type SecretsSubcommand = 'list' | 'get' | 'set' | 'delete' | 'download' |
 
 export interface SecretsOptions {
 	subcommand: SecretsSubcommand;
-	/** Secret key for get/set/delete, or file path for upload/download */
+	/** Secret key for get/set/delete, or file path for upload */
 	key?: string;
-	/** Secret keys for get/delete */
-	keys?: string[];
 	/** Secret value for set */
 	value?: string;
-	/** Secret key/value pairs for set */
-	values?: Record<string, string>;
 	/** Override project */
 	project?: string;
 	/** Override environment */
 	environment?: string;
 	/** Show raw values (not redacted) */
 	raw?: boolean;
-	/** List only secret names */
-	onlyNames?: boolean;
-	/** Continue successfully when get keys are missing */
-	noExitOnMissingSecret?: boolean;
 	/** Output format */
-	format?: 'table' | 'json' | 'env' | 'yaml' | 'docker' | 'env-no-quotes';
-	/** Print download output instead of writing a file */
-	noFile?: boolean;
+	format?: 'table' | 'json' | 'env';
 }
 
 /**
@@ -92,44 +83,64 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 				break;
 
 			case 'get': {
-				const keys = options.keys?.length ? options.keys : options.key ? [options.key] : [];
-				if (keys.length === 0) {
+				if (!options.key) {
 					console.error('Error: Key is required for `secrets get`');
 					process.exit(1);
 				}
-				const normalizedKeys = keys.map((key) => normalizeAndValidateSecretKey(key, 'secret key'));
-				await getSecrets(manager, projectId, environment, normalizedKeys, options);
+				// Validate key format
+				const getKeyValidation = validateSecretKey(options.key);
+				if (!getKeyValidation.valid) {
+					console.error(formatValidationError('secret key', getKeyValidation));
+					process.exit(1);
+				}
+				await getSecret(manager, projectId, environment, normalizeSecretKey(options.key), options);
 				break;
 			}
 
 			case 'set': {
-				const values = options.values ?? (options.key && options.value !== undefined ? { [options.key]: options.value } : undefined);
-				if (!values || Object.keys(values).length === 0) {
-					console.error('Error: At least one KEY=VALUE pair is required for `secrets set`');
+				if (!options.key) {
+					console.error('Error: Key is required for `secrets set`');
 					process.exit(1);
 				}
-				const normalizedValues: Record<string, string> = {};
-				for (const [key, value] of Object.entries(values)) {
-					const normalizedKey = normalizeAndValidateSecretKey(key, 'secret key');
-					const setValueValidation = validateSecretValue(value);
-					if (!setValueValidation.valid) {
-						console.error(formatValidationError('secret value', setValueValidation));
-						process.exit(1);
-					}
-					normalizedValues[normalizedKey] = value;
+				if (options.value === undefined) {
+					console.error('Error: Value is required for `secrets set`');
+					process.exit(1);
 				}
-				await setSecrets(manager, projectId, environment, normalizedValues);
+				// Validate key
+				const setKeyValidation = validateSecretKey(options.key);
+				if (!setKeyValidation.valid) {
+					console.error(formatValidationError('secret key', setKeyValidation));
+					process.exit(1);
+				}
+				validateInjectableSecretName(options.key);
+				// Validate value
+				const setValueValidation = validateSecretValue(options.value);
+				if (!setValueValidation.valid) {
+					console.error(formatValidationError('secret value', setValueValidation));
+					process.exit(1);
+				}
+				await setSecret(
+					manager,
+					projectId,
+					environment,
+					normalizeSecretKey(options.key),
+					options.value,
+				);
 				break;
 			}
 
 			case 'delete': {
-				const keys = options.keys?.length ? options.keys : options.key ? [options.key] : [];
-				if (keys.length === 0) {
+				if (!options.key) {
 					console.error('Error: Key is required for `secrets delete`');
 					process.exit(1);
 				}
-				const normalizedKeys = keys.map((key) => normalizeAndValidateSecretKey(key, 'secret key'));
-				await deleteSecrets(manager, projectId, environment, normalizedKeys);
+				// Validate key format
+				const deleteKeyValidation = validateSecretKey(options.key);
+				if (!deleteKeyValidation.valid) {
+					console.error(formatValidationError('secret key', deleteKeyValidation));
+					process.exit(1);
+				}
+				await deleteSecret(manager, projectId, environment, normalizeSecretKey(options.key));
 				break;
 			}
 
@@ -167,108 +178,110 @@ async function listSecrets(
 		return;
 	}
 
-	if (options.onlyNames) {
-		for (const key of Object.keys(secrets).sort()) {
-			console.log(key);
-		}
-		return;
-	}
-
 	const format = options.format || 'table';
-	const output = formatSecrets(secrets, format);
+	const outputSecrets = prepareSecretsForOutput(secrets, options.raw === true);
+	if (options.raw) warnAboutRawOutput();
 
-	if (format !== 'table') {
-		console.log(output);
-		return;
-	}
+	switch (format) {
+		case 'json':
+			console.log(JSON.stringify(outputSecrets, null, 2));
+			break;
 
-	console.log(`Secrets for ${projectId}/${environment}:`);
-	console.log('');
-	const maxKeyLen = Math.max(...Object.keys(secrets).map((k) => k.length), 10);
-	console.log(`${'KEY'.padEnd(maxKeyLen)}  VALUE`);
-	console.log(`${'-'.repeat(maxKeyLen)}  ${'-'.repeat(40)}`);
+		case 'env':
+			for (const [key, value] of Object.entries(outputSecrets)) {
+				console.log(formatEnvLine(key, value));
+			}
+			break;
+		default: {
+			console.log(`Secrets for ${projectId}/${environment}:`);
+			console.log('');
+			const maxKeyLen = Math.max(...Object.keys(secrets).map((k) => k.length), 10);
+			console.log(`${'KEY'.padEnd(maxKeyLen)}  VALUE`);
+			console.log(`${'-'.repeat(maxKeyLen)}  ${'-'.repeat(40)}`);
 
-	for (const [key, value] of Object.entries(secrets)) {
-		const displayValue = formatSecretValue(value, options.raw || false);
-		console.log(`${key.padEnd(maxKeyLen)}  ${displayValue}`);
+			for (const [key, value] of Object.entries(outputSecrets)) {
+				const displayValue = value;
+				console.log(`${key.padEnd(maxKeyLen)}  ${displayValue}`);
+			}
+			break;
+		}
 	}
 }
 
 /**
- * Get one or more secret values.
+ * Get a single secret value.
  */
-async function getSecrets(
+async function getSecret(
 	manager: SecretManager,
 	projectId: string,
 	environment: string,
-	keys: string[],
+	key: string,
 	options: SecretsOptions,
 ): Promise<void> {
 	const secrets = await manager.fetchSecrets(projectId, environment);
-	const missing = keys.filter((key) => !secrets || !(key in secrets));
 
-	if (missing.length > 0 && !options.noExitOnMissingSecret) {
-		console.error(`Secret '${missing[0]}' not found in ${projectId}/${environment}`);
+	if (!secrets || !(key in secrets)) {
+		console.error(`Secret '${key}' not found in ${projectId}/${environment}`);
 		process.exit(1);
 	}
 
-	const found = keys.filter((key) => secrets && key in secrets);
-	const plain = options.raw || options.format === 'env' || options.format === 'env-no-quotes';
-	for (const key of found) {
-		const value = secrets?.[key] ?? '';
-		if (plain && found.length === 1) {
-			process.stdout.write(value);
-		} else if (plain) {
-			console.log(`${key}=${value}`);
-		} else {
-			console.log(`${key}=${formatSecretValue(value, true)}`);
-		}
+	const value = secrets[key]!;
+
+	if (options.raw) {
+		warnAboutRawOutput();
+		process.stdout.write(value);
+	} else {
+		console.log(`${key}=${formatSecretValue(value, false)}`);
 	}
 }
 
 /**
- * Set one or more secret values.
+ * Set a secret value.
  */
-async function setSecrets(
+async function setSecret(
 	manager: SecretManager,
 	projectId: string,
 	environment: string,
-	values: Record<string, string>,
+	key: string,
+	value: string,
 ): Promise<void> {
+	// Fetch existing secrets
 	const existingSecrets = (await manager.fetchSecrets(projectId, environment)) || {};
-	const updatedSecrets = mergeSecrets(existingSecrets, values);
 
+	// Store value as string (environment variables are always strings)
+	const updatedSecrets = mergeSecrets(existingSecrets, { [key]: value });
+
+	// Publish updated secrets
 	await manager.publishSecrets(projectId, environment, updatedSecrets);
 
-	const keys = Object.keys(values);
-	console.log(`✓ Set ${keys.length === 1 ? keys[0] : `${keys.length} secrets`} in ${projectId}/${environment}`);
+	console.log(`✓ Set ${key} in ${projectId}/${environment}`);
 }
 
 /**
- * Delete one or more secrets.
+ * Delete a secret.
  */
-async function deleteSecrets(
+async function deleteSecret(
 	manager: SecretManager,
 	projectId: string,
 	environment: string,
-	keys: string[],
+	key: string,
 ): Promise<void> {
+	// Fetch existing secrets
 	const existingSecrets = (await manager.fetchSecrets(projectId, environment)) || {};
-	const missing = keys.filter((key) => !(key in existingSecrets));
 
-	if (missing.length > 0) {
-		console.error(`Secret '${missing[0]}' not found in ${projectId}/${environment}`);
+	if (!(key in existingSecrets)) {
+		console.error(`Secret '${key}' not found in ${projectId}/${environment}`);
 		process.exit(1);
 	}
 
+	// Remove the key
 	const updatedSecrets = { ...existingSecrets };
-	for (const key of keys) {
-		delete updatedSecrets[key];
-	}
+	delete updatedSecrets[key];
 
+	// Publish updated secrets
 	await manager.publishSecrets(projectId, environment, updatedSecrets);
 
-	console.log(`✓ Deleted ${keys.length === 1 ? keys[0] : `${keys.length} secrets`} from ${projectId}/${environment}`);
+	console.log(`✓ Deleted ${key} from ${projectId}/${environment}`);
 }
 
 /**
@@ -287,16 +300,20 @@ async function downloadSecrets(
 		process.exit(1);
 	}
 
-	const format = options.format && options.format !== 'table' ? options.format : 'env';
-	const output = formatSecrets(secrets, format);
-
-	if (options.noFile || !options.key) {
-		console.log(output);
-		return;
+	if (!options.raw) {
+		throw new ValidationError('Secret export requires --raw to acknowledge plaintext output.');
 	}
-
-	await Bun.write(options.key, output.endsWith('\n') ? output : `${output}\n`);
-	console.log(`✓ Downloaded ${Object.keys(secrets).length} secrets to ${options.key}`);
+	warnAboutRawOutput();
+	const content = Object.entries(secrets)
+		.map(([key, value]) => formatEnvLine(key, value))
+		.join('\n');
+	if (options.key) {
+		await Bun.write(options.key, `${content}\n`);
+		chmodSync(options.key, 0o600);
+		console.log(`✓ Downloaded secrets to ${options.key}`);
+	} else {
+		process.stdout.write(`${content}\n`);
+	}
 }
 
 /**
@@ -322,9 +339,9 @@ async function uploadSecrets(
 		process.exit(1);
 	}
 
-	// Read and parse the .env file
+	// Parse and validate the entire file before reading or publishing existing state.
 	const content = await file.text();
-	const parsedSecrets = parseEnvFile(content);
+	const parsedSecrets = parseSecretUpload(content);
 
 	if (Object.keys(parsedSecrets).length === 0) {
 		console.error('Error: No secrets found in file.');
@@ -361,45 +378,49 @@ async function uploadSecrets(
 /**
  * Format a secret value for display.
  */
-function normalizeAndValidateSecretKey(key: string, fieldName: string): string {
-	const validation = validateSecretKey(key);
-	if (!validation.valid) {
-		console.error(formatValidationError(fieldName, validation));
-		process.exit(1);
+export function parseSecretUpload(content: string) {
+	const parsed = parseEnvFileDetailed(content);
+	const problems = parsed.issues.map((issue) => `line ${issue.line}: ${issue.message}`);
+	const normalized: Record<string, string> = {};
+	for (const [key, value] of Object.entries(parsed.secrets)) {
+		const normalizedKey = normalizeSecretKey(key);
+		const keyValidation = validateSecretKey(normalizedKey);
+		const valueValidation = validateSecretValue(value);
+		try {
+			validateInjectableSecretName(normalizedKey);
+		} catch (error) {
+			problems.push(error instanceof Error ? error.message : String(error));
+		}
+		if (!keyValidation.valid)
+			problems.push(formatValidationError(`secret key ${key}`, keyValidation));
+		if (!valueValidation.valid) {
+			problems.push(formatValidationError(`secret value for ${key}`, valueValidation));
+		}
+		if (Object.hasOwn(normalized, normalizedKey)) {
+			problems.push(`duplicate key after normalization: ${normalizedKey}`);
+		} else {
+			normalized[normalizedKey] = value;
+		}
 	}
-	return normalizeSecretKey(key);
+	if (problems.length > 0) {
+		throw new ValidationError(
+			`Invalid .env file:\n${problems.map((problem) => `- ${problem}`).join('\n')}`,
+		);
+	}
+	return normalized;
 }
 
-function formatSecrets(
-	secrets: Record<string, string>,
-	format: Exclude<NonNullable<SecretsOptions['format']>, 'table'> | 'table',
-): string {
-	switch (format) {
-		case 'json':
-			return JSON.stringify(secrets, null, 2);
-		case 'yaml':
-			return stringifyYaml(secrets).trimEnd();
-		case 'docker':
-			return Object.entries(secrets)
-				.map(([key, value]) => `${key}=${JSON.stringify(value)}`)
-				.join('\n');
-		case 'env-no-quotes':
-			return Object.entries(secrets)
-				.map(([key, value]) => `${key}=${value}`)
-				.join('\n');
-		case 'env':
-			return Object.entries(secrets)
-				.map(([key, value]) => formatEnvLine(key, value))
-				.join('\n');
-		case 'table':
-			return '';
-	}
-}
-
-function formatSecretValue(value: string, showRaw: boolean): string {
-	if (showRaw) {
-		return value.length > 50 ? `${value.substring(0, 50)}...` : value;
-	}
-	// Redact by default
+export function formatSecretValue(value: string, showRaw: boolean): string {
+	if (showRaw) return value;
 	return value.length > 0 ? redactValue(value) : '(empty)';
+}
+
+export function prepareSecretsForOutput(secrets: Record<string, string>, showRaw: boolean) {
+	return Object.fromEntries(
+		Object.entries(secrets).map(([key, value]) => [key, formatSecretValue(value, showRaw)]),
+	);
+}
+
+function warnAboutRawOutput() {
+	console.error('Warning: --raw reveals plaintext secrets; keep stdout out of logs and history.');
 }

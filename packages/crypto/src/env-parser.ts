@@ -7,30 +7,54 @@
  * L2: Function-Author - Shared utility for secret import/export
  */
 
-/**
- * Parse a .env file string into a key-value record.
- * Handles: comments, blank lines, export prefix, quoted values, escape sequences.
- */
-export function parseEnvFile(content: string): Record<string, string> {
+export interface EnvParseIssue {
+	line: number;
+	message: string;
+}
+
+export interface EnvParseResult {
+	secrets: Record<string, string>;
+	issues: EnvParseIssue[];
+}
+
+export function parseEnvFileDetailed(content: string): EnvParseResult {
 	const secrets: Record<string, string> = {};
-
-	for (const line of content.split('\n')) {
-		const trimmed = line.trim();
+	const issues: EnvParseIssue[] = [];
+	const lines = content.split('\n');
+	for (let index = 0; index < lines.length; index++) {
+		const trimmed = (lines[index] ?? '').trim();
 		if (!trimmed || trimmed.startsWith('#')) continue;
-
 		const withoutExport = trimmed.startsWith('export ') ? trimmed.slice(7).trim() : trimmed;
-
 		const eqIndex = withoutExport.indexOf('=');
-		if (eqIndex === -1) continue;
-
+		if (eqIndex === -1) {
+			issues.push({ line: index + 1, message: 'expected KEY=value' });
+			continue;
+		}
 		const key = withoutExport.slice(0, eqIndex).trim();
-		if (!key || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
-
-		const value = parseEnvValue(withoutExport.slice(eqIndex + 1));
-		secrets[key] = value;
+		if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+			issues.push({ line: index + 1, message: `invalid key "${key}"` });
+			continue;
+		}
+		const rawValue = withoutExport.slice(eqIndex + 1).trim();
+		if (
+			(rawValue.startsWith('"') && !rawValue.endsWith('"')) ||
+			(rawValue.startsWith("'") && !rawValue.endsWith("'"))
+		) {
+			issues.push({ line: index + 1, message: `unterminated quoted value for ${key}` });
+			continue;
+		}
+		if (Object.hasOwn(secrets, key)) {
+			issues.push({ line: index + 1, message: `duplicate key ${key}` });
+			continue;
+		}
+		secrets[key] = parseEnvValue(rawValue);
 	}
+	return { secrets, issues };
+}
 
-	return secrets;
+/** Backward-compatible permissive parser. Use parseEnvFileDetailed at trust boundaries. */
+export function parseEnvFile(content: string): Record<string, string> {
+	return parseEnvFileDetailed(content).secrets;
 }
 
 /**

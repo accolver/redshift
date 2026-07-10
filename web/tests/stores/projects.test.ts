@@ -1,5 +1,5 @@
 /// <reference types="@testing-library/jest-dom" />
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock the nostr.svelte module before importing the projects store
 vi.mock('$lib/stores/nostr.svelte', () => {
@@ -14,6 +14,10 @@ vi.mock('$lib/stores/nostr.svelte', () => {
 		DEFAULT_RELAYS: ['wss://relay.test.com'],
 	};
 });
+
+vi.mock('$lib/stores/secrets.svelte', () => ({
+	publishSecretTombstone: vi.fn().mockResolvedValue({ id: 'tombstone' }),
+}));
 
 // Mock the auth store
 vi.mock('$lib/stores/auth.svelte', () => ({
@@ -32,24 +36,28 @@ vi.mock('$lib/stores/auth.svelte', () => ({
 	})),
 }));
 
+import { signEvent } from '$lib/stores/auth.svelte';
+import { eventStore, publishEvent } from '$lib/stores/nostr.svelte';
 // Now import the module under test
 import {
-	getProjectsState,
-	getProjectById,
-	createProject,
-	deleteProject,
-	updateProject,
 	addEnvironment,
+	createProject,
+	deleteEnvironment,
+	deleteProject,
+	getProjectById,
+	getProjectsState,
 	resetProjectsStore,
 	subscribeToProjects,
 	unsubscribeFromProjects,
+	updateProject,
 } from '$lib/stores/projects.svelte';
-import { publishEvent } from '$lib/stores/nostr.svelte';
-import { signEvent } from '$lib/stores/auth.svelte';
+import { publishSecretTombstone } from '$lib/stores/secrets.svelte';
 
 describe('Projects Store (Applesauce)', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.mocked(publishSecretTombstone).mockResolvedValue({ id: 'tombstone' } as never);
+		vi.mocked(publishEvent).mockResolvedValue(undefined as never);
 		// Reset the store state before each test
 		resetProjectsStore();
 	});
@@ -105,7 +113,9 @@ describe('Projects Store (Applesauce)', () => {
 		});
 
 		it('throws error for invalid slug', async () => {
-			await expect(createProject('a', 'Project')).rejects.toThrow('Slug must be at least 2 characters');
+			await expect(createProject('a', 'Project')).rejects.toThrow(
+				'Slug must be at least 2 characters',
+			);
 		});
 
 		it('throws error for empty displayName', async () => {
@@ -154,9 +164,47 @@ describe('Projects Store (Applesauce)', () => {
 		});
 	});
 
-	describe('deleteProject', () => {
+	describe('deletion tombstones', () => {
+		const project = {
+			id: 'project-id',
+			slug: 'project-slug',
+			displayName: 'Project',
+			createdAt: 1,
+			environments: [
+				{ id: 'dev-id', slug: 'dev', name: 'Development', createdAt: 1 },
+				{ id: 'prod-id', slug: 'prod', name: 'Production', createdAt: 1 },
+			],
+		};
+
 		it('throws error for non-existent project id', async () => {
 			await expect(deleteProject('non-existent-id')).rejects.toThrow('Project not found');
+		});
+
+		it('publishes an environment secret tombstone before metadata update', async () => {
+			getProjectsState().projects = [project];
+			await deleteEnvironment(project.id, 'dev');
+			expect(publishSecretTombstone).toHaveBeenCalledWith(project.slug, 'dev');
+			expect(publishEvent).toHaveBeenCalledTimes(1);
+			expect(vi.mocked(publishSecretTombstone).mock.invocationCallOrder[0]).toBeLessThan(
+				vi.mocked(publishEvent).mock.invocationCallOrder[0] ?? 0,
+			);
+		});
+
+		it('tombstones every project environment before metadata deletion', async () => {
+			getProjectsState().projects = [project];
+			await deleteProject(project.id);
+			expect(publishSecretTombstone).toHaveBeenNthCalledWith(1, project.slug, 'dev');
+			expect(publishSecretTombstone).toHaveBeenNthCalledWith(2, project.slug, 'prod');
+			expect(publishEvent).toHaveBeenCalledTimes(2);
+			expect(getProjectsState().projects).toEqual([]);
+		});
+
+		it('keeps metadata and local state when a required tombstone lacks quorum', async () => {
+			getProjectsState().projects = [project];
+			vi.mocked(publishSecretTombstone).mockRejectedValueOnce(new Error('quorum failed'));
+			await expect(deleteProject(project.id)).rejects.toThrow('quorum failed');
+			expect(publishEvent).not.toHaveBeenCalled();
+			expect(getProjectsState().projects).toEqual([project]);
 		});
 	});
 
@@ -173,6 +221,54 @@ describe('Projects Store (Applesauce)', () => {
 			await expect(updateProject('fake-id', { displayName: 'New Name' })).rejects.toThrow(
 				'Project not found',
 			);
+		});
+
+		it('advances replaceable metadata timestamps for same-second updates', async () => {
+			vi.useFakeTimers();
+			try {
+				const now = 1_700_000_000;
+				vi.setSystemTime(now * 1000);
+				const project = {
+					id: 'project-id',
+					slug: 'project-slug',
+					displayName: 'Project',
+					createdAt: 1,
+					environments: [],
+				};
+				getProjectsState().projects = [project];
+				eventStore.database.add({
+					kind: 30078,
+					created_at: now,
+					tags: [['d', project.id]],
+					content: '{}',
+					id: '01'.repeat(32),
+					pubkey: 'test-pubkey-123',
+					sig: '02'.repeat(64),
+				});
+
+				await updateProject(project.id, { displayName: 'Updated' });
+				const updateTemplate = vi.mocked(signEvent).mock.calls.at(-1)?.[0];
+				const updateCreatedAt = updateTemplate?.created_at;
+				expect(updateCreatedAt).toBe(now + 1);
+				if (!updateTemplate || typeof updateCreatedAt !== 'number') {
+					throw new Error('Expected signed update template with timestamp');
+				}
+				eventStore.database.add({
+					kind: updateTemplate.kind,
+					created_at: updateCreatedAt,
+					tags: updateTemplate.tags,
+					content: updateTemplate.content,
+					id: '03'.repeat(32),
+					pubkey: 'test-pubkey-123',
+					sig: '04'.repeat(64),
+				});
+
+				await addEnvironment(project.id, 'staging', 'Staging');
+				const environmentTemplate = vi.mocked(signEvent).mock.calls.at(-1)?.[0];
+				expect(environmentTemplate?.created_at).toBe(now + 2);
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 	});
 

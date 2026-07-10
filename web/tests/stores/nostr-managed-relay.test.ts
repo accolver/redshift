@@ -5,8 +5,9 @@
  * Tests for checkManagedRelayAccess, getRelaysForUser, syncSecretsToManagedRelay
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { NostrEvent } from 'nostr-tools';
+import type { EventTemplate, NostrEvent } from 'nostr-tools';
+import { Subscription } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock fetch using vi.stubGlobal (hoisted properly by Vitest)
 const mockFetch = vi.fn();
@@ -46,6 +47,11 @@ vi.mock('applesauce-relay', () => {
 	return {
 		RelayPool: class MockRelayPool {
 			publish = mockPublish;
+			relay = vi.fn().mockReturnValue({
+				authenticated: false,
+				challenge$: { subscribe: vi.fn(() => new Subscription()) },
+				authenticate: vi.fn(),
+			});
 			subscription = vi.fn().mockReturnValue({
 				pipe: vi.fn().mockReturnValue({
 					subscribe: vi.fn().mockReturnValue({ unsubscribe: vi.fn() }),
@@ -64,20 +70,35 @@ vi.mock('$lib/rate-limiter', () => {
 			reset = vi.fn();
 		},
 		withPublishBackoff: vi.fn().mockImplementation(async (fn: () => Promise<void>) => fn()),
+		executeWithQuorum: vi
+			.fn()
+			.mockImplementation(
+				async (
+					targets: string[],
+					operationId: string,
+					operation: (target: string) => Promise<void>,
+				) => {
+					for (const target of targets) await operation(target);
+					return { operationId, required: 1, accepted: targets, failed: [] };
+				},
+			),
 	};
 });
 
 // Import after mocks are set up
 import {
-	checkManagedRelayAccess,
-	getRelaysForUser,
-	syncSecretsToManagedRelay,
-	resetManagedRelaySync,
-	clearPaymentCache,
 	DEFAULT_RELAYS,
 	MANAGED_RELAY,
 	MANAGED_RELAY_API,
+	checkManagedRelayAccess,
+	clearPaymentCache,
 	eventStore,
+	getRelaysForUser,
+	getRuntimeRelays,
+	resetManagedRelaySync,
+	syncSecretsToManagedRelay,
+	watchManagedRelayAuthentication,
+	withPublishTimeout,
 } from '$lib/stores/nostr.svelte';
 
 describe('Managed Relay Integration', () => {
@@ -95,6 +116,81 @@ describe('Managed Relay Integration', () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		vi.useRealTimers();
+	});
+
+	describe('publish timeout cleanup', () => {
+		it('clears the timeout immediately after a successful publish', async () => {
+			vi.useFakeTimers();
+			await withPublishTimeout(Promise.resolve('ok'), 'wss://relay.test', 5000);
+			expect(vi.getTimerCount()).toBe(0);
+		});
+
+		it('rejects and clears the timeout when publication stalls', async () => {
+			vi.useFakeTimers();
+			const stalled = withPublishTimeout(new Promise<never>(() => {}), 'wss://relay.test', 5000);
+			const rejection = expect(stalled).rejects.toThrow('Publish timeout for wss://relay.test');
+			await vi.advanceTimersByTimeAsync(5000);
+			await rejection;
+			expect(vi.getTimerCount()).toBe(0);
+		});
+	});
+
+	describe('NIP-42 authentication', () => {
+		it('signs an AUTH template when the managed relay issues a challenge', async () => {
+			let challengeObserver: ((challenge: string | null) => void) | undefined;
+			const authenticate = vi.fn(
+				async (signer: { signEvent: (event: EventTemplate) => Promise<NostrEvent> }) => {
+					const event = await signer.signEvent({
+						kind: 22242,
+						created_at: 1,
+						tags: [['challenge', 'challenge-value']],
+						content: '',
+					});
+					expect(event.kind).toBe(22242);
+					return { ok: true };
+				},
+			);
+			const signAuthEvent = vi.fn(async (template: EventTemplate) => ({
+				...template,
+				id: 'signed-auth-id',
+				pubkey: 'a'.repeat(64),
+				sig: 'b'.repeat(128),
+			}));
+			const onError = vi.fn();
+			const subscription = watchManagedRelayAuthentication(
+				{
+					authenticated: false,
+					challenge$: {
+						subscribe(observer) {
+							challengeObserver = observer;
+							return new Subscription();
+						},
+					},
+					authenticate,
+				},
+				signAuthEvent,
+				onError,
+			);
+
+			challengeObserver?.('challenge-value');
+			await vi.waitFor(() => expect(authenticate).toHaveBeenCalledTimes(1));
+			expect(signAuthEvent).toHaveBeenCalledTimes(1);
+			expect(onError).not.toHaveBeenCalled();
+			subscription.unsubscribe();
+		});
+	});
+
+	describe('embedded runtime relays', () => {
+		it('uses normalized nonce-injected custom relays and rejects unsafe transports', () => {
+			expect(
+				getRuntimeRelays({
+					relays: ['wss://custom.example', 'ws://127.0.0.1:4777'],
+				}),
+			).toEqual(['wss://custom.example/', 'ws://127.0.0.1:4777/']);
+			expect(getRuntimeRelays({ relays: ['ws://remote.example'] })).toEqual(DEFAULT_RELAYS);
+			expect(getRuntimeRelays({ relays: [] })).toEqual(DEFAULT_RELAYS);
+		});
 	});
 
 	describe('Constants', () => {

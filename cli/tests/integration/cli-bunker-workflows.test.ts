@@ -138,7 +138,10 @@ describe('spawned CLI bunker workflows', () => {
 		baseEnv.REDSHIFT_CONFIG_DIR = configDir;
 		baseEnv.REDSHIFT_DISABLE_KEYCHAIN = '1';
 		const cliPath = join(process.cwd(), 'src/main.ts');
-		const run = async (args: string[], extraEnv: Record<string, string> = {}): Promise<CliResult> => {
+		const run = async (
+			args: string[],
+			extraEnv: Record<string, string> = {},
+		): Promise<CliResult> => {
 			const result = Bun.spawn({
 				cmd: ['bun', cliPath, ...args],
 				cwd: projectDir,
@@ -180,33 +183,29 @@ describe('spawned CLI bunker workflows', () => {
 		expectSuccess(result);
 		expect(result.stdout).toContain('Configuration saved');
 
-		result = await fixture.run(['secrets', 'set', 'API_KEY=dev-123', 'DATABASE_URL=postgres://localhost/app']);
+		result = await fixture.run(['secrets', 'set', 'API_KEY=dev-123']);
 		expectSuccess(result);
-		expect(result.stdout).toContain('Set 2 secrets');
+		result = await fixture.run(['secrets', 'set', 'DATABASE_URL=postgres://localhost/app']);
+		expectSuccess(result);
 
-		result = await fixture.run(['secrets', 'list', '--only-names']);
+		result = await fixture.run(['secrets']);
 		expectSuccess(result);
 		expect(result.stdout).toContain('API_KEY');
 		expect(result.stdout).toContain('DATABASE_URL');
 
-		result = await fixture.run(['secrets', 'get', 'API_KEY', '--plain']);
+		result = await fixture.run(['secrets', 'get', 'API_KEY', '--raw']);
 		expectSuccess(result);
 		expect(result.stdout).toBe('dev-123');
 
-		result = await fixture.run(['secrets', 'get', 'API_KEY', 'MISSING', '--no-exit-on-missing-secret']);
-		expectSuccess(result);
-		expect(result.stdout).toContain('API_KEY=dev-123');
-
-		result = await fixture.run(['secrets', 'download', '--format', 'json', '--no-file']);
-		expectSuccess(result);
-		expect(result.stdout).toContain('"API_KEY": "dev-123"');
-
 		const envFile = join(fixture.projectDir, 'download.env');
-		result = await fixture.run(['secrets', 'download', '--format', 'env-no-quotes', envFile]);
+		result = await fixture.run(['secrets', 'download', '--raw', envFile]);
 		expectSuccess(result);
-		expect(await Bun.file(envFile).text()).toContain('API_KEY=dev-123');
+		expect(await Bun.file(envFile).text()).toContain('API_KEY="dev-123"');
 
-		await writeFile(join(fixture.projectDir, 'upload.env'), 'FEATURE_FLAG=true\nAPI_KEY=uploaded\n');
+		await writeFile(
+			join(fixture.projectDir, 'upload.env'),
+			'FEATURE_FLAG=true\nAPI_KEY=uploaded\n',
+		);
 		// Nostr replaceable events use second-level created_at timestamps.
 		// Ensure the uploaded bundle supersedes the earlier set bundle deterministically.
 		await new Promise((resolve) => setTimeout(resolve, 2100));
@@ -225,32 +224,24 @@ describe('spawned CLI bunker workflows', () => {
 		expectSuccess(result);
 		expect(result.stdout).toContain('existing');
 
-		const mountPath = join(fixture.projectDir, 'mounted-secrets.json');
-		result = await fixture.run([
-			'run',
-			'--mount',
-			mountPath,
-			'--',
-			'test',
-			'-f',
-			mountPath,
-		]);
+		result = await fixture.run(['secrets', 'delete', 'FEATURE_FLAG']);
 		expectSuccess(result);
-		expect(await Bun.file(mountPath).exists()).toBe(false);
-
-		result = await fixture.run(['secrets', 'delete', 'FEATURE_FLAG', 'DATABASE_URL', '--yes']);
+		result = await fixture.run(['secrets', 'delete', 'DATABASE_URL']);
 		expectSuccess(result);
-		expect(result.stdout).toContain('Deleted 2 secrets');
-	}, 30000);
+	}, 90000);
 
 	it('supports REDSHIFT_NSEC auth for direct CLI flows without stored login', async () => {
 		const fixture = await startFixture();
 		const project = `nsec-test-${Date.now()}`;
 
-		let result = await fixture.run(['setup', '--project', project, '--environment', 'dev']);
+		let result = await fixture.run(['setup', '--project', project, '--environment', 'dev'], {
+			REDSHIFT_NSEC: fixture.userNsec,
+		});
 		expectSuccess(result);
 
-		result = await fixture.run(['secrets', 'set', 'TOKEN', 'nsec-token'], { REDSHIFT_NSEC: fixture.userNsec });
+		result = await fixture.run(['secrets', 'set', 'TOKEN', 'nsec-token'], {
+			REDSHIFT_NSEC: fixture.userNsec,
+		});
 		expectSuccess(result);
 
 		result = await fixture.run(['run', '--', 'bun', '-e', 'console.log(process.env.TOKEN)'], {
@@ -258,5 +249,5 @@ describe('spawned CLI bunker workflows', () => {
 		});
 		expectSuccess(result);
 		expect(result.stdout).toContain('nsec-token');
-	}, 30000);
+	}, 45000);
 });

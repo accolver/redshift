@@ -1,5 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { nip19, generateSecretKey, getPublicKey } from 'nostr-tools';
+import {
+	bunkerConnectionToUri,
+	disconnect,
+	hasNip44Capabilities,
+	serializeBunkerConnection,
+} from '$lib/stores/auth.svelte';
+import { secureRetrieve, secureStore } from '$lib/stores/secure-storage';
+import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 // Mock sessionStorage
 const sessionStorageMock = (() => {
@@ -14,6 +21,10 @@ const sessionStorageMock = (() => {
 		},
 		clear: () => {
 			store = {};
+		},
+		key: (index: number) => Object.keys(store)[index] ?? null,
+		get length() {
+			return Object.keys(store).length;
 		},
 	};
 })();
@@ -115,6 +126,54 @@ describe('Auth Store - nsec validation', () => {
 			expect(sessionStorageMock.getItem('key1')).toBeNull();
 			expect(sessionStorageMock.getItem('key2')).toBeNull();
 		});
+	});
+});
+
+describe('Auth Store - capabilities and bunker persistence', () => {
+	it('requires both NIP-44 encrypt and decrypt capabilities', () => {
+		expect(hasNip44Capabilities(undefined)).toBe(false);
+		expect(hasNip44Capabilities({ nip44: { encrypt: async () => 'ciphertext' } })).toBe(false);
+		expect(hasNip44Capabilities({ nip44: { decrypt: async () => 'plaintext' } })).toBe(false);
+		expect(
+			hasNip44Capabilities({
+				nip44: {
+					encrypt: async () => 'ciphertext',
+					decrypt: async () => 'plaintext',
+				},
+			}),
+		).toBe(true);
+	});
+
+	it('serializes a bunker pointer without its one-time pairing secret', () => {
+		const serialized = serializeBunkerConnection({
+			pubkey: 'a'.repeat(64),
+			relays: ['wss://relay.example'],
+			secret: 'pairing-secret',
+		});
+		expect(serialized).not.toContain('pairing-secret');
+		expect(JSON.parse(serialized)).toEqual({
+			version: 1,
+			bunkerPubkey: 'a'.repeat(64),
+			relays: ['wss://relay.example'],
+		});
+	});
+
+	it('reconstructs a sanitized URI without a secret query parameter', () => {
+		const uri = bunkerConnectionToUri({
+			version: 1,
+			bunkerPubkey: 'a'.repeat(64),
+			relays: ['wss://relay.example'],
+		});
+		expect(uri).toContain('bunker://');
+		expect(uri).toContain('relay=');
+		expect(uri).not.toContain('secret=');
+	});
+
+	it('full disconnect clears encrypted session data and the browser key', async () => {
+		await secureStore('logout-test', 'secret-value');
+		expect(await secureRetrieve('logout-test')).toBe('secret-value');
+		await disconnect();
+		expect(await secureRetrieve('logout-test')).toBeNull();
 	});
 });
 

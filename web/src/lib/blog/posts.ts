@@ -222,7 +222,7 @@ export const posts: BlogPost[] = [
 
 			<h2>Step 5: Update Your Scripts</h2>
 			<p>
-				Here's the payoff for the Doppler-compatible CLI: anywhere you have <code>doppler run</code>, swap in <code>redshift run</code>. Same syntax, same <code>--</code> separator.
+				Here's the payoff for the Doppler-inspired run workflow: many scripts can swap <code>doppler run</code> for <code>redshift run</code> while keeping the same <code>--</code> separator. Check the Redshift CLI reference for strict flag differences.
 			</p>
 			<pre><code># Before
 doppler run -- npm start
@@ -1087,7 +1087,7 @@ DATABASE_URL=postgres://staging.internal:5432/myapp_staging</code></pre>
 
 			<h2>Auditing Environment Access</h2>
 			<p>
-				<a href="https://relay.redshiftapp.com">Redshift Cloud</a> includes 7-day audit logs showing who accessed which environment, when secrets were read or modified, and what changed. Useful when you're trying to figure out why staging broke after someone "didn't touch anything."
+				The current managed relay does not provide a user-facing audit-log guarantee. If your workflow requires access auditing, record it in your deployment system and treat a Redshift audit-log product as future roadmap work.
 			</p>
 			<p>
 				On the free tier, you can use separate Nostr identities per environment tier for coarse access control.
@@ -1256,7 +1256,7 @@ $ rm .env.*</code></pre>
 					<tr>
 						<td>Audit logs</td>
 						<td>Yes</td>
-						<td>Yes (Cloud tier)</td>
+						<td>Not currently</td>
 					</tr>
 					<tr>
 						<td>SSO/SAML</td>
@@ -1434,7 +1434,7 @@ $ rm .env.*</code></pre>
 $ redshift run -e production -- npm run build
 
 # Or download and pass to your bundler
-$ export $(redshift secrets download -e production --format env)
+$ export $(redshift secrets download -e production --raw)
 $ npm run build</code></pre>
 			<p>
 				The tradeoff is that your secrets end up in the deployment artifact. If someone gets access to the built bundle, they get the secrets too. For many internal tools this is acceptable risk. For anything handling payment keys or PII, you probably want one of the other patterns.
@@ -1447,20 +1447,17 @@ $ npm run build</code></pre>
 
 			<h3>Vercel</h3>
 			<pre><code># Sync Redshift secrets to Vercel
-$ redshift secrets download -e production --format env | while IFS='=' read -r key value; do
+$ redshift secrets download -e production --raw | while IFS='=' read -r key value; do
     vercel env add "$key" production <<< "$value"
 done</code></pre>
 
 			<h3>AWS Lambda</h3>
-			<pre><code># Sync to AWS Secrets Manager
-$ redshift secrets download -e production --format json | \\
-    aws secretsmanager put-secret-value \\
-    --secret-id my-app/production \\
-    --secret-string file:///dev/stdin</code></pre>
+			<pre><code># Export a mode-0600 .env file, then parse it with deployment tooling
+$ redshift secrets download -e production --raw ./secrets.env</code></pre>
 
 			<h3>Cloudflare Workers</h3>
 			<pre><code># Sync to Cloudflare secrets
-$ redshift secrets download -e production --format env | while IFS='=' read -r key value; do
+$ redshift secrets download -e production --raw | while IFS='=' read -r key value; do
     echo "$value" | wrangler secret put "$key"
 done</code></pre>
 			<p>
@@ -1549,7 +1546,7 @@ console.log('Function initialized');</code></pre>
 
 			<h2>Get Started</h2>
 			<p>
-				If you want to try any of these patterns, <a href="/docs/quickstart">the quickstart</a> will get you from zero to synced secrets in a few minutes. The <a href="/docs/cli">CLI docs</a> cover the <code>secrets download</code> command and its format options in detail.
+				If you want to try any of these patterns, <a href="/docs/quickstart">the quickstart</a> will get you from zero to synced secrets in a few minutes. The <a href="/docs/cli">CLI docs</a> cover the plaintext acknowledgement and <code>secrets download --raw</code> contract in detail.
 			</p>
 		`,
 	},

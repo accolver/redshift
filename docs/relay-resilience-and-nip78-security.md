@@ -50,10 +50,26 @@ relays:
 
 ## Availability tradeoffs
 
-- Publishing to multiple relays makes secrets more likely to sync from another device if one relay is down or prunes data.
+- Redshift publishes the same signed event independently to every configured relay and requires a majority to accept it. Below-quorum partial publication is reported as a failure with per-relay outcomes.
 - Public relays may rate-limit, reject, or delete events without notice.
 - Self-hosted or managed relays can provide stronger retention guarantees, but users should still keep more than one relay configured for failover.
-- Redshift queries all configured relays and uses the latest replaceable event per `{project}|{environment}` d-tag.
+- Redshift queries all configured relays, discards states whose authenticated rumor author is not the signed-in identity, and selects one version per `{project}|{environment}` d-tag. Newer rumor timestamps win; equal timestamps use the lexicographically lowest outer event ID.
+
+## Authorization and deletion
+
+Decryption proves that ciphertext was addressed to a key; it does not by itself
+authorize the sender to replace that key's Redshift state. Redshift therefore
+requires the Gift Wrap recipient, seal author, and inner rumor author to all
+match the authenticated owner before a bundle participates in state selection.
+Malformed structures and rumor timestamps more than five minutes in the future
+are rejected.
+
+Secret deletion publishes an owner-authored, encrypted empty bundle at a newer
+version. Environment and project deletion tombstone each affected secret bundle
+before metadata is hidden. These operations are logical deletion only: older
+Gift Wrap ciphertext may remain on relays, in caches, exports, or backups.
+NIP-09 cannot erase those Gift Wraps because their outer events were signed by
+ephemeral keys; an owner's deletion event is not authored by those keys.
 
 ## Recommended relay sets
 
@@ -61,4 +77,4 @@ relays:
 - **Balanced privacy/availability:** 1 private or managed relay plus 1-2 reputable public relays.
 - **Maximum privacy:** self-hosted relay only, with explicit backups and monitoring.
 
-No relay set changes Redshift's cryptographic trust model: never publish plaintext secrets, and never rely on a relay operator to enforce confidentiality.
+No relay set changes Redshift's cryptographic trust model: never publish plaintext secrets, never rely on a relay operator to enforce confidentiality or ordering, and do not describe logical tombstones as cryptographic erasure.

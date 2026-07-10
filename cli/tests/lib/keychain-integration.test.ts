@@ -60,8 +60,7 @@ describe('Keychain + Config Integration', () => {
 			const sk = generateSecretKey();
 			const nsec = nsecEncode(sk);
 
-			// Store in both keychain and config
-			await storeNsecInKeychain('keychain-nsec');
+			// A lower-priority config value must not override the environment.
 			await saveConfig({ authMethod: 'nsec', nsec: 'config-nsec' });
 
 			// Set env var

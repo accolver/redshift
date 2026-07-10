@@ -13,6 +13,7 @@ export {
 	wrapSecrets,
 	unwrapSecrets,
 	unwrapGiftWrap,
+	compareSecretVersions,
 	createTombstone,
 	isRedshiftSecretsEvent,
 	getRedshiftSecretsFilter,
@@ -34,6 +35,7 @@ export type {
 	UnsignedEvent,
 	SecretBundle,
 	GiftWrapResult,
+	SecretVersion,
 	UnwrapResult,
 	// Signer-based types
 	EncryptFn,

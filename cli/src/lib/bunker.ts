@@ -9,21 +9,20 @@
  */
 
 import type { EventTemplate, VerifiedEvent } from 'nostr-tools/core';
-import type { BunkerAuth } from './types';
 import {
 	type BunkerPointer,
 	BunkerSigner,
 	type BunkerSignerParams,
 	parseBunkerInput,
 } from 'nostr-tools/nip46';
+import { SimplePool } from 'nostr-tools/pool';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { getRelays } from './config';
+import type { BunkerAuth } from './types';
 
 const DEFAULT_BUNKER_CONNECT_TIMEOUT_MS = 15000;
 
-/**
- * Run an async bunker operation with a timeout so relay or bunker outages do not hang CLI commands.
- */
+/** Run a bunker operation with a bounded wait and always clear the timeout handle. */
 export async function withBunkerTimeout<T>(
 	operation: Promise<T>,
 	timeoutMs = DEFAULT_BUNKER_CONNECT_TIMEOUT_MS,
@@ -68,6 +67,29 @@ export interface BunkerConnectOptions {
 	usePairingSecret?: boolean;
 }
 
+const bunkerSignerPools = new WeakMap<BunkerSigner, SimplePool>();
+
+function createBunkerSigner(
+	clientSecretKey: Uint8Array,
+	bp: BunkerPointer,
+	params: BunkerSignerParams,
+) {
+	const pool = new SimplePool({ enableReconnect: false });
+	const signer = BunkerSigner.fromBunker(clientSecretKey, bp, { ...params, pool });
+	bunkerSignerPools.set(signer, pool);
+	return signer;
+}
+
+/** Close both the NIP-46 subscription and its owned relay pool. */
+export async function closeBunkerSigner(signer: BunkerSigner) {
+	try {
+		await signer.close();
+	} finally {
+		bunkerSignerPools.get(signer)?.destroy();
+		bunkerSignerPools.delete(signer);
+	}
+}
+
 /**
  * Parse a bunker URL or NIP-05 identifier.
  *
@@ -96,7 +118,7 @@ export async function connectToBunker(
 	// Parse bunker input
 	const bp = await parseBunkerInput(bunkerUrl);
 	if (!bp) {
-		throw new Error(`Invalid bunker URL or NIP-05: ${bunkerUrl}`);
+		throw new Error('Invalid bunker URL or NIP-05 input');
 	}
 
 	// Generate client keypair
@@ -108,8 +130,8 @@ export async function connectToBunker(
 		params.onauth = options.onAuth;
 	}
 
-	// Create signer from bunker pointer
-	const signer = BunkerSigner.fromBunker(clientSecretKey, bp, params);
+	// Create signer from bunker pointer with an explicitly owned relay pool.
+	const signer = createBunkerSigner(clientSecretKey, bp, params);
 
 	try {
 		// Connect to the bunker
@@ -121,7 +143,11 @@ export async function connectToBunker(
 			options.timeout,
 			'Timed out fetching bunker public key',
 		);
-		await withBunkerTimeout(signer.switchRelays(), options.timeout, 'Timed out switching bunker relays');
+		await withBunkerTimeout(
+			signer.switchRelays(),
+			options.timeout,
+			'Timed out switching bunker relays',
+		);
 
 		return {
 			signer,
@@ -130,8 +156,8 @@ export async function connectToBunker(
 			clientSecretKey,
 		};
 	} catch (error) {
-		// Clean up on error without masking the original connection failure.
-		await signer.close().catch(() => undefined);
+		// Clean up without masking the original connection failure.
+		await closeBunkerSigner(signer).catch(() => undefined);
 		throw error;
 	}
 }
@@ -154,7 +180,7 @@ export async function reconnectToBunker(
 		params.onauth = options.onAuth;
 	}
 
-	const signer = BunkerSigner.fromBunker(clientSecretKey, bp, params);
+	const signer = createBunkerSigner(clientSecretKey, bp, params);
 
 	try {
 		await withBunkerTimeout(signer.connect(), options.timeout, 'Timed out connecting to bunker');
@@ -163,7 +189,11 @@ export async function reconnectToBunker(
 			options.timeout,
 			'Timed out fetching bunker public key',
 		);
-		await withBunkerTimeout(signer.switchRelays(), options.timeout, 'Timed out switching bunker relays');
+		await withBunkerTimeout(
+			signer.switchRelays(),
+			options.timeout,
+			'Timed out switching bunker relays',
+		);
 
 		return {
 			signer,
@@ -172,7 +202,7 @@ export async function reconnectToBunker(
 			clientSecretKey,
 		};
 	} catch (error) {
-		await signer.close().catch(() => undefined);
+		await closeBunkerSigner(signer).catch(() => undefined);
 		throw error;
 	}
 }
@@ -259,10 +289,22 @@ export async function createNostrConnectUri(
 		uri,
 		clientSecretKey,
 		waitForConnection: async (timeout = 120000) => {
-			const signer = await BunkerSigner.fromURI(clientSecretKey, uri, {}, timeout);
+			const pool = new SimplePool({ enableReconnect: false });
+			let signer: BunkerSigner;
+			try {
+				signer = await BunkerSigner.fromURI(clientSecretKey, uri, { pool }, timeout);
+			} catch (error) {
+				pool.destroy();
+				throw error;
+			}
+			bunkerSignerPools.set(signer, pool);
 
-			const userPubkey = await signer.getPublicKey();
-			await signer.switchRelays();
+			const userPubkey = await withBunkerTimeout(
+				signer.getPublicKey(),
+				timeout,
+				'Timed out fetching bunker public key',
+			);
+			await withBunkerTimeout(signer.switchRelays(), timeout, 'Timed out switching bunker relays');
 
 			// Extract bunker pointer from signer
 			const bp = signer.bp;
@@ -287,7 +329,11 @@ export class BunkerSecretManager {
 	private relays: string[];
 	private timeoutMs: number;
 
-	constructor(connection: BunkerConnection, relays: string[], timeoutMs = DEFAULT_BUNKER_CONNECT_TIMEOUT_MS) {
+	constructor(
+		connection: BunkerConnection,
+		relays: string[],
+		timeoutMs = DEFAULT_BUNKER_CONNECT_TIMEOUT_MS,
+	) {
 		this.signer = connection.signer;
 		this.userPubkey = connection.userPubkey;
 		this.relays = relays;
@@ -355,7 +401,7 @@ export class BunkerSecretManager {
 	 * Close the bunker connection
 	 */
 	async close(): Promise<void> {
-		await this.signer.close();
+		await closeBunkerSigner(this.signer);
 	}
 }
 

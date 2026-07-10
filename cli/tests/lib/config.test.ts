@@ -15,6 +15,9 @@ import {
 	getPrivateKey,
 	loadConfig,
 	loadProjectConfig,
+	normalizeRelayUrls,
+	redactConfig,
+	resetConfig,
 	saveConfig,
 	saveProjectConfig,
 } from '../../src/lib/config';
@@ -69,7 +72,10 @@ describe('Config Module', () => {
 			await saveConfig(config);
 			const loaded = await loadConfig();
 
-			expect(loaded).toEqual(config);
+			expect(loaded).toEqual({
+				...config,
+				relays: ['wss://relay.damus.io/', 'wss://nos.lol/'],
+			});
 		});
 
 		it('returns empty config when file does not exist', async () => {
@@ -84,6 +90,62 @@ describe('Config Module', () => {
 			await saveConfig({ nsec: 'nsec1test' });
 
 			expect(existsSync(nestedDir)).toBe(true);
+		});
+	});
+
+	describe('relay validation and redaction', () => {
+		it('normalizes, deduplicates, and accepts only secure or loopback WebSockets', () => {
+			expect(
+				normalizeRelayUrls(['wss://relay.example', 'wss://relay.example/', 'ws://127.0.0.1:8080']),
+			).toEqual(['wss://relay.example/', 'ws://127.0.0.1:8080/']);
+			for (const relay of [
+				'https://relay.example',
+				'ws://relay.example',
+				'wss://user:pass@relay.example',
+				'not-a-url',
+			]) {
+				expect(() => normalizeRelayUrls([relay])).toThrow();
+			}
+		});
+
+		it('rejects invalid relay URLs from global and project configuration', async () => {
+			await expect(saveConfig({ relays: ['https://relay.example'] })).rejects.toThrow();
+			const projectDir = join(testDir, 'unsafe-project');
+			mkdirSync(projectDir, { recursive: true });
+			await Bun.write(
+				join(projectDir, 'redshift.yaml'),
+				'project: safe-project\nenvironment: dev\nrelays:\n  - ws://relay.example\n',
+			);
+			await expect(loadProjectConfig(projectDir)).rejects.toThrow();
+		});
+
+		it('redacts every stored credential field', () => {
+			expect(
+				redactConfig({
+					authMethod: 'bunker',
+					nsec: 'nsec-secret',
+					bunker: {
+						bunkerPubkey: 'a'.repeat(64),
+						relays: ['wss://relay.example'],
+						clientSecretKey: 'client-secret',
+						secret: 'pairing-secret',
+					},
+				}),
+			).toMatchObject({
+				nsec: '[REDACTED]',
+				bunker: { clientSecretKey: '[REDACTED]', secret: '[REDACTED]' },
+			});
+		});
+
+		it('resets auth, relays, and defaults', async () => {
+			await saveConfig({
+				nsec: 'nsec-secret',
+				relays: ['wss://relay.example'],
+				defaultProject: 'project',
+				defaultEnvironment: 'dev',
+			});
+			await resetConfig();
+			expect(await loadConfig()).toEqual({});
 		});
 	});
 
@@ -139,7 +201,7 @@ describe('Config Module', () => {
 			await saveProjectConfig(projectDir, projectConfig);
 			const loaded = await loadProjectConfig(projectDir);
 
-			expect(loaded).toEqual(projectConfig);
+			expect(loaded).toEqual({ ...projectConfig, relays: ['wss://custom.relay/'] });
 		});
 
 		it('returns null when redshift.yaml does not exist', async () => {
@@ -169,8 +231,7 @@ describe('Config Module', () => {
 		});
 
 		it('generates a non-empty clientSecretKey from bunker env', async () => {
-			process.env.REDSHIFT_BUNKER =
-				'bunker://abc123?relay=wss://relay.test.com&secret=mysecret';
+			process.env.REDSHIFT_BUNKER = 'bunker://abc123?relay=wss://relay.test.com&secret=mysecret';
 			const auth = await getAuth();
 
 			expect(auth).not.toBeNull();

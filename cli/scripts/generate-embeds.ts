@@ -45,7 +45,7 @@ interface EmbeddedFile {
  */
 async function collectFiles(dir: string, basePath = ''): Promise<string[]> {
 	const files: string[] = [];
-	const entries = await readdir(dir);
+	const entries = (await readdir(dir)).sort((a, b) => a.localeCompare(b));
 
 	for (const entry of entries) {
 		const fullPath = join(dir, entry);
@@ -195,15 +195,9 @@ async function generateEmbeds(): Promise<void> {
 function generateTypeScriptModule(files: EmbeddedFile[]): string {
 	const fileEntries = files
 		.map((file) => {
-			// Escape content for string literal
-			const escapedContent = file.content
-				.replace(/\\/g, '\\\\')
-				.replace(/`/g, '\\`')
-				.replace(/\$/g, '\\$');
-
 			return `  ${JSON.stringify(file.path)}: {
     contentType: ${JSON.stringify(file.contentType)},
-    content: \`${escapedContent}\`,
+    content: ${JSON.stringify(file.content)},
     isBase64: ${file.isBase64},
   }`;
 		})

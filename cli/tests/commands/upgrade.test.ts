@@ -5,7 +5,16 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { compareVersions, detectArch, detectOS, extractVersion } from '../../src/commands/upgrade';
+import {
+	compareVersions,
+	detectArch,
+	detectOS,
+	extractVersion,
+	parseTrustedChecksum,
+	replaceBinaryAtomically,
+	smokeTestDownloadedBinary,
+	verifyArtifactAttestation,
+} from '../../src/commands/upgrade';
 
 describe('Upgrade Command', () => {
 	describe('compareVersions', () => {
@@ -89,10 +98,109 @@ describe('Upgrade Command', () => {
 		});
 	});
 
+	describe('artifact attestation', () => {
+		test('binds verification to the release workflow and source digest', () => {
+			let command: string[] = [];
+			expect(() =>
+				verifyArtifactAttestation('/tmp/redshift', 'a'.repeat(40), (args) => {
+					command = args;
+					return { exitCode: 0, stderr: Buffer.from('') };
+				}),
+			).not.toThrow();
+			expect(command).toEqual([
+				'gh',
+				'attestation',
+				'verify',
+				'/tmp/redshift',
+				'--repo',
+				'accolver/redshift',
+				'--signer-workflow',
+				'accolver/redshift/.github/workflows/release.yml',
+				'--source-digest',
+				'a'.repeat(40),
+				'--deny-self-hosted-runners',
+			]);
+		});
+
+		test('fails closed when verification is unavailable or invalid', () => {
+			expect(() =>
+				verifyArtifactAttestation('/tmp/redshift', 'a'.repeat(40), () => ({
+					exitCode: 1,
+					stderr: Buffer.from('no attestation found'),
+				})),
+			).toThrow('Artifact attestation verification failed: no attestation found');
+		});
+
+		test('rejects an invalid release source digest before invoking gh', () => {
+			let invoked = false;
+			expect(() =>
+				verifyArtifactAttestation('/tmp/redshift', 'not-a-digest', () => {
+					invoked = true;
+					return { exitCode: 0, stderr: Buffer.from('') };
+				}),
+			).toThrow('Invalid release source digest');
+			expect(invoked).toBe(false);
+		});
+
+		test('requires the downloaded binary to execute successfully', () => {
+			expect(() =>
+				smokeTestDownloadedBinary('/tmp/redshift', () => ({
+					exitCode: 126,
+					stderr: Buffer.from('cannot execute'),
+				})),
+			).toThrow('Downloaded binary smoke test failed: cannot execute');
+		});
+	});
+
+	describe('trusted checksum manifest', () => {
+		test('requires one exact canonical entry for the selected asset', () => {
+			const hash = 'b'.repeat(64);
+			expect(parseTrustedChecksum(`${hash}  redshift-linux-x64\n`, 'redshift-linux-x64')).toBe(
+				hash,
+			);
+			expect(() =>
+				parseTrustedChecksum(`${hash}  redshift-linux-x64-extra\n`, 'redshift-linux-x64'),
+			).toThrow('exactly one checksum');
+			expect(() =>
+				parseTrustedChecksum(
+					`${hash}  redshift-linux-x64\n${'c'.repeat(64)}  redshift-linux-x64\n`,
+					'redshift-linux-x64',
+				),
+			).toThrow('exactly one checksum');
+			expect(() =>
+				parseTrustedChecksum(`invalid  redshift-linux-x64\n`, 'redshift-linux-x64'),
+			).toThrow('canonical SHA-256');
+		});
+	});
+
+	describe('atomic replacement', () => {
+		test('restores the previous binary when candidate rename fails', () => {
+			const calls: string[] = [];
+			let renameAttempt = 0;
+			expect(() =>
+				replaceBinaryAtomically('/install/.candidate', '/install/redshift', {
+					copyFile: (source, destination) => calls.push(`copy:${source}:${destination}`),
+					rename: (source, destination) => {
+						renameAttempt += 1;
+						calls.push(`rename:${source}:${destination}`);
+						if (renameAttempt === 1) throw new Error('interrupted');
+					},
+					unlink: (path) => calls.push(`unlink:${path}`),
+				}),
+			).toThrow('interrupted');
+			expect(calls).toContain('rename:/install/redshift.backup:/install/redshift');
+			expect(calls).toContain('unlink:/install/.candidate');
+		});
+	});
+
 	describe('detectOS', () => {
 		test('returns a valid OS string for current platform', () => {
 			const os = detectOS();
-			expect(['darwin', 'linux', 'windows']).toContain(os);
+			expect(['darwin', 'linux']).toContain(os);
+		});
+
+		test('rejects Windows because no Windows release artifact is published', () => {
+			expect(() => detectOS('win32')).toThrow('Windows binaries are not currently published');
 		});
 	});
 

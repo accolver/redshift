@@ -6,11 +6,15 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { generateSecretKey, getPublicKey, verifyEvent } from 'nostr-tools/pure';
-import { connectToBunker, BunkerSecretManager } from '../../src/lib/bunker';
+import { BunkerSecretManager, connectToBunker } from '../../src/lib/bunker';
 import { decodeNsec } from '../../src/lib/crypto';
-import { startNip46BunkerService, type Nip46BunkerService } from '../../src/lib/nip46-bunker';
+import { type Nip46BunkerService, startNip46BunkerService } from '../../src/lib/nip46-bunker';
 import { SecretManager } from '../../src/lib/secret-manager';
 
 async function getFreePort() {
@@ -57,40 +61,30 @@ async function waitForRelay(url: string) {
 	throw new Error(`nak relay did not start: ${String(lastError)}`);
 }
 
-function runNak(args: string[]) {
-	const result = Bun.spawnSync({
-		cmd: ['nak', ...args],
-		stdout: 'pipe',
-		stderr: 'pipe',
-	});
-	if (result.exitCode !== 0) {
-		throw new Error(new TextDecoder().decode(result.stderr).trim() || `nak ${args.join(' ')} failed`);
-	}
-	return new TextDecoder().decode(result.stdout).trim();
-}
-
 function createNakNsec() {
-	const hexSecret = runNak(['key', 'generate']);
-	const nsec = runNak(['encode', 'nsec', hexSecret]);
+	const hexSecret = execFileSync('nak', ['key', 'generate'], { encoding: 'utf8' }).trim();
+	const nsec = execFileSync('nak', ['encode', 'nsec', hexSecret], { encoding: 'utf8' }).trim();
 	expect(nsec).toStartWith('nsec1');
 	return nsec;
 }
 
+const compiledBinary = join(import.meta.dir, '../../../dist/redshift');
+
 describe('nak-backed bunker E2E', () => {
-	let relayProcess: Bun.Subprocess<'ignore', 'pipe', 'pipe'> | null = null;
+	let relayProcess: ChildProcess | null = null;
 	let service: Nip46BunkerService | null = null;
 
 	afterEach(async () => {
 		service?.close();
 		service = null;
 		if (relayProcess) {
-			relayProcess.kill();
-			await relayProcess.exited;
+			relayProcess.kill('SIGTERM');
+			await new Promise((resolve) => relayProcess?.once('exit', resolve));
 			relayProcess = null;
 		}
 	});
 
-	it('generates an nsec1 with nak and exercises bunker connect, relay switch, NIP-44, sign, wrap, unwrap, and scoped deletion signing', async () => {
+	it('generates an nsec1 with nak and exercises bunker connect, relay switch, NIP-44, sign, wrap, and unwrap', async () => {
 		const nsec = createNakNsec();
 		const userSecretKey = decodeNsec(nsec);
 		const userPubkey = getPublicKey(userSecretKey);
@@ -99,10 +93,8 @@ describe('nak-backed bunker E2E', () => {
 		const port = await getFreePort();
 		const relay = `ws://127.0.0.1:${port}`;
 
-		relayProcess = Bun.spawn(['nak', 'serve', '--hostname', '127.0.0.1', '--port', String(port)], {
-			stdin: 'ignore',
-			stdout: 'pipe',
-			stderr: 'pipe',
+		relayProcess = spawn('nak', ['serve', '--hostname', '127.0.0.1', '--port', String(port)], {
+			stdio: ['ignore', 'pipe', 'pipe'],
 		});
 		await waitForRelay(relay);
 
@@ -113,7 +105,9 @@ describe('nak-backed bunker E2E', () => {
 			secret: 'nak-e2e-secret',
 		});
 
-		const connection = await connectToBunker(`bunker://${signerPubkey}?relay=${encodeURIComponent(relay)}&secret=nak-e2e-secret`);
+		const connection = await connectToBunker(
+			`bunker://${signerPubkey}?relay=${encodeURIComponent(relay)}&secret=nak-e2e-secret`,
+		);
 		expect(connection.userPubkey).toBe(userPubkey);
 		expect(connection.bunkerPointer.pubkey).toBe(signerPubkey);
 
@@ -122,26 +116,36 @@ describe('nak-backed bunker E2E', () => {
 		const ciphertext = await signer.nip44Encrypt(userPubkey, 'bunker plaintext');
 		expect(await signer.nip44Decrypt(userPubkey, ciphertext)).toBe('bunker plaintext');
 
-		const signedSeal = await signer.signEvent({ kind: 13, content: 'seal', tags: [], created_at: 1 });
+		const signedSeal = await signer.signEvent({
+			kind: 13,
+			content: 'seal',
+			tags: [],
+			created_at: 1,
+		});
 		expect(signedSeal.kind).toBe(13);
 		expect(signedSeal.pubkey).toBe(userPubkey);
 		expect(verifyEvent(signedSeal)).toBe(true);
 
-		const deletion = await signer.signEvent({
-			kind: 5,
-			content: 'cleanup old gift wrap',
-			tags: [['e', 'ab'.repeat(32)], ['k', '1059']],
-			created_at: 1,
-		});
-		expect(deletion.kind).toBe(5);
-		expect(deletion.tags).toContainEqual(['k', '1059']);
-		expect(verifyEvent(deletion)).toBe(true);
+		await expect(
+			signer.signEvent({
+				kind: 5,
+				content: 'cleanup old gift wrap',
+				tags: [
+					['e', 'ab'.repeat(32)],
+					['k', '1059'],
+				],
+				created_at: 1,
+			}),
+		).rejects.toThrow('kind 5 is not permitted');
 
 		const manager = new SecretManager(signer);
-		const giftWrap = await manager.wrapSecrets({
-			API_KEY: 'nak-secret',
-			FEATURE_FLAG: 'true',
-		}, 'nak-project|dev');
+		const giftWrap = await manager.wrapSecrets(
+			{
+				API_KEY: 'nak-secret',
+				FEATURE_FLAG: 'true',
+			},
+			'nak-project|dev',
+		);
 		expect(giftWrap.event.kind).toBe(1059);
 		expect(verifyEvent(giftWrap.event)).toBe(true);
 		expect(await manager.unwrapSecrets(giftWrap.event)).toEqual({
@@ -151,4 +155,69 @@ describe('nak-backed bunker E2E', () => {
 
 		await manager.close();
 	}, 15000);
+
+	it('runs the compiled CLI through command-scoped bunker authentication', async () => {
+		expect(existsSync(compiledBinary), `Compiled binary required at ${compiledBinary}`).toBe(true);
+		const root = mkdtempSync(join(tmpdir(), 'redshift-bunker-binary-'));
+		const configDir = join(root, 'config');
+		mkdirSync(configDir, { recursive: true });
+		const userSecretKey = generateSecretKey();
+		const signerSecretKey = generateSecretKey();
+		const signerPubkey = getPublicKey(signerSecretKey);
+		const port = await getFreePort();
+		const relay = `ws://127.0.0.1:${port}`;
+		relayProcess = spawn('nak', ['serve', '--hostname', '127.0.0.1', '--port', String(port)], {
+			stdio: ['ignore', 'pipe', 'pipe'],
+		});
+		await waitForRelay(relay);
+
+		const publisher = new SecretManager(userSecretKey);
+		publisher.connect([relay]);
+		await publisher.publishSecrets('bunker-binary', 'dev', { API_KEY: 'bunker-binary-secret' });
+		await publisher.close();
+
+		service = startNip46BunkerService({
+			signerSecretKey,
+			userSecretKey,
+			relays: [relay],
+		});
+		writeFileSync(join(configDir, 'config.json'), JSON.stringify({ relays: [relay] }));
+		const script = join(root, 'inspect.sh');
+		writeFileSync(script, '#!/bin/sh\nprintf "%s|%s" "$API_KEY" "${REDSHIFT_BUNKER-unset}"\n');
+		chmodSync(script, 0o755);
+
+		try {
+			const child = spawn(
+				compiledBinary,
+				[
+					'--config-dir',
+					configDir,
+					'run',
+					'--project',
+					'bunker-binary',
+					'--config',
+					'dev',
+					'--',
+					script,
+				],
+				{
+					cwd: root,
+					env: {
+						...process.env,
+						REDSHIFT_BUNKER: `bunker://${signerPubkey}?relay=${encodeURIComponent(relay)}`,
+					},
+					stdio: ['ignore', 'pipe', 'pipe'],
+				},
+			);
+			let stdout = '';
+			let stderr = '';
+			child.stdout?.on('data', (chunk) => (stdout += String(chunk)));
+			child.stderr?.on('data', (chunk) => (stderr += String(chunk)));
+			const exitCode = await new Promise<number | null>((resolve) => child.once('exit', resolve));
+			expect(exitCode, stderr).toBe(0);
+			expect(stdout).toBe('bunker-binary-secret|unset');
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	}, 60_000);
 });

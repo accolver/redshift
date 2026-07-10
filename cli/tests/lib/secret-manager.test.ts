@@ -9,13 +9,13 @@ import { describe, expect, it } from 'bun:test';
 import { nip44 } from 'nostr-tools';
 import type { EventTemplate } from 'nostr-tools/core';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
+import { createNip46BunkerHandler } from '../../src/lib/nip46-bunker';
 import {
 	SecretManager,
 	extractProjects,
 	injectSecrets,
 	mergeSecrets,
 } from '../../src/lib/secret-manager';
-import { createNip46BunkerHandler } from '../../src/lib/nip46-bunker';
 import type { NostrEvent, SecretBundle } from '../../src/lib/types';
 
 describe('SecretManager', () => {
@@ -142,17 +142,15 @@ describe('SecretManager', () => {
 	});
 
 	describe('disconnect', () => {
-		it('zeroes private key memory on disconnect', () => {
+		it('owns and zeroizes an internal key copy without mutating the caller buffer', async () => {
 			const privateKey = generateSecretKey();
+			const original = privateKey.slice();
 			const manager = new SecretManager(privateKey);
 
-			// Key should be non-zero before disconnect
-			expect(privateKey.some((b) => b !== 0)).toBe(true);
+			await manager.close();
 
-			manager.disconnect();
-
-			// After disconnect, the key bytes should be zeroed
-			expect(privateKey.every((b) => b === 0)).toBe(true);
+			expect(privateKey).toEqual(original);
+			expect(privateKey.some((byte) => byte !== 0)).toBe(true);
 		});
 	});
 });
@@ -189,6 +187,64 @@ describe('injectSecrets', () => {
 		const result = injectSecrets(baseEnv, secrets);
 
 		expect(result.API_KEY).toBe('new_value');
+	});
+
+	it('removes Redshift authentication variables from the child environment', () => {
+		const result = injectSecrets(
+			{
+				PATH: '/usr/bin',
+				REDSHIFT_NSEC: 'nsec-secret',
+				REDSHIFT_BUNKER: 'bunker://secret',
+			},
+			{ API_KEY: 'application-secret' },
+		);
+
+		expect(result.PATH).toBe('/usr/bin');
+		expect(result.API_KEY).toBe('application-secret');
+		expect(result.REDSHIFT_NSEC).toBeUndefined();
+		expect(result.REDSHIFT_BUNKER).toBeUndefined();
+	});
+
+	it('does not allow a secret bundle to reintroduce Redshift auth variables', () => {
+		expect(() => injectSecrets({}, { REDSHIFT_NSEC: 'stolen' })).toThrow('REDSHIFT_NSEC');
+		expect(() => injectSecrets({}, { REDSHIFT_BUNKER: 'stolen' })).toThrow('REDSHIFT_BUNKER');
+	});
+
+	it('rejects runtime startup and dynamic-loader hook names before spawn', () => {
+		const blocked = [
+			'NODE_OPTIONS',
+			'NODE_PATH',
+			'PYTHONPATH',
+			'PYTHONHOME',
+			'PYTHONSTARTUP',
+			'RUBYOPT',
+			'RUBYLIB',
+			'BASH_ENV',
+			'ENV',
+			'LD_PRELOAD',
+			'LD_LIBRARY_PATH',
+			'DYLD_INSERT_LIBRARIES',
+			'DYLD_LIBRARY_PATH',
+			'DYLD_FRAMEWORK_PATH',
+			'PERL5OPT',
+			'PERL5LIB',
+		];
+
+		for (const key of blocked) {
+			expect(() => injectSecrets({}, { [key.toLowerCase()]: 'malicious' })).toThrow(key);
+		}
+	});
+
+	it('does not mutate either environment input', () => {
+		const baseEnv = { PATH: '/usr/bin', REDSHIFT_NSEC: 'private' };
+		const secrets = { API_KEY: 'secret' };
+		const baseSnapshot = { ...baseEnv };
+		const secretSnapshot = { ...secrets };
+
+		injectSecrets(baseEnv, secrets);
+
+		expect(baseEnv).toEqual(baseSnapshot);
+		expect(secrets).toEqual(secretSnapshot);
 	});
 });
 

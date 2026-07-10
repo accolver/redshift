@@ -6,11 +6,10 @@
  */
 
 import type { EventTemplate, VerifiedEvent } from 'nostr-tools/core';
-import { getPublicKey } from 'nostr-tools/pure';
+import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import {
+	compareSecretVersions,
 	createDTag,
-	createDeletionEvent,
-	createTombstone,
 	parseDTag,
 	unwrapGiftWrap,
 	unwrapGiftWrapWithSigner,
@@ -19,10 +18,10 @@ import {
 	wrapSecretsWithSigner,
 } from './crypto';
 import type { AsyncGiftWrapResult, GiftWrapResult, UnwrapResult } from './crypto';
-import { NotConnectedError } from './errors';
+import { NotConnectedError, ValidationError } from './errors';
 import type { RelayPool } from './relay';
 import { createRelayPool, filterGiftWraps } from './relay';
-import { NostrKinds, type NostrEvent, type SecretBundle } from './types';
+import type { NostrEvent, SecretBundle } from './types';
 
 /**
  * Signer abstraction for auth methods that do not expose a raw private key
@@ -50,9 +49,10 @@ interface SecretEntry {
  * Cached decryption result keyed by event ID
  */
 interface DecryptionCacheEntry {
-	dTag: string | null;
+	dTag: string;
 	secrets: SecretBundle;
 	createdAt: number;
+	eventId: string;
 }
 
 /**
@@ -84,7 +84,7 @@ export class SecretManager {
 
 	constructor(auth: Uint8Array | SecretManagerSigner) {
 		if (auth instanceof Uint8Array) {
-			this.privateKey = auth;
+			this.privateKey = auth.slice();
 			this.publicKey = getPublicKey(auth);
 		} else {
 			this.signer = auth;
@@ -112,10 +112,14 @@ export class SecretManager {
 	 * Connect to relays
 	 */
 	connect(relayUrls: string[]): void {
-		if (this.pool) {
-			this.pool.close();
-		}
-		this.pool = createRelayPool(relayUrls);
+		if (this.pool) this.pool.close();
+		this.pool = createRelayPool(relayUrls, {
+			authSigner: async (event) => {
+				if (this.privateKey) return finalizeEvent(event, this.privateKey);
+				if (!this.signer) throw new Error('No signer available for relay authentication');
+				return (await this.signer.signEvent(event)) as VerifiedEvent;
+			},
+		});
 	}
 
 	/**
@@ -153,7 +157,10 @@ export class SecretManager {
 	/**
 	 * Wrap secrets into a Gift Wrap event
 	 */
-	async wrapSecrets(secrets: SecretBundle, dTag: string): Promise<GiftWrapResult | AsyncGiftWrapResult> {
+	async wrapSecrets(
+		secrets: SecretBundle,
+		dTag: string,
+	): Promise<GiftWrapResult | AsyncGiftWrapResult> {
 		if (this.privateKey) {
 			return wrapSecretsToEvent(secrets, this.privateKey, dTag);
 		}
@@ -189,7 +196,7 @@ export class SecretManager {
 		if (!this.signer) {
 			throw new Error('No decryption method available');
 		}
-		return unwrapGiftWrapWithSigner(event, (pubkey, ciphertext) =>
+		return unwrapGiftWrapWithSigner(event, this.publicKey, (pubkey, ciphertext) =>
 			this.signer!.nip44Decrypt(pubkey, ciphertext),
 		);
 	}
@@ -258,15 +265,10 @@ export class SecretManager {
 			// Check decryption cache first
 			if (this.decryptionCache.has(gw.id)) {
 				const cached = this.decryptionCache.get(gw.id);
-				if (cached?.dTag) {
+				if (cached) {
 					const existing = latestByDTag.get(cached.dTag);
-					if (!existing || cached.createdAt >= existing.createdAt) {
-						latestByDTag.set(cached.dTag, {
-							secrets: cached.secrets,
-							dTag: cached.dTag,
-							createdAt: cached.createdAt,
-							eventId: gw.id,
-						});
+					if (!existing || compareSecretVersions(cached, existing) > 0) {
+						latestByDTag.set(cached.dTag, cached);
 					}
 				}
 				continue; // Skip decryption (cached null means it failed before)
@@ -276,24 +278,17 @@ export class SecretManager {
 				const result = await this.unwrapWithMetadata(gw);
 
 				// Cache the successful decryption
-				this.decryptionCache.set(gw.id, {
+				const entry: DecryptionCacheEntry = {
 					dTag: result.dTag,
 					secrets: result.secrets,
 					createdAt: result.createdAt,
-				});
-
-				if (!result.dTag) {
-					continue; // Skip events without d-tag
-				}
+					eventId: result.eventId,
+				};
+				this.decryptionCache.set(gw.id, entry);
 
 				const existing = latestByDTag.get(result.dTag);
-				if (!existing || result.createdAt >= existing.createdAt) {
-					latestByDTag.set(result.dTag, {
-						secrets: result.secrets,
-						dTag: result.dTag,
-						createdAt: result.createdAt,
-						eventId: gw.id,
-					});
+				if (!existing || compareSecretVersions(entry, existing) > 0) {
+					latestByDTag.set(result.dTag, entry);
 				}
 			} catch {
 				// Cache the failure so we don't re-attempt (event not for us)
@@ -304,7 +299,9 @@ export class SecretManager {
 		// Convert to Map<string, SecretBundle>
 		const secretsMap = new Map<string, SecretBundle>();
 		for (const [dTag, entry] of latestByDTag) {
-			secretsMap.set(dTag, entry.secrets);
+			if (Object.keys(entry.secrets).length > 0) {
+				secretsMap.set(dTag, entry.secrets);
+			}
 		}
 
 		return secretsMap;
@@ -398,40 +395,6 @@ export class SecretManager {
 
 		return event;
 	}
-
-	/**
-	 * Create a NIP-09 deletion request for specific events
-	 */
-	async requestDeletion(eventIds: string[], reason?: string): Promise<NostrEvent> {
-		if (!this.pool) {
-			throw new NotConnectedError();
-		}
-
-		const deletion = await this.createDeletionEvent(eventIds, reason);
-		await this.pool.publish(deletion);
-
-		return deletion;
-	}
-
-	/**
-	 * Create a NIP-09 deletion request using the active auth method.
-	 */
-	private async createDeletionEvent(eventIds: string[], reason?: string): Promise<NostrEvent> {
-		if (this.privateKey) {
-			return createDeletionEvent(eventIds, this.privateKey, reason);
-		}
-		if (!this.signer) {
-			throw new Error('No signing method available');
-		}
-		const tags: string[][] = [...eventIds.map((id) => ['e', id]), ['k', String(NostrKinds.GIFT_WRAP)]];
-		const signed = await this.signer.signEvent({
-			kind: 5,
-			content: reason ?? '',
-			tags,
-			created_at: Math.floor(Date.now() / 1000),
-		});
-		return signed as NostrEvent;
-	}
 }
 
 /**
@@ -442,21 +405,50 @@ export class SecretManager {
  * @param secrets - The secrets to inject
  * @returns New environment object with secrets injected
  */
+const REDSHIFT_AUTH_VARIABLES = new Set(['REDSHIFT_NSEC', 'REDSHIFT_BUNKER']);
+const BLOCKED_CHILD_SECRET_NAMES = new Set([
+	...REDSHIFT_AUTH_VARIABLES,
+	'NODE_OPTIONS',
+	'NODE_PATH',
+	'PYTHONPATH',
+	'PYTHONHOME',
+	'PYTHONSTARTUP',
+	'RUBYOPT',
+	'RUBYLIB',
+	'BASH_ENV',
+	'ENV',
+	'LD_PRELOAD',
+	'LD_LIBRARY_PATH',
+	'DYLD_INSERT_LIBRARIES',
+	'DYLD_LIBRARY_PATH',
+	'DYLD_FRAMEWORK_PATH',
+	'PERL5OPT',
+	'PERL5LIB',
+]);
+
+export function validateInjectableSecretName(key: string): void {
+	const canonicalKey = key.toUpperCase();
+	if (BLOCKED_CHILD_SECRET_NAMES.has(canonicalKey)) {
+		throw new ValidationError(
+			`Secret "${key}" is not allowed because ${canonicalKey} can expose Redshift authentication or alter runtime startup`,
+		);
+	}
+}
+
 export function injectSecrets(
 	baseEnv: Record<string, string | undefined>,
 	secrets: SecretBundle,
 ): Record<string, string> {
 	const result: Record<string, string> = {};
 
-	// Copy base environment
 	for (const [key, value] of Object.entries(baseEnv)) {
-		if (value !== undefined) {
+		if (value !== undefined && !REDSHIFT_AUTH_VARIABLES.has(key.toUpperCase())) {
 			result[key] = value;
 		}
 	}
 
-	// Inject secrets — SecretBundle values are always strings
 	for (const [key, value] of Object.entries(secrets)) {
+		validateInjectableSecretName(key);
 		result[key] = value;
 	}
 

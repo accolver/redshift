@@ -1,11 +1,17 @@
 import { REDSHIFT_KIND } from '$lib/constants';
 import { getRedshiftSecretsFilter } from '$lib/crypto';
 import { clearDecryptionCache } from '$lib/models/gift-wrap-secrets';
-import { RateLimiter, withPublishBackoff } from '$lib/rate-limiter';
+import {
+	type QuorumReport,
+	RateLimiter,
+	executeWithQuorum,
+	withPublishBackoff,
+} from '$lib/rate-limiter';
 import { DEFAULT_RELAYS as CRYPTO_DEFAULT_RELAYS } from '@redshift/crypto';
 import { EventStore } from 'applesauce-core';
 import { RelayPool, onlyEvents } from 'applesauce-relay';
-import type { NostrEvent } from 'nostr-tools';
+import type { EventTemplate, NostrEvent } from 'nostr-tools';
+import type { Subscription } from 'rxjs';
 
 // Re-export constants for backward compatibility with existing imports
 export { REDSHIFT_KIND, getProjectDTag } from '$lib/constants';
@@ -28,6 +34,38 @@ export const DEFAULT_RELAYS: string[] = [...CRYPTO_DEFAULT_RELAYS];
 // Managed relay for Cloud tier subscribers
 export const MANAGED_RELAY = 'wss://relay.redshiftapp.com';
 export const MANAGED_RELAY_API = 'https://relay.redshiftapp.com';
+
+interface RuntimeRelayConfig {
+	relays?: unknown;
+}
+
+declare global {
+	interface Window {
+		__REDSHIFT_RUNTIME_CONFIG__?: RuntimeRelayConfig;
+	}
+}
+
+export function getRuntimeRelays(
+	config: RuntimeRelayConfig | undefined = typeof window !== 'undefined'
+		? window.__REDSHIFT_RUNTIME_CONFIG__
+		: undefined,
+) {
+	if (!Array.isArray(config?.relays)) return [...DEFAULT_RELAYS];
+	const relays: string[] = [];
+	for (const value of config.relays) {
+		if (typeof value !== 'string') return [...DEFAULT_RELAYS];
+		try {
+			const url = new URL(value);
+			const localPlaintext =
+				url.protocol === 'ws:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1');
+			if (url.protocol !== 'wss:' && !localPlaintext) return [...DEFAULT_RELAYS];
+			relays.push(url.href);
+		} catch {
+			return [...DEFAULT_RELAYS];
+		}
+	}
+	return relays.length > 0 ? [...new Set(relays)] : [...DEFAULT_RELAYS];
+}
 
 // Cache for payment status to avoid repeated API calls
 let paymentStatusCache: { pubkey: string; paid: boolean; checkedAt: number } | null = null;
@@ -73,13 +111,13 @@ export async function checkManagedRelayAccess(pubkey: string): Promise<boolean> 
  */
 export async function getRelaysForUser(pubkey: string): Promise<string[]> {
 	const hasAccess = await checkManagedRelayAccess(pubkey);
+	const baseRelays = getRuntimeRelays();
 
 	if (hasAccess) {
-		// Put managed relay first for priority
-		return [MANAGED_RELAY, ...DEFAULT_RELAYS];
+		return [MANAGED_RELAY, ...baseRelays.filter((relay) => relay !== MANAGED_RELAY)];
 	}
 
-	return DEFAULT_RELAYS;
+	return baseRelays;
 }
 
 /**
@@ -141,6 +179,40 @@ export const relayPool = new RelayPool();
 
 // Track active subscriptions
 let activeSubscription: { unsubscribe: () => void } | null = null;
+let managedRelayAuthSubscription: Subscription | null = null;
+
+interface ManagedAuthRelay {
+	readonly authenticated: boolean;
+	challenge$: {
+		subscribe(observer: (challenge: string | null) => void): Subscription;
+	};
+	authenticate(signer: {
+		signEvent(event: EventTemplate): NostrEvent | Promise<NostrEvent>;
+	}): Promise<{ ok: boolean; message?: string }>;
+}
+
+export function watchManagedRelayAuthentication(
+	relay: ManagedAuthRelay,
+	signAuthEvent: (event: EventTemplate) => Promise<NostrEvent>,
+	onError: (error: Error) => void,
+): Subscription {
+	let inFlight = false;
+	return relay.challenge$.subscribe((challenge) => {
+		if (!challenge || relay.authenticated || inFlight) return;
+		inFlight = true;
+		void relay
+			.authenticate({ signEvent: signAuthEvent })
+			.then((response) => {
+				if (!response.ok) throw new Error(response.message || 'Relay authentication rejected');
+			})
+			.catch((error: unknown) => {
+				onError(error instanceof Error ? error : new Error(String(error)));
+			})
+			.finally(() => {
+				inFlight = false;
+			});
+	});
+}
 
 // Track the latest event timestamp seen for incremental sync on reconnection
 let lastSeenTimestamp: number | null = null;
@@ -180,6 +252,9 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 		activeSubscription.unsubscribe();
 	}
 
+	managedRelayAuthSubscription?.unsubscribe();
+	managedRelayAuthSubscription = null;
+
 	// Update relay state
 	const hasManagedAccess = relays.includes(MANAGED_RELAY);
 	relayState = {
@@ -194,6 +269,20 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 	// 1. NIP-59 Gift Wrap events (kind 1059) with redshift-secrets type tag for encrypted secrets
 	// 2. Redshift events (Kind 30078) for project metadata
 	// 3. Profile events (Kind 0) for displaying user info
+	if (hasManagedAccess) {
+		managedRelayAuthSubscription = watchManagedRelayAuthentication(
+			relayPool.relay(MANAGED_RELAY),
+			async (template) => {
+				const { signEvent } = await import('./auth.svelte');
+				return signEvent(template);
+			},
+			(error) => {
+				console.error('Managed relay authentication failed:', error);
+				relayState = { ...relayState, status: 'error' };
+			},
+		);
+	}
+
 	const secretsFilter = getRedshiftSecretsFilter(pubkey);
 
 	// Build filters, adding `since` for incremental sync on reconnection
@@ -265,6 +354,8 @@ export function disconnect(): void {
 		activeSubscription.unsubscribe();
 		activeSubscription = null;
 	}
+	managedRelayAuthSubscription?.unsubscribe();
+	managedRelayAuthSubscription = null;
 	relayState = {
 		status: 'disconnected',
 		connectedCount: 0,
@@ -283,29 +374,39 @@ export function disconnect(): void {
 	resetManagedRelaySync();
 }
 
+export async function withPublishTimeout<T>(
+	operation: Promise<T>,
+	relay: string,
+	timeoutMs = 5000,
+) {
+	let timeout: ReturnType<typeof setTimeout> | undefined;
+	try {
+		const timeoutPromise = new Promise<never>((_, reject) => {
+			timeout = setTimeout(() => reject(new Error(`Publish timeout for ${relay}`)), timeoutMs);
+		});
+		return await Promise.race([operation, timeoutPromise]);
+	} finally {
+		if (timeout) clearTimeout(timeout);
+	}
+}
+
 /**
  * Publish an event to relays with rate limiting and exponential backoff
  */
 export async function publishEvent(
 	event: NostrEvent,
-	relays: string[] = DEFAULT_RELAYS,
-): Promise<void> {
-	// Add to local store immediately for optimistic updates
+	relays?: string[],
+): Promise<QuorumReport<string>> {
+	const targets = relays ?? (relayState.relays.length > 0 ? relayState.relays : DEFAULT_RELAYS);
+	const report = await executeWithQuorum(targets, event.id, async (relay) => {
+		await withPublishBackoff(async () => {
+			await rateLimiter.waitForSlot();
+			const publishPromise = relayPool.publish([relay], event).then(() => undefined);
+			await withPublishTimeout(publishPromise, relay);
+		});
+	});
+
+	// Only expose the event as durable local state after publication quorum succeeds.
 	eventStore.add(event);
-
-	// Publish to relays with rate limiting and retry
-	await rateLimiter.waitForSlot();
-
-	// Publish with a timeout to avoid hanging on slow/failing relays
-	const publishWithTimeout = async () => {
-		const timeoutMs = 5000; // 5 second timeout per attempt
-		const publishPromise = relayPool.publish(relays, event);
-		const timeoutPromise = new Promise<void>((_, reject) =>
-			setTimeout(() => reject(new Error('Publish timeout - relays may be slow')), timeoutMs),
-		);
-
-		await Promise.race([publishPromise, timeoutPromise]);
-	};
-
-	await withPublishBackoff(publishWithTimeout);
+	return report;
 }

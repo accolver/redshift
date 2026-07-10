@@ -9,7 +9,16 @@
  * L4: Integration-Contractor - NIP-59 protocol compliance
  */
 
-import { type NostrEvent, createDTag, wrapSecrets, wrapSecretsWithSigner } from '$lib/crypto';
+import {
+	type NostrEvent,
+	compareSecretVersions,
+	createDTag,
+	getRedshiftSecretsFilter,
+	unwrapGiftWrap,
+	unwrapGiftWrapWithSigner,
+	wrapSecrets,
+	wrapSecretsWithSigner,
+} from '$lib/crypto';
 import {
 	AllGiftWrapSecretsModel,
 	type Decryptor,
@@ -72,11 +81,6 @@ let currentEnvironmentSlug: string | null = null;
 let currentEnvironmentSlugs: string[] = [];
 
 /**
- * Cached decryptor for the current session
- */
-let cachedDecryptor: Decryptor | null = null;
-
-/**
  * Cached encrypt function for publishing (NIP-07/bunker)
  */
 let cachedEncryptFn: ((pubkey: string, plaintext: string) => Promise<string>) | null = null;
@@ -107,7 +111,6 @@ function invalidateStaleCachedCredentials(): void {
 		if (cachedPrivateKey) {
 			cachedPrivateKey.fill(0);
 		}
-		cachedDecryptor = null;
 		cachedEncryptFn = null;
 		cachedPrivateKey = null;
 		cachedAuthPubkey = null;
@@ -175,7 +178,9 @@ async function buildDecryptor(): Promise<Decryptor | null> {
 		return { type: 'privateKey', key: privateKey };
 	}
 	if (decryptFn) {
-		return { type: 'decryptFn', fn: decryptFn };
+		const expectedAuthor = getAuthState().pubkey;
+		if (!expectedAuthor) return null;
+		return { type: 'decryptFn', expectedAuthor, fn: decryptFn };
 	}
 	return null;
 }
@@ -356,8 +361,7 @@ export async function subscribeToSecrets(
 		return;
 	}
 
-	// Cache credentials for publishing and decryption, along with the auth identity
-	cachedDecryptor = decryptor;
+	// Cache credentials for publishing, along with the auth identity.
 	cachedPrivateKey = await getPrivateKey();
 	cachedEncryptFn = getEncryptFn();
 	cachedAuthPubkey = auth.pubkey;
@@ -413,7 +417,6 @@ export function unsubscribeFromSecrets(): void {
 	if (cachedPrivateKey) {
 		cachedPrivateKey.fill(0);
 	}
-	cachedDecryptor = null;
 	cachedEncryptFn = null;
 	cachedPrivateKey = null;
 	cachedAuthPubkey = null;
@@ -426,18 +429,61 @@ export function unsubscribeFromSecrets(): void {
 /**
  * Wrap secrets using the appropriate method based on cached credentials
  */
+async function ensurePublishCredentials(): Promise<void> {
+	invalidateStaleCachedCredentials();
+	if (cachedPrivateKey || cachedEncryptFn) return;
+	cachedPrivateKey = await getPrivateKey();
+	cachedEncryptFn = getEncryptFn();
+	const auth = getAuthState();
+	cachedAuthPubkey = auth.pubkey;
+	cachedAuthMethod = auth.method;
+}
+
+async function nextRumorTimestamp(dTag: string): Promise<number> {
+	await ensurePublishCredentials();
+	const auth = getAuthState();
+	if (!auth.pubkey) throw new Error('Not authenticated');
+	const candidates = eventStore.database.getByFilters([getRedshiftSecretsFilter(auth.pubkey)]);
+	let latest: { createdAt: number; eventId: string } | null = null;
+	for (const candidate of candidates) {
+		try {
+			const result = cachedPrivateKey
+				? unwrapGiftWrap(candidate, cachedPrivateKey)
+				: cachedEncryptFn
+					? await unwrapGiftWrapWithSigner(candidate, auth.pubkey, (pubkey, ciphertext) => {
+							const decrypt = getDecryptFn();
+							if (!decrypt) throw new Error('Decryption unavailable');
+							return decrypt(pubkey, ciphertext);
+						})
+					: null;
+			if (result?.dTag === dTag && (!latest || compareSecretVersions(result, latest) > 0)) {
+				latest = result;
+			}
+		} catch {
+			// Ignore ciphertext that is invalid or belongs to another identity.
+		}
+	}
+	const now = Math.floor(Date.now() / 1000);
+	if (latest && latest.createdAt >= now + 300) {
+		throw new Error('Cannot create a newer secret version until the local clock catches up');
+	}
+	return Math.max(now, (latest?.createdAt ?? -1) + 1);
+}
+
 async function wrapSecretsForPublish(
 	bundle: Record<string, string>,
 	dTag: string,
+	createdAt?: number,
 ): Promise<NostrEvent> {
-	// Invalidate cached credentials if the auth identity has changed
-	invalidateStaleCachedCredentials();
-
+	await ensurePublishCredentials();
+	const rumorCreatedAt = createdAt ?? (await nextRumorTimestamp(dTag));
 	const auth = getAuthState();
 
 	if (cachedPrivateKey) {
 		// Use direct private key wrapping (nsec)
-		const { event } = wrapSecrets(bundle, cachedPrivateKey, dTag);
+		const { event } = wrapSecrets(bundle, cachedPrivateKey, dTag, {
+			createdAt: rumorCreatedAt,
+		});
 		return event;
 	}
 
@@ -467,11 +513,22 @@ async function wrapSecretsForPublish(
 			dTag,
 			cachedEncryptFn,
 			signerSignFn,
+			{ createdAt: rumorCreatedAt },
 		);
 		return event;
 	}
 
 	throw new Error('No encryption method available. Please re-authenticate.');
+}
+
+export async function publishSecretTombstone(
+	projectSlug: string,
+	environmentSlug: string,
+): Promise<NostrEvent> {
+	const dTag = createDTag(projectSlug, environmentSlug);
+	const event = await wrapSecretsForPublish({}, dTag);
+	await publishEvent(event);
+	return event;
 }
 
 /**

@@ -1,0 +1,137 @@
+{
+  "summary": {
+    "context": "Repository-wide security, CLI, web, relay, distribution, and product-surface audit at main@9b98467",
+    "overall_assessment": "NEEDS CHANGES",
+    "total_findings": 14,
+    "by_severity": {"critical": 1, "high": 7, "medium": 6, "low": 0, "info": 0},
+    "by_category": {"security": 9, "bug": 4, "protocol": 1}
+  },
+  "findings": [
+    {
+      "id": "C1",
+      "severity": "critical",
+      "category": "security",
+      "title": "Attacker-authored Gift Wrap becomes victim secret state",
+      "location": "packages/crypto/src/gift-wrap.ts:128-183; cli/src/lib/secret-manager.ts:265-310; web/src/lib/models/gift-wrap-secrets.ts:66-238",
+      "issue": "Decryption authenticates the sender but selection never requires sender == authenticated owner. Future-dated attacker state wins and is injected into commands.",
+      "suggestion": "Require expected owner in both unwrap paths, reject mismatched authors/future timestamps, validate environment names, and add malicious-sender CLI/web E2E tests."
+    },
+    {
+      "id": "H1",
+      "severity": "high",
+      "category": "security",
+      "title": "Master Redshift credential inherited by child processes",
+      "location": "cli/src/commands/run.ts:111-138; cli/src/lib/secret-manager.ts:454-473",
+      "issue": "REDSHIFT_NSEC/REDSHIFT_BUNKER are copied from process.env into every launched application.",
+      "suggestion": "Scrub authentication-only variables before injecting requested project secrets."
+    },
+    {
+      "id": "H2",
+      "severity": "high",
+      "category": "security",
+      "title": "Installer and updater fail open without artifact verification",
+      "location": "web/static/install:47-77; cli/src/commands/upgrade.ts:164-225; .github/workflows/release.yml:47-69",
+      "issue": "Current releases provide no checksum/signature/attestation and clients continue when verification data is absent.",
+      "suggestion": "Generate signed checksums and attestations; fail closed; verify before atomic replacement."
+    },
+    {
+      "id": "H3",
+      "severity": "high",
+      "category": "security",
+      "title": "Managed relay executes mutable third-party authentication script",
+      "location": "relay/nosflare/src/relay-worker.ts:2252",
+      "issue": "nostr-login@latest executes with sign_event permission in the relay origin.",
+      "suggestion": "Vendor or pin an immutable reviewed build and enforce CSP/SRI."
+    },
+    {
+      "id": "H4",
+      "severity": "high",
+      "category": "bug",
+      "title": "Compiled redshift serve dashboard is blank",
+      "location": "cli/src/commands/serve.ts:22-34",
+      "issue": "The CSP blocks the inline SvelteKit bootstrap. Repeated browser tests found zero interactive elements, while the same build worked in Vite preview.",
+      "suggestion": "Use a nonce/hash-aware bootstrap policy and add compiled-binary browser E2E."
+    },
+    {
+      "id": "H5",
+      "severity": "high",
+      "category": "bug",
+      "title": "run corrupts argv and breaks --command",
+      "location": "cli/src/commands/run.ts:27-78,130-138; cli/src/main.ts:167-191",
+      "issue": "Already-tokenized argv is joined and parsed again; spaced arguments split and sh -c argument boundaries are destroyed.",
+      "suggestion": "Preserve positional argv verbatim; handle --command as an explicit shell mode without re-tokenization."
+    },
+    {
+      "id": "H6",
+      "severity": "high",
+      "category": "bug",
+      "title": "setup overwrite and no-interactive semantics are reversed",
+      "location": "cli/src/main.ts:154-163; cli/src/commands/setup.ts:21-109",
+      "issue": "Ordinary setup forces overwrite; --no-interactive disables overwrite but does not disable prompts.",
+      "suggestion": "Separate force and interactive flags; reject missing values in noninteractive mode."
+    },
+    {
+      "id": "H7",
+      "severity": "high",
+      "category": "protocol",
+      "title": "Paid managed relay cannot accept normal Redshift Gift Wrap writes",
+      "location": "relay/nosflare/src/durable-object.ts:830-869",
+      "issue": "The relay requires the ephemeral outer event author to be authenticated and paid, but Redshift discards that ephemeral key.",
+      "suggestion": "For kind 1059, authorize/payment-check the authenticated recipient against the p tag while still verifying the outer event."
+    },
+    {
+      "id": "M1",
+      "severity": "medium",
+      "category": "security",
+      "title": "Configuration reads disclose fallback credentials",
+      "location": "cli/src/main.ts:303-319,422-437",
+      "issue": "configure get/--all serialize nsec and bunker client keys.",
+      "suggestion": "Redact sensitive values by default and require an explicit, warned reveal path."
+    },
+    {
+      "id": "M2",
+      "severity": "medium",
+      "category": "security",
+      "title": "Paid relay read access bypass",
+      "location": "relay/nosflare/src/durable-object.ts:963-1075",
+      "issue": "Any authenticated key may issue unrestricted REQ filters without a payment check.",
+      "suggestion": "Enforce paid/allowed identity before subscriptions and define recipient-scoped read policy."
+    },
+    {
+      "id": "M3",
+      "severity": "medium",
+      "category": "security",
+      "title": "Relay rate limit bypass through parallel connections",
+      "location": "relay/nosflare/src/durable-object.ts:580-585,645-651,986",
+      "issue": "Fresh per-session buckets multiply limits for the same pubkey.",
+      "suggestion": "Use shared per-authenticated-pubkey quotas plus a connection-level limiter."
+    },
+    {
+      "id": "M4",
+      "severity": "medium",
+      "category": "security",
+      "title": "Bunker pairing secret leaks through process arguments/errors",
+      "location": "cli/src/commands/login.ts:42-63,130-175; cli/src/lib/bunker.ts:48-70",
+      "issue": "Secret-bearing bunker URIs are visible to process observers/logs and can be echoed in errors.",
+      "suggestion": "Accept via hidden stdin/environment and redact the supplied URI/query in errors."
+    },
+    {
+      "id": "M5",
+      "severity": "medium",
+      "category": "security",
+      "title": "Local bunker lacks inbound request bounds",
+      "location": "cli/src/lib/nip46-bunker.ts:319-372",
+      "issue": "Arbitrary senders can trigger verification, decryption, encryption, signing, and publication work without age/size/rate limits.",
+      "suggestion": "Add global/per-client token buckets and event age/content size limits before expensive work."
+    },
+    {
+      "id": "M6",
+      "severity": "medium",
+      "category": "bug",
+      "title": "Project/environment deletion leaves secret bundles active or historically recoverable",
+      "location": "web/src/lib/stores/projects.svelte.ts:139-191,277-320; cli/src/lib/secret-manager.ts:400-438",
+      "issue": "Deletion does not tombstone every d-tag, and user-signed NIP-09 cannot delete ephemeral-authored Gift Wraps.",
+      "suggestion": "Tombstone affected d-tags, correct documentation, and design key rotation/retention rather than claiming NIP-09 erasure."
+    }
+  ]
+}

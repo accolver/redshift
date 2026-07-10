@@ -4,40 +4,36 @@
  * These tests spawn the actual compiled CLI binary and verify
  * that the serve command responds correctly to HTTP requests.
  *
- * SKIPPED IN CI: Requires compiled binary which may not be available.
- * Set CI=true to skip these tests.
- *
- * To run locally:
+ * The test intentionally fails when the root compiled binary is missing; it
+ * never falls back to source.
  *   1. Build the CLI: bun run build:cli
  *   2. Run tests: bun test cli/tests/integration/binary-serve.test.ts
  */
 
-import { afterEach, beforeAll, describe, expect, it } from 'bun:test';
-import { existsSync } from 'node:fs';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'bun:test';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Subprocess } from 'bun';
 
-// Skip in CI environment (binary may not be built)
-const IS_CI = process.env.CI === 'true';
-
-// Path to the compiled binary
-const BINARY_PATH = join(import.meta.dir, '../../dist/redshift');
-
-// Alternative: use bun to run the CLI directly (works without compiled binary)
-const CLI_ENTRY = join(import.meta.dir, '../../src/main.ts');
+// Root build output. Do not change this to cli/dist or add a source fallback.
+const BINARY_PATH = join(import.meta.dir, '../../../dist/redshift');
 
 // Check if binary exists
 const hasBinary = existsSync(BINARY_PATH);
+const testConfigDir = mkdtempSync(join(tmpdir(), 'redshift-binary-serve-'));
 
-function testEnv() {
-	const env: Record<string, string> = {};
-	for (const [key, value] of Object.entries(process.env)) {
-		if (value !== undefined && key !== 'REDSHIFT_NSEC' && key !== 'REDSHIFT_BUNKER') {
-			env[key] = value;
-		}
-	}
-	env.BROWSER = 'none';
-	return env;
+afterAll(() => rmSync(testConfigDir, { recursive: true, force: true }));
+
+function isolatedServerEnvironment() {
+	const environment: Record<string, string | undefined> = {
+		...process.env,
+		BROWSER: 'none',
+		REDSHIFT_CONFIG_DIR: testConfigDir,
+	};
+	delete environment.REDSHIFT_NSEC;
+	delete environment.REDSHIFT_BUNKER;
+	return environment;
 }
 
 // Helper to wait for server to be ready
@@ -59,16 +55,13 @@ function getRandomPort(): number {
 	return 10000 + Math.floor(Math.random() * 50000);
 }
 
-describe.skipIf(IS_CI)('Binary Serve Integration Tests', () => {
+describe('Binary Serve Integration Tests', () => {
 	let serverProcess: Subprocess | null = null;
 	let serverPort: number;
 	let serverUrl: string;
 
 	beforeAll(() => {
-		if (!hasBinary) {
-			console.log('Binary not found at:', BINARY_PATH);
-			console.log('Using bun to run CLI entry point instead');
-		}
+		expect(hasBinary, `Compiled binary is required at ${BINARY_PATH}`).toBe(true);
 	});
 
 	afterEach(async () => {
@@ -84,19 +77,10 @@ describe.skipIf(IS_CI)('Binary Serve Integration Tests', () => {
 	async function startServer(port: number): Promise<Subprocess> {
 		const args = ['serve', '--port', String(port)];
 
-		if (hasBinary) {
-			// Use compiled binary
-			return Bun.spawn([BINARY_PATH, ...args], {
-				stdout: 'pipe',
-				stderr: 'pipe',
-				env: testEnv(),
-			});
-		}
-		// Use bun to run the CLI entry point
-		return Bun.spawn(['bun', 'run', CLI_ENTRY, ...args], {
+		return Bun.spawn([BINARY_PATH, ...args], {
 			stdout: 'pipe',
 			stderr: 'pipe',
-			env: testEnv(),
+			env: isolatedServerEnvironment(),
 		});
 	}
 
@@ -217,15 +201,17 @@ describe.skipIf(IS_CI)('Binary Serve Integration Tests', () => {
 	}, 15000);
 });
 
-describe.skipIf(IS_CI)('Binary Process Management', () => {
+describe('Binary Process Management', () => {
 	it('gracefully shuts down on SIGINT', async () => {
 		const port = getRandomPort();
 		const url = `http://127.0.0.1:${port}`;
 
 		const args = ['serve', '--port', String(port)];
-		const proc = hasBinary
-			? Bun.spawn([BINARY_PATH, ...args], { stdout: 'pipe', stderr: 'pipe', env: testEnv() })
-			: Bun.spawn(['bun', 'run', CLI_ENTRY, ...args], { stdout: 'pipe', stderr: 'pipe', env: testEnv() });
+		const proc = Bun.spawn([BINARY_PATH, ...args], {
+			stdout: 'pipe',
+			stderr: 'pipe',
+			env: isolatedServerEnvironment(),
+		});
 
 		try {
 			// Wait for server to start

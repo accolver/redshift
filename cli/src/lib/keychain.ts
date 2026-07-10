@@ -21,17 +21,32 @@ const KEYCHAIN_SERVICE = 'com.redshiftapp.cli';
  */
 const KEYCHAIN_NSEC = 'nsec';
 const KEYCHAIN_BUNKER_CLIENT_KEY = 'bunker-client-secret-key';
+const TEST_KEYCHAIN_BACKEND = 'memory';
+const memoryKeychain = new Map<string, string>();
 
-function isKeychainDisabled(): boolean {
+function useMemoryKeychain() {
+	return (
+		process.env.NODE_ENV === 'test' &&
+		process.env.REDSHIFT_TEST_KEYCHAIN_BACKEND === TEST_KEYCHAIN_BACKEND
+	);
+}
+
+function isKeychainDisabled() {
 	return process.env.REDSHIFT_DISABLE_KEYCHAIN === '1';
+}
+
+function memoryKey(name: string) {
+	return `${KEYCHAIN_SERVICE}:${name}`;
 }
 
 /**
  * Check if keychain is available on this system
  */
 export async function isKeychainAvailable(): Promise<boolean> {
+	if (isKeychainDisabled()) return false;
+	if (useMemoryKeychain()) return true;
 	// Bun.secrets is only available in Bun runtime
-	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
+	if (typeof Bun === 'undefined' || !Bun.secrets) {
 		return false;
 	}
 
@@ -53,7 +68,12 @@ export async function isKeychainAvailable(): Promise<boolean> {
  * @returns true if stored successfully, false if keychain unavailable
  */
 export async function storeNsecInKeychain(nsec: string): Promise<boolean> {
-	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
+	if (isKeychainDisabled()) return false;
+	if (useMemoryKeychain()) {
+		memoryKeychain.set(memoryKey(KEYCHAIN_NSEC), nsec);
+		return true;
+	}
+	if (typeof Bun === 'undefined' || !Bun.secrets) {
 		return false;
 	}
 
@@ -77,7 +97,9 @@ export async function storeNsecInKeychain(nsec: string): Promise<boolean> {
  * @returns The nsec if found, null if not found or keychain unavailable
  */
 export async function getNsecFromKeychain(): Promise<string | null> {
-	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
+	if (isKeychainDisabled()) return null;
+	if (useMemoryKeychain()) return memoryKeychain.get(memoryKey(KEYCHAIN_NSEC)) ?? null;
+	if (typeof Bun === 'undefined' || !Bun.secrets) {
 		return null;
 	}
 
@@ -99,7 +121,12 @@ export async function getNsecFromKeychain(): Promise<string | null> {
  * @returns true if deleted (or didn't exist), false if keychain unavailable
  */
 export async function deleteNsecFromKeychain(): Promise<boolean> {
-	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
+	if (isKeychainDisabled()) return false;
+	if (useMemoryKeychain()) {
+		memoryKeychain.delete(memoryKey(KEYCHAIN_NSEC));
+		return true;
+	}
+	if (typeof Bun === 'undefined' || !Bun.secrets) {
 		return false;
 	}
 
@@ -122,7 +149,12 @@ export async function deleteNsecFromKeychain(): Promise<boolean> {
  * @returns true if stored successfully, false if keychain unavailable
  */
 export async function storeBunkerKeyInKeychain(hexKey: string): Promise<boolean> {
-	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
+	if (isKeychainDisabled()) return false;
+	if (useMemoryKeychain()) {
+		memoryKeychain.set(memoryKey(KEYCHAIN_BUNKER_CLIENT_KEY), hexKey);
+		return true;
+	}
+	if (typeof Bun === 'undefined' || !Bun.secrets) {
 		return false;
 	}
 
@@ -145,7 +177,11 @@ export async function storeBunkerKeyInKeychain(hexKey: string): Promise<boolean>
  * @returns The hex-encoded key if found, null if not found or keychain unavailable
  */
 export async function getBunkerKeyFromKeychain(): Promise<string | null> {
-	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
+	if (isKeychainDisabled()) return null;
+	if (useMemoryKeychain()) {
+		return memoryKeychain.get(memoryKey(KEYCHAIN_BUNKER_CLIENT_KEY)) ?? null;
+	}
+	if (typeof Bun === 'undefined' || !Bun.secrets) {
 		return null;
 	}
 
@@ -166,7 +202,12 @@ export async function getBunkerKeyFromKeychain(): Promise<string | null> {
  * @returns true if deleted (or didn't exist), false if keychain unavailable
  */
 export async function deleteBunkerKeyFromKeychain(): Promise<boolean> {
-	if (isKeychainDisabled() || typeof Bun === 'undefined' || !Bun.secrets) {
+	if (isKeychainDisabled()) return false;
+	if (useMemoryKeychain()) {
+		memoryKeychain.delete(memoryKey(KEYCHAIN_BUNKER_CLIENT_KEY));
+		return true;
+	}
+	if (typeof Bun === 'undefined' || !Bun.secrets) {
 		return false;
 	}
 

@@ -1,130 +1,107 @@
-/**
- * Setup Command - Configure project and environment
- *
- * L5: Journey-Validator - Project configuration flow
- */
+/** Setup Command - configure a validated project/environment context. */
 
 import { createInterface } from 'node:readline';
-import { getRelays, loadProjectConfig, saveProjectConfig } from '../lib/config';
+import { getRelays, loadConfig, loadProjectConfig, saveProjectConfig } from '../lib/config';
+import { ValidationError } from '../lib/errors';
 import { SecretManager } from '../lib/secret-manager';
 import type { RedshiftConfig } from '../lib/types';
+import { validateAll, validateEnvironment, validateProjectId } from '../lib/validation';
 import { requireAuth } from './login';
+
+interface SetupSecretManager {
+	connect(relays: string[]): void;
+	listProjects(): Promise<string[]>;
+	listEnvironments(projectId: string): Promise<string[]>;
+	close(): Promise<void>;
+}
 
 export interface SetupOptions {
 	project?: string;
 	environment?: string;
 	force?: boolean;
+	/** Defaults to true. False guarantees that stdin is never read. */
+	interactive?: boolean;
+	/** Test seam for preserving typed relay failures. */
+	secretManager?: SetupSecretManager;
 }
 
-/**
- * Execute the setup command.
- * Creates or updates redshift.yaml in the current directory.
- */
+function validateSetupValues(project: string, environment: string): void {
+	validateAll([
+		['project', project, validateProjectId],
+		['environment', environment, validateEnvironment],
+	]);
+}
+
+/** Execute setup without conflating overwrite permission and interactivity. */
 export async function setupCommand(options: SetupOptions): Promise<void> {
 	const cwd = process.cwd();
 	const existingConfig = await loadProjectConfig(cwd);
-
 	if (existingConfig && !options.force) {
-		console.log('This directory already has a redshift.yaml:');
-		console.log(`  Project: ${existingConfig.project}`);
-		console.log(`  Environment: ${existingConfig.environment}`);
-		console.log('\nUse --force to reconfigure.');
-		return;
+		throw new ValidationError(
+			`This directory already has redshift.yaml for ${existingConfig.project}/${existingConfig.environment}; use --force to reconfigure`,
+		);
 	}
 
-	const relays = await getRelays();
-	const canConfigureDirectly = Boolean(options.project && options.environment);
-	let manager: SecretManager | null = null;
+	const globalConfig = await loadConfig();
+	const interactive = options.interactive !== false;
+	let projectId = options.project ?? existingConfig?.project ?? globalConfig.defaultProject;
+	let environment =
+		options.environment ?? existingConfig?.environment ?? globalConfig.defaultEnvironment;
 
-	let projectId: string;
-	let environment: string;
+	if (!interactive && (!projectId || !environment)) {
+		throw new ValidationError(
+			'Noninteractive setup requires --project and --config, project config, or configured global defaults',
+		);
+	}
+	if (projectId && environment) validateSetupValues(projectId, environment);
+
+	const auth = await requireAuth();
+	console.log(`\nAuthenticated as ${auth.npub}\n`);
+	const relays = await getRelays();
+	let manager: SetupSecretManager | null = null;
 
 	try {
-		console.log('Redshift Setup');
-		console.log('==============\n');
-
-		let existingProjects: string[] = [];
-		let existingEnvironments: string[] = [];
-
-		if (!canConfigureDirectly) {
-			// Require authentication only when setup needs to discover existing projects/environments.
-			// Non-interactive setup with explicit project and environment can write redshift.yaml offline.
-			const auth = await requireAuth();
-			console.log(`\nAuthenticated as ${auth.npub}\n`);
-
-			manager = new SecretManager(auth.privateKey ?? auth.signer!);
+		manager = options.secretManager ?? new SecretManager(auth.privateKey ?? auth.signer!);
+		if (!projectId || !environment) {
 			manager.connect(relays);
+			console.log('Redshift Setup');
+			console.log('==============\n');
 
-			// Fetch existing projects from relays
-			console.log('Fetching existing projects from relays...');
-			try {
-				existingProjects = await manager.listProjects();
-				if (existingProjects.length > 0) {
-					console.log(`Found ${existingProjects.length} existing project(s)\n`);
-				} else {
-					console.log('No existing projects found\n');
-				}
-			} catch {
-				console.log('Could not fetch projects (will use manual input)\n');
-			}
-		}
-
-		// Select or create project
-		if (options.project) {
-			projectId = options.project;
-		} else if (existingProjects.length > 0) {
-			projectId = await selectProject(existingProjects, existingConfig?.project);
-			// If empty, prompt for new project name
+			const existingProjects = await manager.listProjects();
 			if (!projectId) {
-				projectId = await promptForInput('Enter new project name: ');
+				if (existingProjects.length > 0) {
+					projectId = await selectProject(existingProjects, globalConfig.defaultProject);
+					if (!projectId) projectId = await promptForInput('Enter new project name: ');
+				} else {
+					projectId = await promptForInput('Enter project ID: ', globalConfig.defaultProject);
+				}
 			}
-		} else {
-			projectId = await promptForInput('Enter project ID: ', existingConfig?.project);
-		}
+			if (!projectId) throw new ValidationError('Project ID is required.');
 
-		if (!projectId) {
-			console.error('Project ID is required.');
-			process.exit(1);
-		}
-
-		// Fetch environments for selected project
-		if (manager && existingProjects.includes(projectId)) {
-			try {
-				existingEnvironments = await manager.listEnvironments(projectId);
-			} catch {
-				// Ignore errors, will use defaults
+			if (!environment) {
+				const existingEnvironments = existingProjects.includes(projectId)
+					? await manager.listEnvironments(projectId)
+					: [];
+				environment =
+					existingEnvironments.length > 0
+						? await selectEnvironment(
+								existingEnvironments,
+								globalConfig.defaultEnvironment ?? 'dev',
+							)
+						: await promptForInput(
+								'Enter environment (e.g., dev, staging, prod): ',
+								globalConfig.defaultEnvironment ?? 'dev',
+							);
 			}
 		}
 
-		// Select or create environment
-		if (options.environment) {
-			environment = options.environment;
-		} else if (existingEnvironments.length > 0 || existingProjects.includes(projectId)) {
-			environment = await selectEnvironment(
-				existingEnvironments,
-				existingConfig?.environment || 'dev',
-			);
-		} else {
-			environment = await promptForInput(
-				'Enter environment (e.g., dev, staging, prod): ',
-				existingConfig?.environment || 'dev',
-			);
+		if (!projectId || !environment) {
+			throw new ValidationError('Project and environment are required.');
 		}
+		validateSetupValues(projectId, environment);
 
-		if (!environment) {
-			console.error('Environment is required.');
-			process.exit(1);
-		}
-
-		// Save config
-		const config: RedshiftConfig = {
-			project: projectId,
-			environment: environment,
-			relays: relays,
-		};
-
+		const config: RedshiftConfig = { project: projectId, environment, relays };
 		await saveProjectConfig(cwd, config);
-
 		console.log('\n✓ Configuration saved to redshift.yaml');
 		console.log(`  Project: ${projectId}`);
 		console.log(`  Environment: ${environment}`);
@@ -133,21 +110,13 @@ export async function setupCommand(options: SetupOptions): Promise<void> {
 		console.log('  redshift secrets set <KEY> <VALUE>   Set a secret');
 		console.log('  redshift secrets list   List all secrets');
 	} finally {
-		await manager?.close();
+		if (manager) await manager.close();
 	}
 }
 
-/**
- * Prompt user for input with optional default.
- */
 async function promptForInput(prompt: string, defaultValue?: string): Promise<string> {
-	const rl = createInterface({
-		input: process.stdin,
-		output: process.stdout,
-	});
-
+	const rl = createInterface({ input: process.stdin, output: process.stdout });
 	const displayPrompt = defaultValue ? `${prompt}[${defaultValue}] ` : prompt;
-
 	return new Promise((resolve) => {
 		rl.question(displayPrompt, (answer) => {
 			rl.close();
@@ -156,37 +125,27 @@ async function promptForInput(prompt: string, defaultValue?: string): Promise<st
 	});
 }
 
-/**
- * Interactive project selection from existing projects.
- * @internal Used when relay fetching is implemented
- */
 export async function selectProject(
 	existingProjects: string[],
 	defaultProject?: string,
 ): Promise<string> {
-	const rl = createInterface({
-		input: process.stdin,
-		output: process.stdout,
-	});
-
+	const rl = createInterface({ input: process.stdin, output: process.stdout });
 	return new Promise((resolve) => {
 		if (existingProjects.length > 0) {
 			console.log('Existing projects:');
-			existingProjects.forEach((p, i) => {
-				const marker = p === defaultProject ? ' (current)' : '';
-				console.log(`  ${i + 1}. ${p}${marker}`);
+			existingProjects.forEach((project, index) => {
+				const marker = project === defaultProject ? ' (current)' : '';
+				console.log(`  ${index + 1}. ${project}${marker}`);
 			});
 			console.log(`  ${existingProjects.length + 1}. Create new project`);
 			console.log('');
 		}
-
 		rl.question('Select project (number or new name): ', (answer) => {
 			rl.close();
-			const num = Number.parseInt(answer, 10);
-			if (!Number.isNaN(num) && num >= 1 && num <= existingProjects.length) {
-				resolve(existingProjects[num - 1] as string);
-			} else if (!Number.isNaN(num) && num === existingProjects.length + 1) {
-				// Will prompt for new name
+			const number = Number.parseInt(answer, 10);
+			if (!Number.isNaN(number) && number >= 1 && number <= existingProjects.length) {
+				resolve(existingProjects[number - 1] as string);
+			} else if (!Number.isNaN(number) && number === existingProjects.length + 1) {
 				resolve('');
 			} else {
 				resolve(answer.trim());
@@ -195,36 +154,25 @@ export async function selectProject(
 	});
 }
 
-/**
- * Interactive environment selection.
- * @internal Used when relay fetching is implemented
- */
 export async function selectEnvironment(
 	existingEnvironments: string[],
 	defaultEnv?: string,
 ): Promise<string> {
-	const defaultEnvs = ['dev', 'staging', 'prod'];
-	const allEnvs = [...new Set([...existingEnvironments, ...defaultEnvs])];
-
-	const rl = createInterface({
-		input: process.stdin,
-		output: process.stdout,
-	});
-
+	const allEnvironments = [...new Set([...existingEnvironments, 'dev', 'staging', 'prod'])];
+	const rl = createInterface({ input: process.stdin, output: process.stdout });
 	return new Promise((resolve) => {
 		console.log('Environments:');
-		allEnvs.forEach((e, i) => {
-			const marker = e === defaultEnv ? ' (current)' : '';
-			const existing = existingEnvironments.includes(e) ? ' [existing]' : '';
-			console.log(`  ${i + 1}. ${e}${marker}${existing}`);
+		allEnvironments.forEach((environment, index) => {
+			const marker = environment === defaultEnv ? ' (current)' : '';
+			const existing = existingEnvironments.includes(environment) ? ' [existing]' : '';
+			console.log(`  ${index + 1}. ${environment}${marker}${existing}`);
 		});
 		console.log('');
-
 		rl.question('Select environment (number or custom name): ', (answer) => {
 			rl.close();
-			const num = Number.parseInt(answer, 10);
-			if (!Number.isNaN(num) && num >= 1 && num <= allEnvs.length) {
-				resolve(allEnvs[num - 1] as string);
+			const number = Number.parseInt(answer, 10);
+			if (!Number.isNaN(number) && number >= 1 && number <= allEnvironments.length) {
+				resolve(allEnvironments[number - 1] as string);
 			} else {
 				resolve(answer.trim() || defaultEnv || 'dev');
 			}

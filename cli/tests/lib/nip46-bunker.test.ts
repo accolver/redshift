@@ -9,12 +9,17 @@ import { nip44 } from 'nostr-tools';
 import type { Event } from 'nostr-tools/core';
 import { finalizeEvent, getPublicKey, verifyEvent } from 'nostr-tools/pure';
 import {
+	MAX_NIP46_EVENT_AGE_SECONDS,
+	MAX_NIP46_PARAM_BYTES,
+	MAX_NIP46_REQUESTS_PER_MINUTE,
+	MAX_NIP46_SESSIONS,
 	NIP46_KIND,
+	type Nip46RelayPool,
 	createNip46BunkerHandler,
 	decryptNip46Message,
 	encryptNip46Message,
 	startNip46BunkerService,
-	type Nip46RelayPool,
+	validateNip46TransportEvent,
 } from '../../src/lib/nip46-bunker';
 
 describe('NIP-46 message encryption', () => {
@@ -24,9 +29,91 @@ describe('NIP-46 message encryption', () => {
 		const request = { id: 'request-1', method: 'ping', params: [] };
 
 		const encrypted = encryptNip46Message(clientSecretKey, getPublicKey(bunkerSecretKey), request);
-		const decrypted = decryptNip46Message(bunkerSecretKey, getPublicKey(clientSecretKey), encrypted);
+		const decrypted = decryptNip46Message(
+			bunkerSecretKey,
+			getPublicKey(clientSecretKey),
+			encrypted,
+		);
 
 		expect(decrypted).toEqual(request);
+	});
+});
+
+describe('NIP-46 bounds', () => {
+	it('rejects stale, oversized, and incorrectly addressed transport events', () => {
+		const signerSecretKey = new Uint8Array(32).fill(1);
+		const clientSecretKey = new Uint8Array(32).fill(3);
+		const signerPubkey = getPublicKey(signerSecretKey);
+		const now = Math.floor(Date.now() / 1000);
+		const event = finalizeEvent(
+			{
+				kind: NIP46_KIND,
+				created_at: now,
+				tags: [['p', signerPubkey]],
+				content: 'encrypted',
+			},
+			clientSecretKey,
+		);
+		expect(validateNip46TransportEvent(event, signerPubkey, now)).toBeNull();
+		expect(
+			validateNip46TransportEvent(
+				{ ...event, created_at: now - MAX_NIP46_EVENT_AGE_SECONDS - 1 },
+				signerPubkey,
+				now,
+			),
+		).toContain('stale');
+		expect(
+			validateNip46TransportEvent(
+				{ ...event, content: 'x'.repeat(128 * 1024 + 1) },
+				signerPubkey,
+				now,
+			),
+		).toContain('oversized');
+		expect(
+			validateNip46TransportEvent({ ...event, tags: [['p', 'f'.repeat(64)]] }, signerPubkey, now),
+		).toContain('recipient');
+	});
+
+	it('bounds parameter size, request rate, and connected sessions', async () => {
+		const handler = createNip46BunkerHandler({
+			signerSecretKey: new Uint8Array(32).fill(1),
+			userSecretKey: new Uint8Array(32).fill(2),
+			relays: ['wss://relay.test'],
+		});
+		const firstClient = getPublicKey(new Uint8Array(32).fill(3));
+		await handler.handleRequest(firstClient, {
+			id: 'connect',
+			method: 'connect',
+			params: [handler.getSignerPublicKey()],
+		});
+		const oversized = await handler.handleRequest(firstClient, {
+			id: 'oversized',
+			method: 'ping',
+			params: ['x'.repeat(MAX_NIP46_PARAM_BYTES + 1)],
+		});
+		expect(oversized.error).toContain('exceed');
+
+		let finalResponse = { id: '' } as { id: string; error?: string };
+		for (let index = 0; index < MAX_NIP46_REQUESTS_PER_MINUTE; index++) {
+			finalResponse = await handler.handleRequest(firstClient, {
+				id: `ping-${index}`,
+				method: 'ping',
+				params: [],
+			});
+		}
+		expect(finalResponse.error).toContain('rate-limited');
+
+		for (let index = 4; index < MAX_NIP46_SESSIONS + 4; index++) {
+			const client = getPublicKey(new Uint8Array(32).fill(index));
+			const response = await handler.handleRequest(client, {
+				id: `connect-${index}`,
+				method: 'connect',
+				params: [handler.getSignerPublicKey()],
+			});
+			if (index === MAX_NIP46_SESSIONS + 3) {
+				expect(response.error).toContain('session limit');
+			}
+		}
 	});
 });
 
@@ -70,7 +157,7 @@ describe('NIP-46 relay service', () => {
 				kind: NIP46_KIND,
 				content: requestContent,
 				tags: [['p', signerPubkey]],
-				created_at: 1,
+				created_at: Math.floor(Date.now() / 1000),
 			},
 			clientSecretKey,
 		);
@@ -78,11 +165,14 @@ describe('NIP-46 relay service', () => {
 		await onevent!(requestEvent);
 
 		expect(published.length).toBe(1);
-		expect(published[0].kind).toBe(NIP46_KIND);
-		expect(published[0].pubkey).toBe(signerPubkey);
-		expect(published[0].tags).toEqual([['p', clientPubkey]]);
-		expect(verifyEvent(published[0])).toBe(true);
-		expect(decryptNip46Message(clientSecretKey, signerPubkey, published[0].content)).toEqual({
+		const responseEvent = published[0];
+		expect(responseEvent).toBeDefined();
+		if (!responseEvent) throw new Error('Expected bunker response event');
+		expect(responseEvent.kind).toBe(NIP46_KIND);
+		expect(responseEvent.pubkey).toBe(signerPubkey);
+		expect(responseEvent.tags).toEqual([['p', clientPubkey]]);
+		expect(verifyEvent(responseEvent)).toBe(true);
+		expect(decryptNip46Message(clientSecretKey, signerPubkey, responseEvent.content)).toEqual({
 			id: 'connect-1',
 			result: 'ack',
 		});
@@ -128,13 +218,26 @@ describe('NIP-46 relay service', () => {
 		);
 
 		await onevent!({ ...JSON.parse(JSON.stringify(validRequest)), sig: '00'.repeat(64) });
-		await onevent!(finalizeEvent({ kind: NIP46_KIND, content: 'not-ciphertext', tags: [['p', signerPubkey]], created_at: 1 }, clientSecretKey));
-		await onevent!(finalizeEvent({
-			kind: NIP46_KIND,
-			content: encryptNip46Message(clientSecretKey, signerPubkey, { id: 'response-1', result: 'ack' }),
-			tags: [['p', signerPubkey]],
-			created_at: 1,
-		}, clientSecretKey));
+		await onevent!(
+			finalizeEvent(
+				{ kind: NIP46_KIND, content: 'not-ciphertext', tags: [['p', signerPubkey]], created_at: 1 },
+				clientSecretKey,
+			),
+		);
+		await onevent!(
+			finalizeEvent(
+				{
+					kind: NIP46_KIND,
+					content: encryptNip46Message(clientSecretKey, signerPubkey, {
+						id: 'response-1',
+						result: 'ack',
+					}),
+					tags: [['p', signerPubkey]],
+					created_at: 1,
+				},
+				clientSecretKey,
+			),
+		);
 
 		expect(published).toHaveLength(0);
 	});
@@ -216,7 +319,10 @@ describe('NIP-46 bunker handler', () => {
 			method: 'nip44_encrypt',
 			params: [clientPubkey, 'secret text'],
 		});
-		const conversationKey = nip44.v2.utils.getConversationKey(clientSecretKey, getPublicKey(userSecretKey));
+		const conversationKey = nip44.v2.utils.getConversationKey(
+			clientSecretKey,
+			getPublicKey(userSecretKey),
+		);
 		expect(nip44.v2.decrypt(encrypted.result!, conversationKey)).toBe('secret text');
 
 		const decrypted = await handler.handleRequest(clientPubkey, {
@@ -234,7 +340,7 @@ describe('NIP-46 bunker handler', () => {
 		expect(switched.result).toBe(JSON.stringify(['wss://relay.test', 'wss://relay2.test']));
 	});
 
-	it('allows constrained NIP-09 deletion signing for Redshift delete workflows', async () => {
+	it('rejects NIP-09 signing because the user does not author Gift Wrap events', async () => {
 		const clientPubkey = getPublicKey(new Uint8Array(32).fill(3));
 		const handler = createNip46BunkerHandler({
 			signerSecretKey: new Uint8Array(32).fill(1),
@@ -245,22 +351,26 @@ describe('NIP-46 bunker handler', () => {
 		await handler.handleRequest(clientPubkey, {
 			id: 'connect-1',
 			method: 'connect',
-			params: [handler.getSignerPublicKey(), 'connect-secret'],
+			params: [handler.getSignerPublicKey(), 'connect-secret', 'sign_event:5'],
 		});
 
-		const signed = await handler.handleRequest(clientPubkey, {
+		const response = await handler.handleRequest(clientPubkey, {
 			id: 'delete-1',
 			method: 'sign_event',
-			params: [JSON.stringify({ kind: 5, content: 'delete old secret', tags: [['e', 'ab'.repeat(32)], ['k', '1059']], created_at: 1 })],
-		});
-		const unsafe = await handler.handleRequest(clientPubkey, {
-			id: 'delete-2',
-			method: 'sign_event',
-			params: [JSON.stringify({ kind: 5, content: 'unsafe', tags: [['p', 'ab'.repeat(32)]], created_at: 1 })],
+			params: [
+				JSON.stringify({
+					kind: 5,
+					content: 'delete old secret',
+					tags: [
+						['e', 'ab'.repeat(32)],
+						['k', '1059'],
+					],
+					created_at: 1,
+				}),
+			],
 		});
 
-		expect(verifyEvent(JSON.parse(signed.result ?? '{}'))).toBe(true);
-		expect(unsafe.error).toContain('NIP-09 e-tag deletion');
+		expect(response.error).toContain('kind 5 is not permitted');
 	});
 
 	it('enforces requested NIP-46 permissions per client', async () => {
@@ -277,18 +387,98 @@ describe('NIP-46 bunker handler', () => {
 			params: [handler.getSignerPublicKey(), 'connect-secret', 'sign_event:13'],
 		});
 
-		expect((await handler.handleRequest(clientPubkey, { id: 'pubkey-1', method: 'get_public_key', params: [] })).error).toContain('not permitted');
-		expect((await handler.handleRequest(clientPubkey, { id: 'encrypt-1', method: 'nip44_encrypt', params: [clientPubkey, 'secret'] })).error).toContain('not permitted');
-		expect((await handler.handleRequest(clientPubkey, {
-			id: 'sign-13',
+		expect(
+			(
+				await handler.handleRequest(clientPubkey, {
+					id: 'pubkey-1',
+					method: 'get_public_key',
+					params: [],
+				})
+			).error,
+		).toContain('not permitted');
+		expect(
+			(
+				await handler.handleRequest(clientPubkey, {
+					id: 'encrypt-1',
+					method: 'nip44_encrypt',
+					params: [clientPubkey, 'secret'],
+				})
+			).error,
+		).toContain('not permitted');
+		expect(
+			(
+				await handler.handleRequest(clientPubkey, {
+					id: 'sign-13',
+					method: 'sign_event',
+					params: [JSON.stringify({ kind: 13, content: 'hello', tags: [], created_at: 1 })],
+				})
+			).result,
+		).toBeDefined();
+		expect(
+			(
+				await handler.handleRequest(clientPubkey, {
+					id: 'sign-5',
+					method: 'sign_event',
+					params: [
+						JSON.stringify({
+							kind: 5,
+							content: 'delete',
+							tags: [
+								['e', 'ab'.repeat(32)],
+								['k', '1059'],
+							],
+							created_at: 1,
+						}),
+					],
+				})
+			).error,
+		).toContain('not permitted');
+	});
+
+	it('signs only relay-scoped, fresh NIP-42 AUTH templates', async () => {
+		const clientPubkey = getPublicKey(new Uint8Array(32).fill(3));
+		const handler = createNip46BunkerHandler({
+			signerSecretKey: new Uint8Array(32).fill(1),
+			userSecretKey: new Uint8Array(32).fill(2),
+			relays: ['wss://relay.test'],
+			secret: 'connect-secret',
+		});
+		await handler.handleRequest(clientPubkey, {
+			id: 'connect-auth',
+			method: 'connect',
+			params: [handler.getSignerPublicKey(), 'connect-secret'],
+		});
+		const validTemplate = {
+			kind: 22242,
+			content: '',
+			tags: [
+				['relay', 'wss://relay.test'],
+				['challenge', 'challenge-value'],
+			],
+			created_at: Math.floor(Date.now() / 1000),
+		};
+
+		const signed = await handler.handleRequest(clientPubkey, {
+			id: 'sign-auth',
 			method: 'sign_event',
-			params: [JSON.stringify({ kind: 13, content: 'hello', tags: [], created_at: 1 })],
-		})).result).toBeDefined();
-		expect((await handler.handleRequest(clientPubkey, {
-			id: 'sign-5',
+			params: [JSON.stringify(validTemplate)],
+		});
+		expect(signed.result).toBeTruthy();
+
+		const wrongRelay = await handler.handleRequest(clientPubkey, {
+			id: 'sign-auth-wrong',
 			method: 'sign_event',
-			params: [JSON.stringify({ kind: 5, content: 'delete', tags: [['e', 'ab'.repeat(32)], ['k', '1059']], created_at: 1 })],
-		})).error).toContain('not permitted');
+			params: [
+				JSON.stringify({
+					...validTemplate,
+					tags: [
+						['relay', 'wss://attacker.test'],
+						['challenge', 'challenge-value'],
+					],
+				}),
+			],
+		});
+		expect(wrongRelay.error).toContain('AUTH');
 	});
 
 	it('rejects signing event kinds outside the Redshift prototype permission set', async () => {
@@ -327,14 +517,18 @@ describe('NIP-46 bunker handler', () => {
 			await handler.handleRequest(clientPubkey, { id: '', method: 'ping', params: [] }),
 		).toEqual({ id: '', error: 'request id is required' });
 		expect(
-			(await handler.handleRequest(clientPubkey, { id: 'bad', method: 'unknown', params: [] })).error,
+			(await handler.handleRequest(clientPubkey, { id: 'bad', method: 'unknown', params: [] }))
+				.error,
 		).toContain('unsupported method');
 		await handler.handleRequest(clientPubkey, {
 			id: 'connect-1',
 			method: 'connect',
 			params: [handler.getSignerPublicKey(), 'connect-secret'],
 		});
-		expect((await handler.handleRequest(clientPubkey, { id: 'ping-1', method: 'ping', params: [] })).result).toBe('pong');
+		expect(
+			(await handler.handleRequest(clientPubkey, { id: 'ping-1', method: 'ping', params: [] }))
+				.result,
+		).toBe('pong');
 		expect(
 			(
 				await handler.handleRequest(clientPubkey, {

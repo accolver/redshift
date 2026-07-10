@@ -1,11 +1,36 @@
 <script lang="ts">
 import { Badge } from '$lib/components/ui/badge';
+import { sanitizeBlogHtml, serializeScriptJson } from '$lib/content-safety';
 import { Button } from '$lib/components/ui/button';
 import { ArrowLeft, Calendar, Check, Clock, Link } from '@lucide/svelte';
 import type { PageData } from './$types';
 
 const { data }: { data: PageData } = $props();
 const post = $derived(data.post);
+const sanitizedContent = $derived(sanitizeBlogHtml(post.content));
+const jsonLd = $derived(serializeScriptJson({
+	"@context": "https://schema.org",
+	"@type": "BlogPosting",
+	headline: post.title,
+	description: post.description,
+	datePublished: post.date,
+	author: {
+		"@type": "Organization",
+		name: post.author
+	},
+	publisher: {
+		"@type": "Organization",
+		name: "Redshift",
+		logo: {
+			"@type": "ImageObject",
+			url: "https://redshiftapp.com/favicon.svg"
+		}
+	},
+	mainEntityOfPage: {
+		"@type": "WebPage",
+		"@id": `https://redshiftapp.com/blog/${post.slug}`
+	}
+}));
 
 let copied = $state(false);
 
@@ -60,33 +85,7 @@ function shareOnReddit() {
 		<meta property="article:tag" content={tag} />
 	{/each}
 	<link rel="canonical" href="https://redshiftapp.com/blog/{post.slug}" />
-	<!-- SECURITY: {@html} used here for JSON-LD structured data. Safe because
-	     the content is constructed from post metadata via JSON.stringify(), which
-	     escapes special characters. If post fields ever contain user-controlled
-	     HTML, JSON.stringify handles escaping. No XSS risk in this usage. -->
-	{@html `<script type="application/ld+json">${JSON.stringify({
-		"@context": "https://schema.org",
-		"@type": "BlogPosting",
-		headline: post.title,
-		description: post.description,
-		datePublished: post.date,
-		author: {
-			"@type": "Organization",
-			name: post.author
-		},
-		publisher: {
-			"@type": "Organization",
-			name: "Redshift",
-			logo: {
-				"@type": "ImageObject",
-				url: "https://redshiftapp.com/favicon.svg"
-			}
-		},
-		mainEntityOfPage: {
-			"@type": "WebPage",
-			"@id": `https://redshiftapp.com/blog/${post.slug}`
-		}
-	})}</script>`}
+	{@html `<script type="application/ld+json">${jsonLd}</script>`}
 </svelte:head>
 
 <article class="mx-auto max-w-3xl px-4 pt-24 pb-16">
@@ -187,16 +186,9 @@ function shareOnReddit() {
 		</div>
 	</header>
 
-	<!-- Content -->
-	<!-- SECURITY: {@html} renders raw HTML without escaping, creating XSS risk.
-	     This is currently SAFE because post.content comes from static blog post
-	     definitions in posts.ts (hardcoded HTML strings, not user input).
-	     INVARIANT: If blog content ever comes from user input, a CMS, database,
-	     or any external source, it MUST be sanitized with DOMPurify or equivalent
-	     before passing to {@html}. Failure to do so would allow stored XSS attacks.
-	     See: https://svelte.dev/docs/special-tags#html -->
+	<!-- Content passes through the single audited HTML sanitizer boundary. -->
 	<div class="prose prose-lg max-w-none">
-		{@html post.content}
+		{@html sanitizedContent}
 	</div>
 
 	<!-- CTA -->

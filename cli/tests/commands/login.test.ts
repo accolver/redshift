@@ -9,12 +9,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { generateSecretKey } from 'nostr-tools/pure';
 import { nsecEncode } from 'nostr-tools/nip19';
+import { generateSecretKey } from 'nostr-tools/pure';
 
 // We need to test the helper functions that are exported
-import { tryAuth } from '../../src/commands/login';
-import { saveConfig, loadConfig, clearAuth } from '../../src/lib/config';
+import { persistNsecCredential, sanitizeBunkerError, tryAuth } from '../../src/commands/login';
+import { clearAuth, loadConfig, saveConfig } from '../../src/lib/config';
 
 describe('Login Command', () => {
 	const testDir = join(tmpdir(), `redshift-login-test-${Date.now()}`);
@@ -110,6 +110,29 @@ describe('Login Command', () => {
 			const result = await tryAuth();
 
 			expect(result).toBeNull();
+		});
+	});
+
+	describe('credential custody', () => {
+		it('does not write plaintext nsec when the keychain is unavailable', async () => {
+			const nsec = nsecEncode(generateSecretKey());
+			await expect(persistNsecCredential(nsec, async () => false)).rejects.toThrow('keychain');
+			expect(await loadConfig()).toEqual({});
+		});
+
+		it('records keychain auth without writing the nsec to config', async () => {
+			const nsec = nsecEncode(generateSecretKey());
+			await persistNsecCredential(nsec, async () => true);
+			expect(await loadConfig()).toEqual({ authMethod: 'nsec' });
+		});
+
+		it('redacts bunker URI query credentials from failures', () => {
+			const error = new Error(
+				'Could not parse bunker://abc?relay=wss%3A%2F%2Frelay.test&secret=pairing-secret',
+			);
+			const message = sanitizeBunkerError(error);
+			expect(message).not.toContain('pairing-secret');
+			expect(message).toContain('bunker://abc?[REDACTED]');
 		});
 	});
 

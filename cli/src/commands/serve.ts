@@ -1,4 +1,6 @@
+import { randomBytes } from 'node:crypto';
 import { DEFAULT_RELAYS } from '@redshift/crypto';
+import { getRelays } from '../lib/config';
 import { decodeContent, getEmbeddedFile, hasEmbeddedFiles } from '../lib/embedded-files';
 import { tryAuth } from './login';
 
@@ -19,21 +21,45 @@ export interface ServeOptions {
  *   allows inline styles (needed for embedded UI), and WebSocket connections
  *   for relay communication
  */
-export function addSecurityHeaders(headers: Headers, isApiRoute: boolean): void {
+export function addSecurityHeaders(
+	headers: Headers,
+	isApiRoute: boolean,
+	scriptNonce?: string,
+	relays: string[] = [...DEFAULT_RELAYS, 'wss://relay.redshiftapp.com'],
+): void {
 	headers.set('X-Frame-Options', 'DENY');
 	headers.set('X-Content-Type-Options', 'nosniff');
 	headers.set('X-XSS-Protection', '1; mode=block');
 	headers.set('Referrer-Policy', 'no-referrer');
-	const relayConnectSrc = [...DEFAULT_RELAYS, 'wss://relay.redshiftapp.com'].join(' ');
+	const relayConnectSrc = [...new Set(relays)].join(' ');
+	const nonceSource = scriptNonce ? ` 'nonce-${scriptNonce}'` : '';
 	headers.set(
 		'Content-Security-Policy',
-		`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ${relayConnectSrc};`,
+		`default-src 'self'; script-src 'self'${nonceSource}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ${relayConnectSrc};`,
 	);
 
 	// API routes should never be cached to prevent stale sensitive data
 	if (isApiRoute) {
 		headers.set('Cache-Control', 'no-store');
 	}
+}
+
+export function injectScriptNonce(html: string, nonce: string): string {
+	return html.replace(/<script\b(?![^>]*\bnonce=)/gi, `<script nonce="${nonce}"`);
+}
+
+export function injectRuntimeConfig(html: string, nonce: string, relays: string[]) {
+	const serialized = JSON.stringify({ relays }).replaceAll('<', '\\u003c');
+	const script = `<script nonce="${nonce}">globalThis.__REDSHIFT_RUNTIME_CONFIG__=${serialized};</script>`;
+	return html.includes('</head>')
+		? html.replace('</head>', `${script}</head>`)
+		: `${script}${html}`;
+}
+
+function prepareHtmlResponse(content: string, headers: Headers, relays: string[]) {
+	const nonce = randomBytes(18).toString('base64url');
+	addSecurityHeaders(headers, false, nonce, relays);
+	return injectRuntimeConfig(injectScriptNonce(content, nonce), nonce, relays);
 }
 
 /**
@@ -46,7 +72,7 @@ function isAllowedOrigin(req: Request, host: string, port: number): boolean {
 	const path = new URL(req.url).pathname;
 
 	// Exempt safe read-only API endpoints from origin checks (health/info monitoring)
-	const SAFE_API_PATHS = new Set(['/api/health', '/api/info']);
+	const SAFE_API_PATHS = new Set(['/api/health', '/api/info', '/api/config']);
 
 	// API routes (except safe endpoints) require valid Origin or X-Redshift-Client header
 	if (!origin && path.startsWith('/api/') && !SAFE_API_PATHS.has(path)) {
@@ -227,6 +253,7 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
 
 	const address = `http://${host}:${port}`;
 	const hasEmbeds = hasEmbeddedFiles();
+	const relays = await getRelays();
 
 	console.log('Starting Redshift Admin Server...');
 	if (hasEmbeds) {
@@ -247,14 +274,14 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
 			// SECURITY: Reject requests from disallowed origins (CORS restriction)
 			if (!isAllowedOrigin(req, host, port)) {
 				const blockedHeaders = new Headers();
-				addSecurityHeaders(blockedHeaders, true);
+				addSecurityHeaders(blockedHeaders, true, undefined, relays);
 				return new Response('Forbidden', { status: 403, headers: blockedHeaders });
 			}
 
 			// API endpoints
 			if (path === '/api/info') {
 				const responseHeaders = new Headers({ 'Content-Type': 'application/json' });
-				addSecurityHeaders(responseHeaders, true);
+				addSecurityHeaders(responseHeaders, true, undefined, relays);
 				return new Response(
 					JSON.stringify({
 						// SECURITY: Redact npub to prevent full public key exposure
@@ -270,8 +297,14 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
 
 			if (path === '/api/health') {
 				const responseHeaders = new Headers({ 'Content-Type': 'application/json' });
-				addSecurityHeaders(responseHeaders, true);
+				addSecurityHeaders(responseHeaders, true, undefined, relays);
 				return new Response(JSON.stringify({ status: 'ok' }), { headers: responseHeaders });
+			}
+
+			if (path === '/api/config') {
+				const responseHeaders = new Headers({ 'Content-Type': 'application/json' });
+				addSecurityHeaders(responseHeaders, true, undefined, relays);
+				return new Response(JSON.stringify({ relays }), { headers: responseHeaders });
 			}
 
 			// If we have embedded files, serve them
@@ -285,20 +318,29 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
 				}
 
 				if (file) {
-					const content = decodeContent(file);
+					const decodedContent = decodeContent(file);
+					let content: Uint8Array | string = decodedContent;
 					const responseHeaders = new Headers({
 						'Content-Type': file.contentType,
 						'Cache-Control': path.includes('/_app/immutable/')
 							? 'public, max-age=31536000, immutable'
 							: 'public, max-age=0, must-revalidate',
 					});
-					addSecurityHeaders(responseHeaders, false);
+					if (file.contentType.startsWith('text/html')) {
+						content = prepareHtmlResponse(
+							new TextDecoder().decode(decodedContent),
+							responseHeaders,
+							relays,
+						);
+					} else {
+						addSecurityHeaders(responseHeaders, false, undefined, relays);
+					}
 					return new Response(content, { headers: responseHeaders });
 				}
 
 				// 404 for missing files
 				const notFoundHeaders = new Headers();
-				addSecurityHeaders(notFoundHeaders, false);
+				addSecurityHeaders(notFoundHeaders, false, undefined, relays);
 				return new Response('Not Found', { status: 404, headers: notFoundHeaders });
 			}
 
@@ -306,8 +348,8 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
 			const fallbackHeaders = new Headers({
 				'Content-Type': 'text/html; charset=utf-8',
 			});
-			addSecurityHeaders(fallbackHeaders, false);
-			return new Response(FALLBACK_HTML, { headers: fallbackHeaders });
+			const fallbackHtml = prepareHtmlResponse(FALLBACK_HTML, fallbackHeaders, relays);
+			return new Response(fallbackHtml, { headers: fallbackHeaders });
 		},
 	});
 

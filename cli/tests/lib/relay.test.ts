@@ -5,8 +5,14 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { createRelayPool, filterGiftWraps, getLatestByDTag } from '../../src/lib/relay';
 import { RateLimiter } from '../../src/lib/rate-limiter';
+import {
+	PublishQuorumError,
+	createRelayPool,
+	filterGiftWraps,
+	getLatestByDTag,
+	publishWithQuorum,
+} from '../../src/lib/relay';
 import type { NostrEvent } from '../../src/lib/types';
 
 describe('Relay Module', () => {
@@ -66,6 +72,49 @@ describe('Relay Module', () => {
 			});
 
 			expect(pool).toBeDefined();
+		});
+	});
+
+	describe('publishWithQuorum', () => {
+		const event = createMockRumor('proj|env', 1);
+
+		it('reports degraded success after a majority accepts', async () => {
+			const report = await publishWithQuorum(
+				['wss://one.test', 'wss://two.test', 'wss://three.test'],
+				event,
+				async (relay) => {
+					if (relay === 'wss://three.test') throw new Error('offline');
+				},
+			);
+			expect(report.required).toBe(2);
+			expect(report.accepted).toEqual(['wss://one.test', 'wss://two.test']);
+			expect(report.failed).toEqual([{ relay: 'wss://three.test', reason: 'offline' }]);
+		});
+
+		it('throws a typed report when partial acceptance is below quorum', async () => {
+			const operation = publishWithQuorum(
+				['wss://one.test', 'wss://two.test', 'wss://three.test'],
+				event,
+				async (relay) => {
+					if (relay !== 'wss://one.test') throw new Error(`rejected ${relay}`);
+				},
+			);
+			try {
+				await operation;
+				throw new Error('Expected quorum failure');
+			} catch (error) {
+				expect(error).toBeInstanceOf(PublishQuorumError);
+				if (!(error instanceof PublishQuorumError)) return;
+				expect(error.report.eventId).toBe(event.id);
+				expect(error.report.accepted).toEqual(['wss://one.test']);
+				expect(error.report.failed).toHaveLength(2);
+			}
+		});
+
+		it('fails closed for an empty relay set', async () => {
+			await expect(publishWithQuorum([], event, async () => {})).rejects.toBeInstanceOf(
+				PublishQuorumError,
+			);
 		});
 	});
 
@@ -130,6 +179,18 @@ describe('Relay Module', () => {
 			const latest = getLatestByDTag(events);
 
 			expect(latest['proj|env']?.created_at).toBe(5000);
+		});
+
+		it('selects the lexicographically lowest ID for equal timestamps regardless of order', () => {
+			const lower = { ...createMockRumor('proj|env', 5000), id: '0'.repeat(64) };
+			const higher = { ...createMockRumor('proj|env', 5000), id: 'f'.repeat(64) };
+
+			expect((getLatestByDTag([higher, lower])['proj|env'] as NostrEvent | undefined)?.id).toBe(
+				lower.id,
+			);
+			expect((getLatestByDTag([lower, higher])['proj|env'] as NostrEvent | undefined)?.id).toBe(
+				lower.id,
+			);
 		});
 	});
 });

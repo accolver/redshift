@@ -43,10 +43,19 @@ export {
 	// Signer-based functions (for NIP-07/NIP-46)
 	wrapSecretsWithSigner,
 	unwrapGiftWrapWithSigner,
+	compareSecretVersions,
+	MAX_RUMOR_FUTURE_SKEW_SECONDS,
 } from './gift-wrap.js';
 
-// Signer-based types
-export type { EncryptFn, DecryptFn, SignFn, AsyncGiftWrapResult } from './gift-wrap.js';
+// Signer-based and validation types
+export type {
+	EncryptFn,
+	DecryptFn,
+	SignFn,
+	AsyncGiftWrapResult,
+	WrapOptions,
+	UnwrapOptions,
+} from './gift-wrap.js';
 
 // Utility functions
 export {
@@ -64,6 +73,7 @@ export type {
 	UnsignedEvent,
 	SecretBundle,
 	GiftWrapResult,
+	SecretVersion,
 	UnwrapResult,
 } from './types.js';
 
@@ -74,4 +84,11 @@ export { validateSlug, normalizeSlug, type ValidationResult } from './validation
 export { NostrKinds, REDSHIFT_TYPE_TAG, DEFAULT_RELAYS } from './types.js';
 
 // .env parsing and formatting
-export { parseEnvFile, parseEnvValue, formatEnvLine } from './env-parser.js';
+export {
+	parseEnvFile,
+	parseEnvFileDetailed,
+	parseEnvValue,
+	formatEnvLine,
+	type EnvParseIssue,
+	type EnvParseResult,
+} from './env-parser.js';

@@ -9,6 +9,59 @@
 
 import { type BackoffOptions, backOff } from 'exponential-backoff';
 
+export interface QuorumReport<T> {
+	operationId: string;
+	required: number;
+	accepted: T[];
+	failed: Array<{ target: T; reason: string }>;
+}
+
+export class QuorumError<T> extends Error {
+	readonly report: QuorumReport<T>;
+
+	constructor(report: QuorumReport<T>) {
+		super(
+			`Quorum failed: ${report.accepted.length}/${report.required} targets accepted ${report.operationId}`,
+		);
+		this.name = 'QuorumError';
+		this.report = report;
+	}
+}
+
+export async function executeWithQuorum<T>(
+	targets: T[],
+	operationId: string,
+	operation: (target: T) => Promise<void>,
+	required = Math.floor(targets.length / 2) + 1,
+): Promise<QuorumReport<T>> {
+	const uniqueTargets = [...new Set(targets)];
+	const normalizedRequired = Math.max(1, Math.min(required, uniqueTargets.length));
+	const outcomes = await Promise.allSettled(uniqueTargets.map(operation));
+	const report: QuorumReport<T> = {
+		operationId,
+		required: normalizedRequired,
+		accepted: [],
+		failed: [],
+	};
+	for (let index = 0; index < outcomes.length; index++) {
+		const target = uniqueTargets[index];
+		const outcome = outcomes[index];
+		if (target === undefined || !outcome) continue;
+		if (outcome.status === 'fulfilled') {
+			report.accepted.push(target);
+		} else {
+			report.failed.push({
+				target,
+				reason: outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason),
+			});
+		}
+	}
+	if (uniqueTargets.length === 0 || report.accepted.length < report.required) {
+		throw new QuorumError(report);
+	}
+	return report;
+}
+
 /**
  * Default backoff configuration optimized for relay connections
  */

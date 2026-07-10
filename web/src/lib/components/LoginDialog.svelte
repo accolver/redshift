@@ -15,6 +15,7 @@ import {
 	connectWithNsec,
 	connectWithBunker,
 	hasNip07Extension,
+	hasNip44Capabilities,
 	getAuthState,
 	clearError,
 } from '$lib/stores/auth.svelte';
@@ -34,6 +35,7 @@ let bunkerInput = $state('');
 let showNsec = $state(false);
 let isConnecting = $state(false);
 let hasExtension = $state(false);
+let hasSecretCapability = $state(false);
 
 const auth = $derived(getAuthState());
 
@@ -41,6 +43,7 @@ const auth = $derived(getAuthState());
 $effect(() => {
 	if (open) {
 		hasExtension = hasNip07Extension();
+		hasSecretCapability = hasNip44Capabilities();
 		authMethod = 'select';
 		nsecInput = '';
 		bunkerInput = '';
@@ -112,7 +115,7 @@ function goBack() {
 					type="button"
 					class="flex w-full cursor-pointer items-center gap-4 rounded-lg border border-border p-4 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
 					onclick={handleNip07Connect}
-					disabled={!hasExtension || isConnecting}
+					disabled={!hasExtension || !hasSecretCapability || isConnecting}
 				>
 					<div class="flex size-10 items-center justify-center rounded-lg bg-tokyo-blue/10 text-tokyo-blue">
 						<Globe class="size-5" />
@@ -120,8 +123,10 @@ function goBack() {
 					<div class="flex-1">
 						<p class="font-medium">Browser Extension</p>
 						<p class="text-sm text-muted-foreground">
-							{#if hasExtension}
-								Use Alby, nos2x, or other NIP-07 extension
+							{#if hasSecretCapability}
+								Secret read/write capable (NIP-44)
+							{:else if hasExtension}
+								Signing only — NIP-44 encrypt/decrypt required
 							{:else}
 								No extension detected
 							{/if}
@@ -163,9 +168,9 @@ function goBack() {
 				</button>
 			</div>
 
-			{#if !hasExtension}
+			{#if !hasSecretCapability}
 				<p class="text-xs text-muted-foreground">
-					Tip: Install a NIP-07 extension like <a href="https://getalby.com" target="_blank" class="text-tokyo-blue hover:underline">Alby</a> or <a href="https://chromewebstore.google.com/detail/nos2x/kpgefcfmnafjgpblomihpgmejjdanjjp" target="_blank" class="text-tokyo-blue hover:underline">nos2x</a> for the best experience.
+					Use the bunker or nsec options above, or install an extension that supports both NIP-44 encrypt and decrypt.
 				</p>
 			{/if}
 

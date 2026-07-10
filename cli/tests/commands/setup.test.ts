@@ -5,7 +5,7 @@
  * L5: Journey-Validator - Project configuration workflow validation
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
@@ -70,15 +70,17 @@ describe('setup command', () => {
 			expect(options.force).toBe(true);
 		});
 
-		it('should accept all options together', () => {
+		it('should accept force and interactivity independently', () => {
 			const options: SetupOptions = {
 				project: 'test-project',
 				environment: 'staging',
 				force: true,
+				interactive: false,
 			};
 			expect(options.project).toBe('test-project');
 			expect(options.environment).toBe('staging');
 			expect(options.force).toBe(true);
+			expect(options.interactive).toBe(false);
 		});
 	});
 
@@ -141,7 +143,7 @@ describe('setup command', () => {
 			const loaded = await loadProjectConfig(TEST_DIR);
 			expect(loaded?.project).toBe('new-project');
 			expect(loaded?.environment).toBe('production');
-			expect(loaded?.relays).toEqual(['wss://relay1.example', 'wss://relay2.example']);
+			expect(loaded?.relays).toEqual(['wss://relay1.example/', 'wss://relay2.example/']);
 		});
 
 		it('should parse YAML with relays array', async () => {
@@ -157,7 +159,7 @@ relays:
 			const config = await loadProjectConfig(TEST_DIR);
 
 			expect(config?.relays).toHaveLength(2);
-			expect(config?.relays?.[0]).toBe('wss://relay.damus.io');
+			expect(config?.relays?.[0]).toBe('wss://relay.damus.io/');
 		});
 	});
 
@@ -198,45 +200,111 @@ relays:
 			const loadedFull = await loadProjectConfig(TEST_DIR);
 			expect(loadedFull?.project).toBe('full-project');
 			expect(loadedFull?.environment).toBe('production');
-			expect(loadedFull?.relays).toEqual(['wss://custom.relay']);
+			expect(loadedFull?.relays).toEqual(['wss://custom.relay/']);
 		});
 	});
 
-	describe('force flag behavior', () => {
-		it('should respect force flag to overwrite existing config', () => {
-			// Create existing config
-			const existingConfig = {
-				project: 'old-project',
-				environment: 'development',
-			};
+	describe('force and noninteractive behavior', () => {
+		it('refuses to overwrite existing config without force', async () => {
+			const existingConfig = { project: 'existing-project', environment: 'development' };
 			writeFileSync(join(TEST_DIR, 'redshift.yaml'), stringifyYaml(existingConfig));
+			const cwdSpy = spyOn(process, 'cwd').mockReturnValue(TEST_DIR);
+			const { setupCommand } = await import('../../src/commands/setup');
 
-			const options: SetupOptions = {
+			await expect(
+				setupCommand({ project: 'new-project', environment: 'production', interactive: false }),
+			).rejects.toThrow('--force');
+			cwdSpy.mockRestore();
+
+			const { loadProjectConfig } = await import('../../src/lib/config');
+			expect(await loadProjectConfig(TEST_DIR)).toMatchObject(existingConfig);
+		});
+
+		it('overwrites with force without prompting when all values are explicit', async () => {
+			writeFileSync(
+				join(TEST_DIR, 'redshift.yaml'),
+				stringifyYaml({ project: 'old-project', environment: 'development' }),
+			);
+			process.env.REDSHIFT_NSEC = 'nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5';
+			const cwdSpy = spyOn(process, 'cwd').mockReturnValue(TEST_DIR);
+			const { setupCommand } = await import('../../src/commands/setup');
+
+			await setupCommand({
 				project: 'new-project',
 				environment: 'production',
 				force: true,
-			};
+				interactive: false,
+			});
+			cwdSpy.mockRestore();
 
-			// With force flag, should be allowed to proceed
-			expect(options.force).toBe(true);
+			const { loadProjectConfig } = await import('../../src/lib/config');
+			expect(await loadProjectConfig(TEST_DIR)).toMatchObject({
+				project: 'new-project',
+				environment: 'production',
+			});
 		});
 
-		it('should not overwrite without force flag', async () => {
-			// Create existing config
-			const existingConfig = {
-				project: 'existing-project',
-				environment: 'development',
-			};
-			writeFileSync(join(TEST_DIR, 'redshift.yaml'), stringifyYaml(existingConfig));
+		it('uses configured global defaults without prompting', async () => {
+			process.env.REDSHIFT_NSEC = 'nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5';
+			const { saveConfig } = await import('../../src/lib/config');
+			await saveConfig({ defaultProject: 'default-project', defaultEnvironment: 'staging' });
+			const cwdSpy = spyOn(process, 'cwd').mockReturnValue(TEST_DIR);
+			const { setupCommand } = await import('../../src/commands/setup');
 
-			const options: SetupOptions = {};
+			await setupCommand({ interactive: false });
+			cwdSpy.mockRestore();
 
-			// Without force flag, existing config should be preserved
 			const { loadProjectConfig } = await import('../../src/lib/config');
-			const config = await loadProjectConfig(TEST_DIR);
+			expect(await loadProjectConfig(TEST_DIR)).toMatchObject({
+				project: 'default-project',
+				environment: 'staging',
+			});
+		});
 
-			expect(config?.project).toBe('existing-project');
-			expect(options.force).toBeUndefined();
+		it('fails before authentication when noninteractive values are missing', async () => {
+			const cwdSpy = spyOn(process, 'cwd').mockReturnValue(TEST_DIR);
+			const { setupCommand } = await import('../../src/commands/setup');
+
+			await expect(setupCommand({ interactive: false })).rejects.toThrow(
+				'Noninteractive setup requires',
+			);
+			cwdSpy.mockRestore();
+		});
+
+		it('preserves typed relay failures during interactive discovery', async () => {
+			process.env.REDSHIFT_NSEC = 'nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5';
+			const cwdSpy = spyOn(process, 'cwd').mockReturnValue(TEST_DIR);
+			const { RelayError } = await import('../../src/lib/errors');
+			const { setupCommand } = await import('../../src/commands/setup');
+			const relayError = new RelayError('relay query failed', 'query');
+			let closed = false;
+			const secretManager = {
+				connect() {},
+				async listProjects(): Promise<string[]> {
+					throw relayError;
+				},
+				async listEnvironments(): Promise<string[]> {
+					return [];
+				},
+				async close() {
+					closed = true;
+				},
+			};
+
+			await expect(setupCommand({ interactive: true, secretManager })).rejects.toBe(relayError);
+			expect(closed).toBe(true);
+			cwdSpy.mockRestore();
+		});
+
+		it('rejects invalid project and environment slugs before writing', async () => {
+			const cwdSpy = spyOn(process, 'cwd').mockReturnValue(TEST_DIR);
+			const { setupCommand } = await import('../../src/commands/setup');
+
+			await expect(
+				setupCommand({ project: '../escape', environment: 'prod!', interactive: false }),
+			).rejects.toThrow('Invalid project');
+			cwdSpy.mockRestore();
+			expect(existsSync(join(TEST_DIR, 'redshift.yaml'))).toBe(false);
 		});
 	});
 
@@ -260,7 +328,7 @@ relays:
 
 			const relays = await getRelays();
 
-			expect(relays).toEqual(customRelays);
+			expect(relays).toEqual(customRelays.map((relay) => new URL(relay).href));
 		});
 
 		it('should report custom relay status', async () => {
@@ -272,7 +340,7 @@ relays:
 			const status = await getRelayConfigStatus();
 
 			expect(status.source).toBe('custom');
-			expect(status.relays).toEqual(customRelays);
+			expect(status.relays).toEqual(customRelays.map((relay) => new URL(relay).href));
 		});
 
 		it('should report default relay status when custom relays are absent', async () => {

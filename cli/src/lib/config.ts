@@ -18,6 +18,7 @@ import {
 	getNsecFromKeychain,
 } from './keychain';
 import type { AuthMethod, BunkerAuth, RedshiftConfig } from './types';
+import { validateEnvironment, validateProjectId, validateRelayUrl } from './validation';
 
 /**
  * Global Redshift configuration stored in ~/.redshift/config.json
@@ -33,6 +34,8 @@ export interface Config {
 	relays?: string[];
 	/** Default project ID */
 	defaultProject?: string;
+	/** Default environment slug */
+	defaultEnvironment?: string;
 }
 
 export interface RelayConfigStatus {
@@ -64,6 +67,63 @@ export interface AuthResult {
 
 const CONFIG_FILE = 'config.json';
 const PROJECT_CONFIG_FILE = 'redshift.yaml';
+const MAX_RELAY_URLS = 16;
+const REDACTED = '[REDACTED]';
+
+export function normalizeRelayUrls(relays: string[], source = 'relay configuration'): string[] {
+	if (relays.length === 0) {
+		throw new ConfigError(`${source} must contain at least one relay URL`);
+	}
+	if (relays.length > MAX_RELAY_URLS) {
+		throw new ConfigError(`${source} cannot contain more than ${MAX_RELAY_URLS} relay URLs`);
+	}
+
+	const normalized = new Set<string>();
+	for (const relay of relays) {
+		const trimmed = relay.trim();
+		const validation = validateRelayUrl(trimmed);
+		if (!validation.valid) {
+			throw new ConfigError(`Invalid ${source} URL "${relay}": ${validation.error}`);
+		}
+		const parsed = new URL(trimmed);
+		if (parsed.username || parsed.password) {
+			throw new ConfigError(`Invalid ${source} URL "${relay}": credentials are not allowed`);
+		}
+		normalized.add(parsed.href);
+	}
+	return [...normalized];
+}
+
+function validateGlobalConfig(config: Config): Config {
+	return {
+		...config,
+		...(config.relays ? { relays: normalizeRelayUrls(config.relays, 'global relay') } : {}),
+		...(config.bunker
+			? {
+					bunker: {
+						...config.bunker,
+						relays: normalizeRelayUrls(config.bunker.relays, 'bunker relay'),
+					},
+				}
+			: {}),
+	};
+}
+
+export function redactConfig(config: Config): Record<string, unknown> {
+	return {
+		...config,
+		...(config.nsec ? { nsec: REDACTED } : {}),
+		...(config.bunker
+			? {
+					bunker: {
+						...config.bunker,
+						...(config.bunker.clientSecretKey ? { clientSecretKey: REDACTED } : {}),
+						...(config.bunker.secret ? { secret: REDACTED } : {}),
+					},
+				}
+			: {}),
+	};
+}
 
 /**
  * Get the Redshift config directory path.
@@ -105,7 +165,8 @@ function ensureConfigDir(): void {
 export async function saveConfig(config: Config): Promise<void> {
 	ensureConfigDir();
 	const configPath = join(getConfigDir(), CONFIG_FILE);
-	await Bun.write(configPath, JSON.stringify(config, null, 2));
+	const validated = validateGlobalConfig(config);
+	await Bun.write(configPath, JSON.stringify(validated, null, 2));
 	// Set file permissions to owner read/write only (0o600)
 	// This prevents other system users from reading the nsec private key
 	chmodSync(configPath, 0o600);
@@ -128,7 +189,7 @@ export async function loadConfig(): Promise<Config> {
 	if (typeof parsed !== 'object' || parsed === null) {
 		throw new ConfigError('Invalid config: expected an object', configPath);
 	}
-	return parsed as Config;
+	return validateGlobalConfig(parsed as Config);
 }
 
 /**
@@ -164,7 +225,19 @@ export async function getPrivateKey(): Promise<PrivateKeyResult | null> {
  */
 export async function saveProjectConfig(projectDir: string, config: RedshiftConfig): Promise<void> {
 	const configPath = join(projectDir, PROJECT_CONFIG_FILE);
-	const yaml = stringifyYaml(config);
+	const projectValidation = validateProjectId(config.project);
+	if (!projectValidation.valid) {
+		throw new ConfigError(`Invalid project config: ${projectValidation.error}`, configPath);
+	}
+	const environmentValidation = validateEnvironment(config.environment);
+	if (!environmentValidation.valid) {
+		throw new ConfigError(`Invalid environment config: ${environmentValidation.error}`, configPath);
+	}
+	const validated: RedshiftConfig = {
+		...config,
+		...(config.relays ? { relays: normalizeRelayUrls(config.relays, 'project relay') } : {}),
+	};
+	const yaml = stringifyYaml(validated);
 	await Bun.write(configPath, yaml);
 }
 
@@ -198,7 +271,19 @@ export async function loadProjectConfig(projectDir: string): Promise<RedshiftCon
 			configPath,
 		);
 	}
-	return parsed as RedshiftConfig;
+	const projectValidation = validateProjectId(config.project);
+	if (!projectValidation.valid) {
+		throw new ConfigError(`Invalid project config: ${projectValidation.error}`, configPath);
+	}
+	const environmentValidation = validateEnvironment(config.environment);
+	if (!environmentValidation.valid) {
+		throw new ConfigError(`Invalid environment config: ${environmentValidation.error}`, configPath);
+	}
+	const result = parsed as RedshiftConfig;
+	return {
+		...result,
+		...(result.relays ? { relays: normalizeRelayUrls(result.relays, 'project relay') } : {}),
+	};
 }
 
 /**
@@ -244,7 +329,7 @@ export async function getAuth(): Promise<AuthResult | null> {
 		// Format: bunker://<pubkey>?relay=...&secret=...
 		const url = new URL(envBunker);
 		const bunkerPubkey = url.hostname || url.pathname.replace('//', '');
-		const relays = url.searchParams.getAll('relay');
+		const relays = normalizeRelayUrls(url.searchParams.getAll('relay'), 'bunker relay');
 		const secret = url.searchParams.get('secret');
 
 		const bunkerAuth: BunkerAuth = {
@@ -317,6 +402,12 @@ export async function saveBunkerAuth(bunker: BunkerAuth): Promise<void> {
 /**
  * Clear all auth from config and keychain
  */
+export async function resetConfig(): Promise<void> {
+	await deleteNsecFromKeychain();
+	await deleteBunkerKeyFromKeychain();
+	await saveConfig({});
+}
+
 export async function clearAuth(): Promise<void> {
 	// Clear from keychain (ignore errors - may not be available)
 	await deleteNsecFromKeychain();

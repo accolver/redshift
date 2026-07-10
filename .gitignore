@@ -53,3 +53,6 @@ memory/
 
 # git worktrees
 .worktrees
+
+# Local agent runtime artifacts
+.pi-subagents/
