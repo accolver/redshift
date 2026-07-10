@@ -8,6 +8,7 @@
  * L5: Journey-Validator - Secure authentication flow
  */
 
+import { ResilientSimplePool } from '@redshift/rate-limiter';
 import type { EventTemplate, VerifiedEvent } from 'nostr-tools/core';
 import {
 	type BunkerPointer,
@@ -15,9 +16,9 @@ import {
 	type BunkerSignerParams,
 	parseBunkerInput,
 } from 'nostr-tools/nip46';
-import { SimplePool } from 'nostr-tools/pool';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { getRelays } from './config';
+import { AuthError } from './errors';
 import type { BunkerAuth } from './types';
 
 const DEFAULT_BUNKER_CONNECT_TIMEOUT_MS = 15000;
@@ -67,14 +68,14 @@ export interface BunkerConnectOptions {
 	usePairingSecret?: boolean;
 }
 
-const bunkerSignerPools = new WeakMap<BunkerSigner, SimplePool>();
+const bunkerSignerPools = new WeakMap<BunkerSigner, ResilientSimplePool>();
 
 function createBunkerSigner(
 	clientSecretKey: Uint8Array,
 	bp: BunkerPointer,
 	params: BunkerSignerParams,
 ) {
-	const pool = new SimplePool({ enableReconnect: false });
+	const pool = new ResilientSimplePool();
 	const signer = BunkerSigner.fromBunker(clientSecretKey, bp, { ...params, pool });
 	bunkerSignerPools.set(signer, pool);
 	return signer;
@@ -239,6 +240,12 @@ export async function reconnectFromBunkerAuth(
 	auth: BunkerAuth,
 	options: BunkerConnectOptions = {},
 ): Promise<BunkerConnection> {
+	if (!auth.clientSecretKey) {
+		throw new AuthError(
+			'Bunker client key is unavailable; re-authentication is required.',
+			'bunker',
+		);
+	}
 	return reconnectToBunker(
 		bunkerAuthToPointer(auth, options.usePairingSecret === true),
 		decodeClientSecretKey(auth.clientSecretKey),
@@ -289,7 +296,7 @@ export async function createNostrConnectUri(
 		uri,
 		clientSecretKey,
 		waitForConnection: async (timeout = 120000) => {
-			const pool = new SimplePool({ enableReconnect: false });
+			const pool = new ResilientSimplePool();
 			let signer: BunkerSigner;
 			try {
 				signer = await BunkerSigner.fromURI(clientSecretKey, uri, { pool }, timeout);

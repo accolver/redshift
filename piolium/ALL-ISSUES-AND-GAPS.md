@@ -67,9 +67,9 @@ This file is the exhaustive implementation register for every confirmed security
   - Web restoration stores the original URI while CLI intentionally omits one-time pairing secrets.
   - Required: persist only sanitized pointer + client credential required for reconnection.
 
-- [ ] **SEC-013 — Improve local credential fallback custody.**
-  - When OS keychain is unavailable, CLI persists plaintext nsec/client keys under `0600`.
-  - Required: default to non-persistent operation or passphrase-backed encryption; keep local bunker labeled prototype until addressed.
+- [x] **SEC-013 — Improve local credential fallback custody.**
+  - Persistent login now fails closed when the OS keychain is unavailable and points users to command-scoped `REDSHIFT_NSEC`/`REDSHIFT_BUNKER` authentication.
+  - Valid legacy plaintext credentials migrate transactionally to keychain before config sanitization; failed migration preserves recovery bytes but never authenticates from them. The local signer remains explicitly labeled an insecure plaintext-key prototype and requires opt-in.
 
 - [x] **SEC-014 — Gate NIP-07 login on NIP-44 capability.**
   - Users can appear logged in through an extension that cannot read/write secrets.
@@ -178,8 +178,9 @@ This file is the exhaustive implementation register for every confirmed security
   - One-second timestamps and strict `>` make same-second updates dependent on relay ordering.
   - Required: deterministic `(created_at,event/id)` tie-break and rollback/future-skew protection.
 
-- [ ] **REL-003 — Route bunker transport through rate limit/backoff policy.**
-  - NIP-46 bunker uses raw SimplePool/Promise.all rather than resilient relay abstraction.
+- [x] **REL-003 — Route bunker transport through rate limit/backoff policy.**
+  - Client and signer NIP-46 pools reconnect subscriptions and independently rate-limit/retry each relay publish.
+  - A signer response succeeds through any healthy configured relay; permanent relay rejection is not retried and pool ownership remains explicit.
 
 - [x] **REL-004 — Align relay NIP claims/config.**
   - NIP-09 is advertised but kind 5 is excluded from allowed kinds; payment-required metadata is inconsistent; logical/historical deletion behavior is unclear.
@@ -201,13 +202,15 @@ This file is the exhaustive implementation register for every confirmed security
 - [x] **WEB-003 — Sanitize future external blog/CMS content.**
   - Static hardcoded `{@html post.content}` is currently trusted; any future CMS/external source must be sanitized. JSON-LD must escape `<`/`</script>` if metadata becomes external.
 
-- [ ] **WEB-004 — Replace broad admin `unsafe-inline` CSP when feasible.**
-  - Use nonces/hashes for Svelte bootstrap and keep strong script policy for secret-handling routes.
+- [x] **WEB-004 — Replace broad admin `unsafe-inline` CSP when feasible.**
+  - SvelteKit centrally emits nonce policies for dynamic responses and hash policies for prerendered/static output.
+  - Embedded serving removes the static meta policy before applying its authoritative runtime nonce header; standalone and embedded browser journeys fail on CSP execution errors.
 
 ## Testing, Build, and Governance Gaps
 
-- [ ] **TEST-001 — Add a true compiled CLI local-relay E2E.**
-  - Spawn binary and cover login/setup/set/get/list/run, exact argv, shell mode, credentials scrub, child exit/signal, author rejection, deletion, partial relay failure, and timestamp tie.
+- [x] **TEST-001 — Add a true compiled CLI local-relay E2E.**
+  - The compiled binary covers setup, set/get/list/delete, redaction/reveal, exact argv, explicit shell mode, credential scrubbing, child exit/signal, logical deletion, and majority success with one unavailable relay.
+  - Author/recipient rejection and deterministic equal-timestamp selection remain covered at the shared state/manager boundary where crafted events can be injected deterministically.
 
 - [x] **TEST-002 — Run real relay integration in CI.**
   - Start local `nak`; do not conditionally skip the primary relay lifecycle suite.
@@ -224,11 +227,12 @@ This file is the exhaustive implementation register for every confirmed security
 - [x] **TEST-006 — Repair Biome scope and baseline.**
   - Ignore `.worktrees`, `.applesauce-src`, audit/generated output; handle 3.4 MiB embed; fix product-source diagnostics.
 
-- [ ] **TEST-007 — Make CI/release gates complete.**
-  - Require typecheck, scoped lint/format, dependency audit, unit/integration/E2E, relay typecheck/build, generated-artifact consistency, and actual release binary smoke/browser tests.
+- [x] **TEST-007 — Make CI/release gates complete.**
+  - CI/release require frozen installs, scoped lint/format, all typechecks/tests, explicit compiled lifecycle E2E, managed relay verification, generated consistency, browser journeys, and native artifact smoke tests.
+  - Dependency audit remains separately deferred as SEC-017 under explicit user instruction.
 
-- [ ] **TEST-008 — Add upgrade/install E2E.**
-  - Use a temporary binary directory and controlled release server to test checksum/signature, rollback, atomic replacement, unsupported platforms, and interruption.
+- [x] **TEST-008 — Add upgrade/install E2E.**
+  - Hermetic shell-installer coverage exercises attestation/checksum/smoke/rollback failures, while a compiled upgrade journey uses controlled release assets and a fake GitHub attestation CLI to prove verified atomic replacement and preservation on provenance failure.
 
 - [x] **TEST-009 — Add custom relay CSP/config E2E.**
   - Prove CLI and embedded web can use a configured local/custom relay without widening CSP unsafely.
@@ -236,11 +240,12 @@ This file is the exhaustive implementation register for every confirmed security
 - [x] **GOV-001 — Make roadmap/docs capability claims test-backed.**
   - Remove inaccurate “MVP Complete,” `/tutorial`, complete deletion, complete bunker custody, and overly broad Doppler-compatibility claims.
 
-- [ ] **GOV-002 — Establish current OpenSpec truth.**
-  - Archive completed bunker prototype change, create current core capability specs, and keep prototype/security limitations normative.
+- [x] **GOV-002 — Establish current OpenSpec truth.**
+  - Completed NIP-46 and production-hardening changes are archived into nine current capability specs; future Cloud/Teams proposals remain clearly separated and deferred.
 
-- [ ] **GOV-003 — Resolve pricing/architecture contradictions.**
-  - Cloud is described as both one-time sats and monthly USD; Teams encryption/custody differs across roadmap/spec/proposal.
+- [x] **GOV-003 — Resolve pricing/architecture contradictions.**
+  - The deferred Cloud hypothesis is explicitly $5 USD monthly with BTCPay conversion at invoice creation, not a live offer.
+  - The deferred Teams research baseline is a bunker-held team key with signer-layer RBAC; MLS/FROSTR are labeled later custody research.
 
 ## Verified Remediation Matrix
 
@@ -254,10 +259,13 @@ The checked items above are backed by the following focused regressions or relea
 | SEC-004 | `relay/nosflare/tests/landing-page.test.ts` |
 | SEC-005, CLI-004, CLI-005, CLI-006 | `cli/tests/commands/configure.test.ts`, `cli/tests/lib/config.test.ts`, `cli/tests/lib/cli.test.ts` |
 | SEC-006, SEC-007, CORE-004, REL-006 | `relay/nosflare/tests/relay-policy.test.ts`, `principal-quota.test.ts`, `quota-object.test.ts`, `event-verifier.test.ts` |
+| SEC-008 | `cli/tests/commands/login.test.ts` and hidden-input spawned flow in `cli/tests/integration/cli-bunker-workflows.test.ts` |
 | SEC-009 | `cli/tests/lib/nip46-bunker.test.ts` and the bounded local signer journey in `cli/tests/integration/nak-bunker-e2e.test.ts` |
 | SEC-010 | `relay/nosflare/tests/event-verifier.test.ts` |
 | SEC-011 | `cli/tests/lib/config.test.ts`, `cli/tests/commands/serve.test.ts`, and runtime relay validation exercised by Playwright |
 | SEC-012, SEC-014, SEC-020, WEB-002 | `web/tests/stores/auth.test.ts`, `web/tests/stores/secure-storage.test.ts` |
+| SEC-013 | keychain-failure/migration cases in `cli/tests/lib/config.test.ts`, persistence tests in `cli/tests/commands/login.test.ts`, and cross-process file-backed test keychain journey |
+| REL-003 | `packages/rate-limiter/tests/resilient-pool.test.ts`, NIP-46 service healthy-relay test, and real `nak` bunker E2E |
 | SEC-015, SEC-016 | `cli/tests/integration/workflow-policy.test.ts`, frozen-install/pinned-action/least-permission workflow gates, plus `bash -n relay/deploy.sh` |
 | SEC-019, CLI-002 | `cli/tests/commands/secrets-output.test.ts`, `cli/tests/commands/secrets.test.ts`, `cli/tests/lib/cli.test.ts` |
 | CORE-001, WEB-001, TEST-004 | `web/tests/e2e/dashboard.spec.ts` against standalone and compiled embedded dashboards |
@@ -272,11 +280,14 @@ The checked items above are backed by the following focused regressions or relea
 | REL-004 | `relay/nosflare/tests/metadata.test.ts` |
 | REL-005, TEST-009 | `cli/tests/commands/serve.test.ts`, `web/tests/e2e/dashboard.spec.ts` custom-relay browser/CLI journey |
 | WEB-003 | `web/tests/lib/content-safety.test.ts` |
+| WEB-004 | centralized SvelteKit CSP regression, static hash build, runtime nonce tests, and standalone/embedded Playwright hydration journeys |
 | TEST-002 | pinned `nak` installation in `.github/workflows/ci.yml` and the unconditional compiled relay case in `cli/tests/integration/binary-cli.test.ts` |
 | TEST-003 | compiled command-scoped bunker case in `cli/tests/integration/nak-bunker-e2e.test.ts` |
 | TEST-005 | root, web/Svelte, and relay `tsc`/`svelte-check` gates |
 | TEST-006 | scoped Biome gate over owned source and tests |
+| TEST-001, TEST-007, TEST-008 | compiled multi-relay lifecycle and upgrade E2E, installer integrity matrix, workflow policy regressions, and native matrix smoke gates |
 | GOV-001 | rewritten `README.md`, `ROADMAP.md`, CLI/docs/pricing/privacy/terms pages and passing release journeys |
+| GOV-002, GOV-003 | nine archived current capability specs plus explicit deferred Cloud pricing and Teams custody baselines in OpenSpec |
 
 ## Product Opportunities (Not Current Defects)
 

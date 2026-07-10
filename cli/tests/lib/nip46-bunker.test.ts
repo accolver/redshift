@@ -128,22 +128,22 @@ describe('NIP-46 relay service', () => {
 		const published: Event[] = [];
 		const relayPool: Nip46RelayPool = {
 			subscribeMany(relays, filter, handlers) {
-				expect(relays).toEqual(['wss://relay.test']);
+				expect(relays).toEqual(['wss://relay.test', 'wss://backup.test']);
 				expect(filter).toEqual({ kinds: [NIP46_KIND], '#p': [signerPubkey] });
 				onevent = handlers.onevent;
 				return { close() {} };
 			},
 			publish(relays, event) {
-				expect(relays).toEqual(['wss://relay.test']);
+				expect(relays).toEqual(['wss://relay.test', 'wss://backup.test']);
 				published.push(event);
-				return [Promise.resolve()];
+				return [Promise.reject(new Error('primary unavailable')), Promise.resolve()];
 			},
 			close() {},
 		};
 		startNip46BunkerService({
 			signerSecretKey,
 			userSecretKey,
-			relays: ['wss://relay.test'],
+			relays: ['wss://relay.test', 'wss://backup.test'],
 			secret: 'connect-secret',
 			relayPool,
 		});

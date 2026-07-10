@@ -79,7 +79,7 @@ NIP-09 can request deletion only for events actually authored by the user. It ca
 
 NIP-07 login completes only if both NIP-44 encrypt and decrypt capabilities exist. Web bunker restoration persists a versioned sanitized pointer and local client credential, never a one-time pairing secret. A full logout/account switch clears ciphertext and the IndexedDB CryptoKey; relay reconnect is a separate operation.
 
-The compiled embedded dashboard and relay landing page use per-response cryptographic nonces. Runtime relay configuration is nonce-protected, validated, and reflected as exact CSP connect origins. The mutable relay landing dependency was removed. The hosted static admin fallback still permits broad `script-src 'unsafe-inline'`; removing it without breaking Svelte hydration remains tracked as WEB-004 rather than being claimed complete.
+The compiled embedded dashboard and relay landing page use per-response cryptographic nonces. Runtime relay configuration is nonce-protected, validated, and reflected as exact CSP connect origins. The mutable relay landing dependency was removed. SvelteKit centrally generates nonce policies for dynamic hosted responses and hash policies for prerendered/static output; embedded serving removes the static CSP meta tag before applying its exact runtime nonce header so the two policies cannot conflict.
 
 External blog/CMS HTML crosses one audited sanitizer boundary. JSON-LD serialization escapes `<`, `>`, `&`, U+2028/U+2029, and closing script sequences.
 

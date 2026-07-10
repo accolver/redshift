@@ -282,27 +282,24 @@ const secrets = await unwrapSecrets(event, privateKey);
 
 ### Global Config (`~/.redshift/config.json`)
 
-For nsec authentication:
+For nsec authentication, config stores only the selected method; the nsec remains in the OS keychain:
 
 ```json
 {
   "authMethod": "nsec",
-  "nsec": "nsec1...",
   "relays": ["wss://relay.damus.io", "wss://nos.lol"],
   "defaultProject": "my-project"
 }
 ```
 
-For bunker authentication:
+For bunker authentication, config stores only the public restoration pointer. The client key remains in the OS keychain and one-time pairing secrets are discarded:
 
 ```json
 {
   "authMethod": "bunker",
   "bunker": {
     "bunkerPubkey": "abc123...",
-    "relays": ["wss://relay.example"],
-    "secret": "optional-secret",
-    "clientSecretKey": "hex-encoded-key"
+    "relays": ["wss://relay.example"]
   },
   "relays": ["wss://relay.damus.io"]
 }

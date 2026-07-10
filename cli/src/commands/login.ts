@@ -168,11 +168,34 @@ export function validateBunkerArgSafety(bunkerUrl: string) {
 	}
 }
 
+type StoreBunkerCredential = (clientKeyHex: string) => Promise<boolean>;
+
+export async function persistBunkerCredential(
+	bunkerPointer: Pick<BunkerAuth, 'bunkerPubkey' | 'relays'>,
+	clientKeyHex: string,
+	storeCredential: StoreBunkerCredential = storeBunkerKeyInKeychain,
+) {
+	if (!/^[0-9a-f]{64}$/i.test(clientKeyHex)) {
+		throw new ValidationError('Invalid NIP-46 client secret key.');
+	}
+	if (!(await storeCredential(clientKeyHex))) {
+		throw new AuthError(
+			'System keychain unavailable; the bunker client key was not persisted. Use REDSHIFT_BUNKER for command-scoped authentication.',
+			'bunker',
+		);
+	}
+	await saveBunkerAuth({
+		bunkerPubkey: bunkerPointer.bunkerPubkey,
+		relays: bunkerPointer.relays,
+	});
+}
+
 /** Login with a bunker pointer while retaining the client key only in keychain. */
 async function loginWithBunker(bunkerUrl: string): Promise<void> {
 	console.log('Connecting to bunker...');
+	let connection: Awaited<ReturnType<typeof connectToBunker>> | null = null;
 	try {
-		const connection = await connectToBunker(bunkerUrl, {
+		connection = await connectToBunker(bunkerUrl, {
 			onAuth: (url) => {
 				console.log('\n⚠️  Authentication required. Please visit:');
 				console.log(`   ${url}`);
@@ -180,30 +203,27 @@ async function loginWithBunker(bunkerUrl: string): Promise<void> {
 		});
 		const npub = npubEncode(connection.userPubkey);
 		const clientKeyHex = Buffer.from(connection.clientSecretKey).toString('hex');
-		const storedInKeychain = await storeBunkerKeyInKeychain(clientKeyHex);
+		await persistBunkerCredential(
+			{
+				bunkerPubkey: connection.bunkerPointer.pubkey,
+				relays: connection.bunkerPointer.relays,
+			},
+			clientKeyHex,
+		);
 		await deleteNsecFromKeychain();
-		// Retain the NIP-46 client key as a 0600 config fallback. Never persist the
-		// one-time pairing secret from the bunker URI.
-		const bunkerAuth: BunkerAuth = {
-			bunkerPubkey: connection.bunkerPointer.pubkey,
-			relays: connection.bunkerPointer.relays,
-			clientSecretKey: clientKeyHex,
-		};
-		await saveBunkerAuth(bunkerAuth);
 		console.log('\n✓ Connected to bunker successfully!');
 		console.log(`  User: ${npub}`);
 		console.log(`  Bunker: ${formatBunkerPointer(connection.bunkerPointer)}`);
-		if (storedInKeychain) {
-			console.log('\nClient key stored in the system keychain and 0600 config fallback.');
-			console.log(`  Service: ${getKeychainServiceName()}`);
-		} else {
-			console.log('\n⚠️  System keychain unavailable. Client key stored in 0600 config fallback.');
-		}
-		await closeBunkerSigner(connection.signer);
-		connection.clientSecretKey.fill(0);
+		console.log('\nClient key stored only in the system keychain.');
+		console.log(`  Service: ${getKeychainServiceName()}`);
 	} catch (error) {
 		if (error instanceof AuthError) throw error;
 		throw new AuthError(`Failed to connect to bunker: ${sanitizeBunkerError(error)}`, 'bunker');
+	} finally {
+		if (connection) {
+			await closeBunkerSigner(connection.signer).catch(() => undefined);
+			connection.clientSecretKey.fill(0);
+		}
 	}
 }
 
@@ -214,41 +234,40 @@ async function loginWithNostrConnect(): Promise<void> {
 	console.log('Creating NostrConnect URI...\n');
 
 	const relays = await getRelays();
-	const { uri, waitForConnection } = await createNostrConnectUri(relays, 'Redshift CLI');
+	const { uri, clientSecretKey, waitForConnection } = await createNostrConnectUri(
+		relays,
+		'Redshift CLI',
+	);
 
 	console.log('Scan this QR code or paste the URI in your bunker app:\n');
 	console.log(renderTerminalQr(uri));
 	console.log(`\nURI: ${uri}\n`);
 	console.log('Waiting for connection (timeout: 2 minutes)...');
 
+	let connection: Awaited<ReturnType<typeof waitForConnection>> | null = null;
 	try {
-		const connection = await waitForConnection(120000);
+		connection = await waitForConnection(120000);
 		const npub = npubEncode(connection.userPubkey);
 		const clientKeyHex = Buffer.from(connection.clientSecretKey).toString('hex');
-		const storedInKeychain = await storeBunkerKeyInKeychain(clientKeyHex);
+		await persistBunkerCredential(
+			{
+				bunkerPubkey: connection.bunkerPointer.pubkey,
+				relays: connection.bunkerPointer.relays,
+			},
+			clientKeyHex,
+		);
 		await deleteNsecFromKeychain();
-		// Retain the NIP-46 client key as a 0600 config fallback. Never persist the
-		// one-time pairing secret from the nostrconnect URI.
-		const bunkerAuth: BunkerAuth = {
-			bunkerPubkey: connection.bunkerPointer.pubkey,
-			relays: connection.bunkerPointer.relays,
-			clientSecretKey: clientKeyHex,
-		};
-		await saveBunkerAuth(bunkerAuth);
 		console.log('\n✓ Connected successfully!');
 		console.log(`  User: ${npub}`);
 		console.log(`  Bunker: ${formatBunkerPointer(connection.bunkerPointer)}`);
-		if (storedInKeychain) {
-			console.log('\nClient key stored in the system keychain and 0600 config fallback.');
-			console.log(`  Service: ${getKeychainServiceName()}`);
-		} else {
-			console.log('\n⚠️  System keychain unavailable. Client key stored in 0600 config fallback.');
-		}
-		await closeBunkerSigner(connection.signer);
-		connection.clientSecretKey.fill(0);
+		console.log('\nClient key stored only in the system keychain.');
+		console.log(`  Service: ${getKeychainServiceName()}`);
 	} catch (error) {
 		if (error instanceof AuthError) throw error;
 		throw new AuthError(`Connection timed out or failed: ${sanitizeBunkerError(error)}`, 'bunker');
+	} finally {
+		if (connection) await closeBunkerSigner(connection.signer).catch(() => undefined);
+		clientSecretKey.fill(0);
 	}
 }
 

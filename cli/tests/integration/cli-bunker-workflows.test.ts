@@ -6,7 +6,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { nsecEncode } from 'nostr-tools/nip19';
@@ -135,8 +135,10 @@ describe('spawned CLI bunker workflows', () => {
 			}
 		}
 		baseEnv.HOME = tempDir;
+		baseEnv.NODE_ENV = 'test';
 		baseEnv.REDSHIFT_CONFIG_DIR = configDir;
-		baseEnv.REDSHIFT_DISABLE_KEYCHAIN = '1';
+		baseEnv.REDSHIFT_TEST_KEYCHAIN_BACKEND = 'file';
+		baseEnv.REDSHIFT_TEST_KEYCHAIN_FILE = join(configDir, 'test-keychain.json');
 		const cliPath = join(process.cwd(), 'src/main.ts');
 		const run = async (
 			args: string[],
@@ -182,6 +184,13 @@ describe('spawned CLI bunker workflows', () => {
 		let result = await fixture.run(['login', '--force', '--bunker-stdin'], {}, fixture.bunkerUrl);
 		expectSuccess(result);
 		expect(result.stdout).toContain('Connected to bunker successfully');
+		const storedConfig = (await Bun.file(join(fixture.configDir, 'config.json')).json()) as {
+			bunker?: { clientSecretKey?: string; secret?: string };
+		};
+		expect(storedConfig.bunker?.clientSecretKey).toBeUndefined();
+		expect(storedConfig.bunker?.secret).toBeUndefined();
+		const keychainFile = join(fixture.configDir, 'test-keychain.json');
+		expect((await stat(keychainFile)).mode & 0o777).toBe(0o600);
 
 		result = await fixture.run(['setup', '--project', project, '--environment', 'dev']);
 		expectSuccess(result);

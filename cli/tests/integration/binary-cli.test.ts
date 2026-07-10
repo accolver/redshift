@@ -98,19 +98,32 @@ describe('compiled CLI contracts', () => {
 		temporaryDirectories.push(root);
 		const configDir = join(root, 'config');
 		const port = await getFreePort();
+		const backupPort = await getFreePort();
+		const unavailablePort = await getFreePort();
 		const relayUrl = `ws://127.0.0.1:${port}`;
+		const backupRelayUrl = `ws://127.0.0.1:${backupPort}`;
+		const unavailableRelayUrl = `ws://127.0.0.1:${unavailablePort}`;
 		const relay = Bun.spawn(['nak', 'serve', '--hostname', '127.0.0.1', '--port', String(port)], {
 			stdout: 'ignore',
 			stderr: 'pipe',
 		});
-		childProcesses.push(relay);
-		await waitForRelay(relayUrl);
+		const backupRelay = Bun.spawn(
+			['nak', 'serve', '--hostname', '127.0.0.1', '--port', String(backupPort)],
+			{ stdout: 'ignore', stderr: 'pipe' },
+		);
+		childProcesses.push(relay, backupRelay);
+		await Promise.all([waitForRelay(relayUrl), waitForRelay(backupRelayUrl)]);
 
 		const globalArgs = ['--config-dir', configDir];
 		const nsec = nip19.nsecEncode(generateSecretKey());
 		const authEnvironment = { REDSHIFT_NSEC: nsec };
 		const configure = await runBinary(
-			[...globalArgs, 'configure', 'set', `relays=${relayUrl}`],
+			[
+				...globalArgs,
+				'configure',
+				'set',
+				`relays=${relayUrl},${backupRelayUrl},${unavailableRelayUrl}`,
+			],
 			{},
 			root,
 		);
@@ -148,6 +161,33 @@ describe('compiled CLI contracts', () => {
 		);
 		expect(setSecret.exitCode, setSecret.stderr).toBe(0);
 
+		const listSecrets = await runBinary(
+			[...globalArgs, 'secrets', '--project', 'binary-project', '--config', 'dev'],
+			authEnvironment,
+			root,
+		);
+		expect(listSecrets.exitCode, listSecrets.stderr).toBe(0);
+		expect(listSecrets.stdout).toContain('API_KEY');
+		expect(listSecrets.stdout).not.toContain('binary-secret');
+
+		const rawSecret = await runBinary(
+			[
+				...globalArgs,
+				'secrets',
+				'get',
+				'API_KEY',
+				'--raw',
+				'--project',
+				'binary-project',
+				'--config',
+				'dev',
+			],
+			authEnvironment,
+			root,
+		);
+		expect(rawSecret.exitCode, rawSecret.stderr).toBe(0);
+		expect(rawSecret.stdout).toBe('binary-secret');
+
 		const childScript = join(root, 'inspect-child.sh');
 		writeFileSync(
 			childScript,
@@ -180,6 +220,41 @@ describe('compiled CLI contracts', () => {
 		expect(execution.stdout).toContain('secret=binary-secret');
 		expect(execution.stdout).toContain('nsec=unset');
 		expect(execution.stdout).toContain('bunker=unset');
+
+		const shellExecution = await runBinary(
+			[
+				...globalArgs,
+				'run',
+				'--project',
+				'binary-project',
+				'--config',
+				'dev',
+				'--command',
+				'printf "shell=%s" "$API_KEY"',
+			],
+			authEnvironment,
+			root,
+		);
+		expect(shellExecution.exitCode, shellExecution.stderr).toBe(0);
+		expect(shellExecution.stdout).toBe('shell=binary-secret');
+
+		const childExit = await runBinary(
+			[
+				...globalArgs,
+				'run',
+				'--project',
+				'binary-project',
+				'--config',
+				'dev',
+				'--',
+				'sh',
+				'-c',
+				'exit 7',
+			],
+			authEnvironment,
+			root,
+		);
+		expect(childExit.exitCode).toBe(7);
 
 		const signalMarker = join(root, 'child-signal.txt');
 		const childReady = join(root, 'child-ready.txt');
@@ -219,5 +294,39 @@ describe('compiled CLI contracts', () => {
 			await Bun.sleep(50);
 		}
 		expect(readFileSync(signalMarker, 'utf8')).toBe('term');
-	}, 40_000);
+
+		const deleteSecret = await runBinary(
+			[
+				...globalArgs,
+				'secrets',
+				'delete',
+				'API_KEY',
+				'--project',
+				'binary-project',
+				'--config',
+				'dev',
+			],
+			authEnvironment,
+			root,
+		);
+		expect(deleteSecret.exitCode, deleteSecret.stderr).toBe(0);
+
+		const deletedGet = await runBinary(
+			[
+				...globalArgs,
+				'secrets',
+				'get',
+				'API_KEY',
+				'--raw',
+				'--project',
+				'binary-project',
+				'--config',
+				'dev',
+			],
+			authEnvironment,
+			root,
+		);
+		expect(deletedGet.exitCode).toBe(1);
+		expect(deletedGet.stderr).toContain("Secret 'API_KEY' not found");
+	}, 60_000);
 });

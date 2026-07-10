@@ -15,38 +15,39 @@ import { generateSecretKey } from 'nostr-tools/pure';
 // We need to test the helper functions that are exported
 import {
 	loginCommand,
+	persistBunkerCredential,
 	persistNsecCredential,
 	sanitizeBunkerError,
 	tryAuth,
 	validateBunkerArgSafety,
 } from '../../src/commands/login';
-import { clearAuth, loadConfig, saveConfig } from '../../src/lib/config';
+import { clearAuth, loadConfig } from '../../src/lib/config';
+import { deleteBunkerKeyFromKeychain, deleteNsecFromKeychain } from '../../src/lib/keychain';
+
+async function writeLegacyConfig(configDir: string, config: object) {
+	await Bun.write(join(configDir, 'config.json'), JSON.stringify(config));
+}
 
 describe('Login Command', () => {
 	const testDir = join(tmpdir(), `redshift-login-test-${Date.now()}`);
 	const originalEnv = { ...process.env };
 
-	beforeEach(() => {
-		// Clean test directory
-		if (existsSync(testDir)) {
-			rmSync(testDir, { recursive: true });
-		}
+	beforeEach(async () => {
+		if (existsSync(testDir)) rmSync(testDir, { recursive: true });
 		mkdirSync(testDir, { recursive: true });
-
-		// Set test config directory
 		process.env.REDSHIFT_CONFIG_DIR = testDir;
-		// Clear any existing nsec env var
 		delete process.env.REDSHIFT_NSEC;
 		delete process.env.REDSHIFT_BUNKER;
+		delete process.env.REDSHIFT_DISABLE_KEYCHAIN;
+		await deleteNsecFromKeychain();
+		await deleteBunkerKeyFromKeychain();
 	});
 
-	afterEach(() => {
-		// Restore environment
+	afterEach(async () => {
 		process.env = { ...originalEnv };
-		// Clean up
-		if (existsSync(testDir)) {
-			rmSync(testDir, { recursive: true });
-		}
+		if (existsSync(testDir)) rmSync(testDir, { recursive: true });
+		await deleteNsecFromKeychain();
+		await deleteBunkerKeyFromKeychain();
 	});
 
 	describe('tryAuth', () => {
@@ -55,11 +56,11 @@ describe('Login Command', () => {
 			expect(result).toBeNull();
 		});
 
-		it('returns auth from config file when nsec is stored', async () => {
+		it('migrates legacy config nsec to secure storage', async () => {
 			const sk = generateSecretKey();
 			const nsec = nsecEncode(sk);
 
-			await saveConfig({ authMethod: 'nsec', nsec });
+			await writeLegacyConfig(testDir, { authMethod: 'nsec', nsec });
 
 			const result = await tryAuth();
 
@@ -87,7 +88,7 @@ describe('Login Command', () => {
 			const sk2 = generateSecretKey();
 			const nsec2 = nsecEncode(sk2);
 
-			await saveConfig({ authMethod: 'nsec', nsec: nsec1 });
+			await writeLegacyConfig(testDir, { authMethod: 'nsec', nsec: nsec1 });
 			process.env.REDSHIFT_NSEC = nsec2;
 
 			const result = await tryAuth();
@@ -95,21 +96,18 @@ describe('Login Command', () => {
 			expect(result?.nsec).toBe(nsec2);
 		});
 
-		it('returns null for invalid nsec in config', async () => {
-			await saveConfig({ authMethod: 'nsec', nsec: 'invalid-nsec' });
-
-			const result = await tryAuth();
-
-			expect(result).toBeNull();
+		it('fails closed for an invalid legacy nsec', async () => {
+			await writeLegacyConfig(testDir, { authMethod: 'nsec', nsec: 'invalid-nsec' });
+			await expect(tryAuth()).rejects.toThrow('invalid nsec');
 		});
 
 		it('returns null for bunker auth (not yet supported in tryAuth)', async () => {
-			await saveConfig({
+			await writeLegacyConfig(testDir, {
 				authMethod: 'bunker',
 				bunker: {
 					bunkerPubkey: 'abc123',
 					relays: ['wss://relay.test'],
-					clientSecretKey: 'def456',
+					clientSecretKey: 'd'.repeat(64),
 				},
 			});
 
@@ -130,6 +128,29 @@ describe('Login Command', () => {
 			const nsec = nsecEncode(generateSecretKey());
 			await persistNsecCredential(nsec, async () => true);
 			expect(await loadConfig()).toEqual({ authMethod: 'nsec' });
+		});
+
+		it('does not write a bunker client key when the keychain is unavailable', async () => {
+			await expect(
+				persistBunkerCredential(
+					{ bunkerPubkey: 'a'.repeat(64), relays: ['wss://relay.test'] },
+					'b'.repeat(64),
+					async () => false,
+				),
+			).rejects.toThrow('REDSHIFT_BUNKER');
+			expect(await loadConfig()).toEqual({});
+		});
+
+		it('stores only a sanitized bunker pointer after keychain success', async () => {
+			await persistBunkerCredential(
+				{ bunkerPubkey: 'a'.repeat(64), relays: ['wss://relay.test'] },
+				'b'.repeat(64),
+				async () => true,
+			);
+			expect(await loadConfig()).toEqual({
+				authMethod: 'bunker',
+				bunker: { bunkerPubkey: 'a'.repeat(64), relays: ['wss://relay.test/'] },
+			});
 		});
 
 		it('redacts bunker URI query credentials from failures', () => {
@@ -161,11 +182,11 @@ describe('Login Command', () => {
 	});
 
 	describe('clearAuth', () => {
-		it('clears stored nsec from config', async () => {
+		it('clears stored nsec from legacy config', async () => {
 			const sk = generateSecretKey();
 			const nsec = nsecEncode(sk);
 
-			await saveConfig({ authMethod: 'nsec', nsec });
+			await writeLegacyConfig(testDir, { authMethod: 'nsec', nsec });
 
 			// Verify it's stored
 			let config = await loadConfig();
@@ -181,12 +202,12 @@ describe('Login Command', () => {
 		});
 
 		it('clears bunker auth from config', async () => {
-			await saveConfig({
+			await writeLegacyConfig(testDir, {
 				authMethod: 'bunker',
 				bunker: {
 					bunkerPubkey: 'abc123',
 					relays: ['wss://relay.test'],
-					clientSecretKey: 'def456',
+					clientSecretKey: 'd'.repeat(64),
 				},
 			});
 

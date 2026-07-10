@@ -9,13 +9,19 @@ import { generateSecretKey } from 'nostr-tools/pure';
 
 const compiledBinary = resolve(import.meta.dirname, '../../../dist/redshift');
 
-async function assertHydratedDashboard(page: Page, url: string) {
+async function assertHydratedDashboard(page: Page, url: string, expectFrameworkCsp = false) {
 	const runtimeErrors: string[] = [];
 	page.on('pageerror', (error) => runtimeErrors.push(error.message));
 	page.on('console', (message) => {
 		if (message.type() === 'error') runtimeErrors.push(message.text());
 	});
-	await page.goto(`${url}/admin`, { waitUntil: 'networkidle' });
+	const response = await page.goto(`${url}/admin`, { waitUntil: 'networkidle' });
+	if (expectFrameworkCsp) {
+		const csp = response?.headers()['content-security-policy'] ?? '';
+		expect(csp).toContain("script-src 'self'");
+		expect(csp).toContain("'nonce-");
+		expect(csp).not.toContain("script-src 'self' 'unsafe-inline'");
+	}
 	await expect(page).toHaveTitle('Dashboard - Redshift Admin');
 	await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Connect', exact: true }).click();
@@ -98,7 +104,7 @@ async function stopChild(child: ChildProcess | undefined) {
 }
 
 test('standalone dashboard hydrates and opens authentication UI', async ({ page, baseURL }) => {
-	await assertHydratedDashboard(page, baseURL ?? 'http://127.0.0.1:4173');
+	await assertHydratedDashboard(page, baseURL ?? 'http://127.0.0.1:4173', true);
 });
 
 test('embedded browser and compiled CLI share a custom local relay journey', async ({ page }) => {

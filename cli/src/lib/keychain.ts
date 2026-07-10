@@ -21,14 +21,60 @@ const KEYCHAIN_SERVICE = 'com.redshiftapp.cli';
  */
 const KEYCHAIN_NSEC = 'nsec';
 const KEYCHAIN_BUNKER_CLIENT_KEY = 'bunker-client-secret-key';
-const TEST_KEYCHAIN_BACKEND = 'memory';
+const TEST_MEMORY_KEYCHAIN_BACKEND = 'memory';
+const TEST_FILE_KEYCHAIN_BACKEND = 'file';
 const memoryKeychain = new Map<string, string>();
+
+type TestKeychain = Record<string, string>;
+
+function isSourceTestRuntime() {
+	return (
+		process.env.NODE_ENV === 'test' &&
+		process.argv.some((argument) => /\.[cm]?[jt]s$/.test(argument))
+	);
+}
 
 function useMemoryKeychain() {
 	return (
-		process.env.NODE_ENV === 'test' &&
-		process.env.REDSHIFT_TEST_KEYCHAIN_BACKEND === TEST_KEYCHAIN_BACKEND
+		isSourceTestRuntime() &&
+		process.env.REDSHIFT_TEST_KEYCHAIN_BACKEND === TEST_MEMORY_KEYCHAIN_BACKEND
 	);
+}
+
+function getTestKeychainFile() {
+	if (
+		!isSourceTestRuntime() ||
+		process.env.REDSHIFT_TEST_KEYCHAIN_BACKEND !== TEST_FILE_KEYCHAIN_BACKEND
+	) {
+		return null;
+	}
+	return process.env.REDSHIFT_TEST_KEYCHAIN_FILE ?? null;
+}
+
+async function readTestFileKeychain(path: string): Promise<TestKeychain> {
+	const file = Bun.file(path);
+	if (!(await file.exists())) return {};
+	const value: unknown = await file.json();
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
+	return value as TestKeychain;
+}
+
+async function writeTestFileKeychain(path: string, credentials: TestKeychain) {
+	const { chmod, mkdir, rename } = await import('node:fs/promises');
+	const { dirname } = await import('node:path');
+	await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+	const temporaryPath = `${path}.tmp-${process.pid}`;
+	await Bun.write(temporaryPath, JSON.stringify(credentials));
+	await chmod(temporaryPath, 0o600);
+	await rename(temporaryPath, path);
+}
+
+async function setTestFileCredential(path: string, name: string, value?: string) {
+	const credentials = await readTestFileKeychain(path);
+	const key = memoryKey(name);
+	if (value === undefined) delete credentials[key];
+	else credentials[key] = value;
+	await writeTestFileKeychain(path, credentials);
 }
 
 function isKeychainDisabled() {
@@ -44,7 +90,7 @@ function memoryKey(name: string) {
  */
 export async function isKeychainAvailable(): Promise<boolean> {
 	if (isKeychainDisabled()) return false;
-	if (useMemoryKeychain()) return true;
+	if (useMemoryKeychain() || getTestKeychainFile()) return true;
 	// Bun.secrets is only available in Bun runtime
 	if (typeof Bun === 'undefined' || !Bun.secrets) {
 		return false;
@@ -73,6 +119,11 @@ export async function storeNsecInKeychain(nsec: string): Promise<boolean> {
 		memoryKeychain.set(memoryKey(KEYCHAIN_NSEC), nsec);
 		return true;
 	}
+	const testFile = getTestKeychainFile();
+	if (testFile) {
+		await setTestFileCredential(testFile, KEYCHAIN_NSEC, nsec);
+		return true;
+	}
 	if (typeof Bun === 'undefined' || !Bun.secrets) {
 		return false;
 	}
@@ -85,7 +136,7 @@ export async function storeNsecInKeychain(nsec: string): Promise<boolean> {
 		});
 		return true;
 	} catch (error) {
-		// Log for debugging but don't throw - caller will fall back to file
+		// Report availability without exposing credential material; callers fail closed.
 		console.error('Keychain storage failed:', error instanceof Error ? error.message : error);
 		return false;
 	}
@@ -99,6 +150,10 @@ export async function storeNsecInKeychain(nsec: string): Promise<boolean> {
 export async function getNsecFromKeychain(): Promise<string | null> {
 	if (isKeychainDisabled()) return null;
 	if (useMemoryKeychain()) return memoryKeychain.get(memoryKey(KEYCHAIN_NSEC)) ?? null;
+	const testFile = getTestKeychainFile();
+	if (testFile) {
+		return (await readTestFileKeychain(testFile))[memoryKey(KEYCHAIN_NSEC)] ?? null;
+	}
 	if (typeof Bun === 'undefined' || !Bun.secrets) {
 		return null;
 	}
@@ -124,6 +179,11 @@ export async function deleteNsecFromKeychain(): Promise<boolean> {
 	if (isKeychainDisabled()) return false;
 	if (useMemoryKeychain()) {
 		memoryKeychain.delete(memoryKey(KEYCHAIN_NSEC));
+		return true;
+	}
+	const testFile = getTestKeychainFile();
+	if (testFile) {
+		await setTestFileCredential(testFile, KEYCHAIN_NSEC);
 		return true;
 	}
 	if (typeof Bun === 'undefined' || !Bun.secrets) {
@@ -154,6 +214,11 @@ export async function storeBunkerKeyInKeychain(hexKey: string): Promise<boolean>
 		memoryKeychain.set(memoryKey(KEYCHAIN_BUNKER_CLIENT_KEY), hexKey);
 		return true;
 	}
+	const testFile = getTestKeychainFile();
+	if (testFile) {
+		await setTestFileCredential(testFile, KEYCHAIN_BUNKER_CLIENT_KEY, hexKey);
+		return true;
+	}
 	if (typeof Bun === 'undefined' || !Bun.secrets) {
 		return false;
 	}
@@ -181,6 +246,10 @@ export async function getBunkerKeyFromKeychain(): Promise<string | null> {
 	if (useMemoryKeychain()) {
 		return memoryKeychain.get(memoryKey(KEYCHAIN_BUNKER_CLIENT_KEY)) ?? null;
 	}
+	const testFile = getTestKeychainFile();
+	if (testFile) {
+		return (await readTestFileKeychain(testFile))[memoryKey(KEYCHAIN_BUNKER_CLIENT_KEY)] ?? null;
+	}
 	if (typeof Bun === 'undefined' || !Bun.secrets) {
 		return null;
 	}
@@ -205,6 +274,11 @@ export async function deleteBunkerKeyFromKeychain(): Promise<boolean> {
 	if (isKeychainDisabled()) return false;
 	if (useMemoryKeychain()) {
 		memoryKeychain.delete(memoryKey(KEYCHAIN_BUNKER_CLIENT_KEY));
+		return true;
+	}
+	const testFile = getTestKeychainFile();
+	if (testFile) {
+		await setTestFileCredential(testFile, KEYCHAIN_BUNKER_CLIENT_KEY);
 		return true;
 	}
 	if (typeof Bun === 'undefined' || !Bun.secrets) {

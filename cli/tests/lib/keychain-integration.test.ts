@@ -23,6 +23,12 @@ import {
 	storeNsecInKeychain,
 } from '../../src/lib/keychain';
 
+async function writeLegacyConfig(config: object) {
+	const configDir = process.env.REDSHIFT_CONFIG_DIR;
+	if (!configDir) throw new Error('REDSHIFT_CONFIG_DIR is required');
+	await Bun.write(join(configDir, 'config.json'), JSON.stringify(config));
+}
+
 describe('Keychain + Config Integration', () => {
 	const testDir = join(tmpdir(), `redshift-keychain-integration-${Date.now()}`);
 	const originalEnv = { ...process.env };
@@ -60,8 +66,8 @@ describe('Keychain + Config Integration', () => {
 			const sk = generateSecretKey();
 			const nsec = nsecEncode(sk);
 
-			// A lower-priority config value must not override the environment.
-			await saveConfig({ authMethod: 'nsec', nsec: 'config-nsec' });
+			// A lower-priority legacy config value must not override the environment.
+			await writeLegacyConfig({ authMethod: 'nsec', nsec: 'config-nsec' });
 
 			// Set env var
 			process.env.REDSHIFT_NSEC = nsec;
@@ -84,9 +90,9 @@ describe('Keychain + Config Integration', () => {
 			const sk = generateSecretKey();
 			const keychainNsec = nsecEncode(sk);
 
-			// Store in both keychain and config
+			// Store in both keychain and legacy config
 			await storeNsecInKeychain(keychainNsec);
-			await saveConfig({ authMethod: 'nsec', nsec: 'config-nsec' });
+			await writeLegacyConfig({ authMethod: 'nsec', nsec: 'config-nsec' });
 
 			const result = await getPrivateKey();
 
@@ -95,19 +101,19 @@ describe('Keychain + Config Integration', () => {
 			expect(result?.source).toBe('keychain');
 		});
 
-		it('returns config file third (when keychain empty)', async () => {
+		it('migrates a legacy config credential when keychain is empty', async () => {
 			const sk = generateSecretKey();
 			const configNsec = nsecEncode(sk);
 
-			// Only store in config (keychain empty)
+			// Only store in legacy config (keychain empty)
 			await deleteNsecFromKeychain();
-			await saveConfig({ authMethod: 'nsec', nsec: configNsec });
+			await writeLegacyConfig({ authMethod: 'nsec', nsec: configNsec });
 
 			const result = await getPrivateKey();
 
 			expect(result).not.toBeNull();
 			expect(result?.nsec).toBe(configNsec);
-			expect(result?.source).toBe('config');
+			expect(result?.source).toBe('keychain');
 		});
 
 		it('returns null when nothing configured', async () => {
@@ -137,7 +143,7 @@ describe('Keychain + Config Integration', () => {
 			if (available) {
 				await storeNsecInKeychain(keychainNsec);
 			}
-			await saveConfig({ authMethod: 'nsec', nsec: configNsec });
+			await writeLegacyConfig({ authMethod: 'nsec', nsec: configNsec });
 			process.env.REDSHIFT_NSEC = envNsec;
 
 			const result = await getAuth();
@@ -216,7 +222,7 @@ describe('Keychain + Config Integration', () => {
 			if (available) {
 				await storeNsecInKeychain(nsec);
 			}
-			await saveConfig({ authMethod: 'nsec', nsec });
+			await writeLegacyConfig({ authMethod: 'nsec', nsec });
 
 			// Clear auth
 			await clearAuth();
@@ -309,7 +315,7 @@ describe('Keychain migration scenarios', () => {
 		const oldNsec = nsecEncode(oldSk);
 
 		// Simulate old config file auth
-		await saveConfig({ authMethod: 'nsec', nsec: oldNsec });
+		await writeLegacyConfig({ authMethod: 'nsec', nsec: oldNsec });
 
 		// Verify old auth works
 		const oldAuth = await tryAuth();
@@ -346,7 +352,7 @@ describe('Keychain migration scenarios', () => {
 
 		// Both have different keys
 		await storeNsecInKeychain(keychainNsec);
-		await saveConfig({ authMethod: 'nsec', nsec: configNsec });
+		await writeLegacyConfig({ authMethod: 'nsec', nsec: configNsec });
 
 		// Keychain should win
 		const result = await getPrivateKey();
@@ -385,13 +391,13 @@ describe('Keychain edge cases', () => {
 			await storeNsecInKeychain(nsec);
 		}
 
-		// Store bunker auth in config
-		await saveConfig({
+		// Store legacy bunker auth in config
+		await writeLegacyConfig({
 			authMethod: 'bunker',
 			bunker: {
 				bunkerPubkey: 'abc123',
 				relays: ['wss://relay.test'],
-				clientSecretKey: 'def456',
+				clientSecretKey: 'd'.repeat(64),
 			},
 		});
 
@@ -399,7 +405,7 @@ describe('Keychain edge cases', () => {
 		const result = await getAuth();
 
 		expect(result?.method).toBe('bunker');
-		expect(result?.source).toBe('config');
+		expect(result?.source).toBe('keychain');
 	});
 
 	it('handles rapid auth checks without race conditions', async () => {

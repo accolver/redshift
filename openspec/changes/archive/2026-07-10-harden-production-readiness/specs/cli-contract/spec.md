@@ -72,7 +72,15 @@ The CLI SHALL not write new plaintext nsec or bunker client keys when the keycha
 
 #### Scenario: Keychain failure
 - **WHEN** persistent login cannot store a key securely
-- **THEN** the credential is not written to config and the user receives a non-secret fallback instruction
+- **THEN** the credential is not written to config and the user receives a non-secret command-scoped authentication instruction
+
+#### Scenario: Legacy plaintext migration
+- **WHEN** a valid legacy nsec or bunker client key exists in config
+- **THEN** the CLI stores it in the system keychain before removing every plaintext credential field from config
+
+#### Scenario: Legacy migration failure
+- **WHEN** the system keychain is unavailable during legacy migration
+- **THEN** the CLI fails closed, preserves the legacy bytes for manual recovery, and never authenticates from plaintext config
 
 #### Scenario: One-time bunker pairing
 - **WHEN** a bunker URI contains a `secret=` pairing credential

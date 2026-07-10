@@ -9,6 +9,10 @@ const TEST_DIR = join(import.meta.dir, '../.test-configure');
 const CLI_ENTRY = join(import.meta.dir, '../../src/main.ts');
 const originalEnv = { ...process.env };
 
+async function writeLegacyConfig(config: object) {
+	await Bun.write(join(TEST_DIR, 'config.json'), JSON.stringify(config));
+}
+
 function runCli(args: string[]) {
 	return Bun.spawnSync(['bun', 'run', CLI_ENTRY, ...args], {
 		env: { ...process.env, REDSHIFT_CONFIG_DIR: TEST_DIR, HOME: TEST_DIR },
@@ -53,7 +57,7 @@ describe('configure command', () => {
 	});
 
 	it('redacts all credential fields from get and --all output', async () => {
-		await saveConfig({
+		await writeLegacyConfig({
 			authMethod: 'bunker',
 			nsec: 'nsec-secret',
 			bunker: {
@@ -79,7 +83,7 @@ describe('configure command', () => {
 	});
 
 	it('reset --yes clears auth, relays, and defaults', async () => {
-		await saveConfig({
+		await writeLegacyConfig({
 			nsec: 'nsec-secret',
 			relays: ['wss://relay.example'],
 			defaultProject: 'project',

@@ -9,7 +9,7 @@ import SecretTable from '$lib/components/SecretTable.svelte';
 describe('SecretTable', () => {
 	const mockSecrets = [
 		{ key: 'API_KEY', value: 'sk-test-123' },
-		{ key: 'DATABASE_URL', value: 'postgres://localhost/db' }
+		{ key: 'DATABASE_URL', value: 'postgres://localhost/db' },
 	];
 
 	beforeEach(() => {
@@ -89,7 +89,7 @@ describe('SecretTable', () => {
 	it('updates local state when editing a cell value', async () => {
 		const onEdit = vi.fn();
 		render(SecretTable, {
-			props: { secrets: mockSecrets, onEdit, editable: true }
+			props: { secrets: mockSecrets, onEdit, editable: true },
 		});
 
 		// Click edit button to enable editing

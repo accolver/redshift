@@ -14,13 +14,8 @@
 /*.html
   Cache-Control: no-cache
 
-# Homepage CSP - strict because the marketing homepage is static HTML without hydration scripts
-/
-  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' https://cloudflareinsights.com https://*.cloudflareinsights.com; img-src 'self' data: https:; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types 'none'; upgrade-insecure-requests
-
-# Admin SPA CSP - permits SvelteKit's static fallback bootstrap script
-/admin/*
-  Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' wss: https://relay.redshiftapp.com; img-src 'self' data: https:; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+# Content Security Policy is generated centrally by SvelteKit (`kit.csp`).
+# Dynamic Cloudflare responses use nonces; prerendered/static pages use hashes in a CSP meta tag.
 
 # Default security headers
 /*

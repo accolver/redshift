@@ -6,7 +6,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
-import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -71,7 +71,7 @@ function createNakNsec() {
 const compiledBinary = join(import.meta.dir, '../../../dist/redshift');
 
 describe('nak-backed bunker E2E', () => {
-	let relayProcess: ChildProcess | null = null;
+	let relayProcess: Bun.Subprocess | null = null;
 	let service: Nip46BunkerService | null = null;
 
 	afterEach(async () => {
@@ -79,7 +79,7 @@ describe('nak-backed bunker E2E', () => {
 		service = null;
 		if (relayProcess) {
 			relayProcess.kill('SIGTERM');
-			await new Promise((resolve) => relayProcess?.once('exit', resolve));
+			await Promise.race([relayProcess.exited, Bun.sleep(1000)]);
 			relayProcess = null;
 		}
 	});
@@ -93,8 +93,10 @@ describe('nak-backed bunker E2E', () => {
 		const port = await getFreePort();
 		const relay = `ws://127.0.0.1:${port}`;
 
-		relayProcess = spawn('nak', ['serve', '--hostname', '127.0.0.1', '--port', String(port)], {
-			stdio: ['ignore', 'pipe', 'pipe'],
+		relayProcess = Bun.spawn(['nak', 'serve', '--hostname', '127.0.0.1', '--port', String(port)], {
+			stdin: 'ignore',
+			stdout: 'ignore',
+			stderr: 'pipe',
 		});
 		await waitForRelay(relay);
 
@@ -166,8 +168,10 @@ describe('nak-backed bunker E2E', () => {
 		const signerPubkey = getPublicKey(signerSecretKey);
 		const port = await getFreePort();
 		const relay = `ws://127.0.0.1:${port}`;
-		relayProcess = spawn('nak', ['serve', '--hostname', '127.0.0.1', '--port', String(port)], {
-			stdio: ['ignore', 'pipe', 'pipe'],
+		relayProcess = Bun.spawn(['nak', 'serve', '--hostname', '127.0.0.1', '--port', String(port)], {
+			stdin: 'ignore',
+			stdout: 'ignore',
+			stderr: 'pipe',
 		});
 		await waitForRelay(relay);
 
@@ -187,9 +191,9 @@ describe('nak-backed bunker E2E', () => {
 		chmodSync(script, 0o755);
 
 		try {
-			const child = spawn(
-				compiledBinary,
+			const child = Bun.spawn(
 				[
+					compiledBinary,
 					'--config-dir',
 					configDir,
 					'run',
@@ -206,14 +210,16 @@ describe('nak-backed bunker E2E', () => {
 						...process.env,
 						REDSHIFT_BUNKER: `bunker://${signerPubkey}?relay=${encodeURIComponent(relay)}`,
 					},
-					stdio: ['ignore', 'pipe', 'pipe'],
+					stdin: 'ignore',
+					stdout: 'pipe',
+					stderr: 'pipe',
 				},
 			);
-			let stdout = '';
-			let stderr = '';
-			child.stdout?.on('data', (chunk) => (stdout += String(chunk)));
-			child.stderr?.on('data', (chunk) => (stderr += String(chunk)));
-			const exitCode = await new Promise<number | null>((resolve) => child.once('exit', resolve));
+			const [stdout, stderr, exitCode] = await Promise.all([
+				new Response(child.stdout).text(),
+				new Response(child.stderr).text(),
+				child.exited,
+			]);
 			expect(exitCode, stderr).toBe(0);
 			expect(stdout).toBe('bunker-binary-secret|unset');
 		} finally {

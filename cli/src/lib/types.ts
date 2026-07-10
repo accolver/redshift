@@ -45,6 +45,6 @@ export interface BunkerAuth {
 	relays: string[];
 	/** Optional secret for reconnection */
 	secret?: string;
-	/** Client secret key (hex encoded) */
-	clientSecretKey: string;
+	/** Runtime-only client secret key (hex encoded); never persisted in config */
+	clientSecretKey?: string;
 }
