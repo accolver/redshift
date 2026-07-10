@@ -46,9 +46,9 @@ This file is the exhaustive implementation register for every confirmed security
   - Every WebSocket gets fresh event/REQ buckets, allowing parallel-connection multiplication.
   - Required: shared authenticated-pubkey quota plus secondary connection limit.
 
-- [ ] **SEC-008 — Protect bunker pairing credentials.**
-  - `login --bunker` exposes `secret=` in argv; parse failures can echo the supplied URI.
-  - Required: hidden stdin/environment input, warning for flag use, query-string redaction in all errors.
+- [x] **SEC-008 — Protect bunker pairing credentials.**
+  - Secret-bearing pairing URIs are rejected from `login --bunker`; users must use hidden stdin or command-scoped environment input.
+  - Query credentials are redacted from failures, piped hidden input is parsed correctly, and CLI/docs no longer recommend putting one-time secrets in argv.
 
 - [x] **SEC-009 — Bound local bunker inbound work.**
   - Arbitrary senders can force signature verification, NIP-44 decrypt/encrypt, signing, and response publication.

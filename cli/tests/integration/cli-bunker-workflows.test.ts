@@ -141,14 +141,18 @@ describe('spawned CLI bunker workflows', () => {
 		const run = async (
 			args: string[],
 			extraEnv: Record<string, string> = {},
+			stdinInput?: string,
 		): Promise<CliResult> => {
 			const result = Bun.spawn({
 				cmd: ['bun', cliPath, ...args],
 				cwd: projectDir,
 				env: { ...baseEnv, ...extraEnv },
+				stdin: 'pipe',
 				stdout: 'pipe',
 				stderr: 'pipe',
 			});
+			if (stdinInput !== undefined) result.stdin.write(`${stdinInput}\n`);
+			result.stdin.end();
 			const [stdout, stderr, exitCode] = await Promise.all([
 				new Response(result.stdout).arrayBuffer(),
 				new Response(result.stderr).arrayBuffer(),
@@ -175,7 +179,7 @@ describe('spawned CLI bunker workflows', () => {
 		const fixture = await startFixture();
 		const project = `cli-test-${Date.now()}`;
 
-		let result = await fixture.run(['login', '--force', '--bunker', fixture.bunkerUrl]);
+		let result = await fixture.run(['login', '--force', '--bunker-stdin'], {}, fixture.bunkerUrl);
 		expectSuccess(result);
 		expect(result.stdout).toContain('Connected to bunker successfully');
 

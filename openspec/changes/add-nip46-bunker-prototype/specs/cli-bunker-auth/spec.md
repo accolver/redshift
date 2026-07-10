@@ -15,9 +15,9 @@ The CLI SHALL support authentication through a signer abstraction that works wit
 
 #### Scenario: Bunker auth works for secret listing
 
-- **GIVEN** the user has logged in with `redshift login --bunker bunker://...`
-- **AND** the stored bunker client key is available in the keychain or config fallback
-- **WHEN** the user runs `redshift secrets list`
+- **GIVEN** the user has logged in through hidden bunker input
+- **AND** the stored bunker client key is available in the OS keychain
+- **WHEN** the user runs `redshift secrets`
 - **THEN** the CLI SHALL reconnect to the bunker
 - **AND** request NIP-44 decryption through the signer
 - **AND** display secrets without requiring a local nsec
@@ -36,9 +36,10 @@ The CLI SHALL support both `bunker://` login and client-initiated Nostr Connect 
 
 #### Scenario: Login with bunker URI
 
-- **WHEN** the user runs `redshift login --bunker "bunker://<signer-pubkey>?relay=wss://relay.example&secret=abc"`
+- **WHEN** the user runs `redshift login --bunker-stdin` and provides a secret-bearing pairing URI through hidden input
 - **THEN** the CLI SHALL connect to the remote signer using NIP-46
 - **AND** call `get_public_key` to learn the user's actual signing pubkey
+- **AND** reject the same secret-bearing URI if passed through process argv
 - **AND** store reconnection metadata without storing the user's private key
 
 #### Scenario: Login with Nostr Connect pairing

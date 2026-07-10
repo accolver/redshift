@@ -143,7 +143,8 @@ export async function bunkerCommand(options: BunkerCommandOptions): Promise<void
 	console.log(`Relays: ${config.relays.join(', ')}`);
 	console.log('');
 	console.log('Connect with:');
-	console.log(`  redshift login --bunker "${bunkerUri(config)}"`);
+	console.log('  redshift login --bunker-stdin');
+	console.log('  Then paste the one-time pairing URI printed above.');
 	console.log('');
 	console.log(
 		'Security note: this prototype stores local keys in a 0600 plaintext file under ~/.redshift/bunker.',

@@ -66,8 +66,7 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
 
 	// Determine auth method
 	if (options.bunker) {
-		console.log('Warning: Passing a bunker URI via argv can expose its one-time pairing secret.');
-		console.log('Prefer --bunker-stdin or REDSHIFT_BUNKER.\n');
+		validateBunkerArgSafety(options.bunker);
 		await loginWithBunker(options.bunker);
 	} else if (options.bunkerStdin) {
 		const bunkerUrl = await promptHidden('Enter bunker URI: ');
@@ -147,6 +146,26 @@ export function sanitizeBunkerError(error: unknown): string {
 	return message
 		.replace(/(bunker:\/\/[^?\s"']+)\?[^\s"']+/gi, '$1?[REDACTED]')
 		.replace(/([?&]secret=)[^&\s"']+/gi, '$1[REDACTED]');
+}
+
+/** Secret-bearing pairing URIs must never be exposed through process argv. */
+export function validateBunkerArgSafety(bunkerUrl: string) {
+	if (/[?&]secret=/i.test(bunkerUrl)) {
+		throw new ValidationError(
+			'Secret-bearing bunker URIs are not accepted via --bunker; use --bunker-stdin or REDSHIFT_BUNKER.',
+		);
+	}
+	try {
+		const parsed = new URL(bunkerUrl);
+		if (parsed.protocol === 'bunker:' && parsed.searchParams.has('secret')) {
+			throw new ValidationError(
+				'Secret-bearing bunker URIs are not accepted via --bunker; use --bunker-stdin or REDSHIFT_BUNKER.',
+			);
+		}
+	} catch (error) {
+		if (error instanceof ValidationError) throw error;
+		// Normal bunker parsing reports malformed URLs with redacted errors later.
+	}
 }
 
 /** Login with a bunker pointer while retaining the client key only in keychain. */
@@ -249,39 +268,40 @@ async function promptHidden(prompt: string): Promise<string> {
 		process.stdin.setEncoding('utf8');
 
 		let input = '';
+		let settled = false;
 
-		const onData = (char: string) => {
-			// Handle Ctrl+C
-			if (char === '\u0003') {
-				process.stdout.write('\n');
-				process.exit(0);
-			}
+		const finish = () => {
+			if (settled) return;
+			settled = true;
+			if (process.stdin.isTTY) process.stdin.setRawMode(false);
+			process.stdin.pause();
+			process.stdin.removeListener('data', onData);
+			process.stdin.removeListener('end', finish);
+			process.stdout.write('\n');
+			resolve(input.trim());
+		};
 
-			// Handle Enter
-			if (char === '\r' || char === '\n') {
-				if (process.stdin.isTTY) {
-					process.stdin.setRawMode(false);
+		const onData = (chunk: string) => {
+			// Pipes commonly deliver the whole line in one chunk; process it character by character.
+			for (const char of chunk) {
+				if (char === '\u0003') {
+					process.stdout.write('\n');
+					process.exit(0);
 				}
-				process.stdin.pause();
-				process.stdin.removeListener('data', onData);
-				process.stdout.write('\n');
-				resolve(input.trim());
-				return;
-			}
-
-			// Handle Backspace
-			if (char === '\u007F' || char === '\b') {
-				if (input.length > 0) {
-					input = input.slice(0, -1);
+				if (char === '\r' || char === '\n') {
+					finish();
+					return;
 				}
-				return;
+				if (char === '\u007F' || char === '\b') {
+					if (input.length > 0) input = input.slice(0, -1);
+					continue;
+				}
+				input += char;
 			}
-
-			// Accumulate character (don't echo)
-			input += char;
 		};
 
 		process.stdin.on('data', onData);
+		process.stdin.once('end', finish);
 	});
 }
 

@@ -208,8 +208,8 @@ redshift login
 # Select "Use bunker URL"
 # Paste your bunker URI
 
-# Direct
-redshift login --bunker "bunker://..."
+# One-time pairing URI (hidden input; never exposed through process argv)
+redshift login --bunker-stdin
 
 # NostrConnect flow (scan QR with bunker app)
 redshift login --connect
@@ -276,11 +276,12 @@ echo $! > ~/.redshift/bunker.pid
 until grep -q 'bunker: bunker://' ~/.redshift/bunker.log; do sleep 0.2; done
 export REDSHIFT_BUNKER="$(awk '/bunker: bunker:\/\// { print $2 }' ~/.redshift/bunker.log | tail -n 1)"
 
-# Connect Redshift. The variable is quoted so &secret=... stays part of the URL.
-redshift login --bunker "$REDSHIFT_BUNKER"
+# Connect Redshift without placing the one-time pairing secret in process argv.
+redshift login --bunker-stdin
+# Paste the REDSHIFT_BUNKER value at the hidden prompt.
 
-# Re-authenticate an existing Redshift CLI profile with the same bunker URL.
-redshift login --force --bunker "$REDSHIFT_BUNKER"`} />
+# Re-authenticate an existing Redshift CLI profile through the same protected input path.
+redshift login --force --bunker-stdin`} />
 
 		<ProseHeading level={4} id="nak-teams">Teams Setup (Persistent)</ProseHeading>
 		<p>

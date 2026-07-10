@@ -39,7 +39,7 @@ Authenticate with your Nostr identity. Supports multiple methods:
 ```bash
 redshift login                              # Interactive (choose method)
 redshift login --nsec nsec1...              # Direct private key
-redshift login --bunker <bunker-url>        # NIP-46 remote signer
+redshift login --bunker-stdin               # NIP-46 one-time pairing URI (hidden input)
 redshift login --connect                    # Generate NostrConnect QR
 redshift login --overwrite                  # Re-authenticate
 ```
@@ -184,15 +184,16 @@ directly.
 ### Using a Bunker URL
 
 If you have a bunker running (e.g., Amber, nsec.app, or `nak bunker`), it will
-display a `bunker://` URL. Copy that URL and pass it to the login command:
+display a one-time `bunker://` URL. Paste that URL through hidden input so its
+`secret=` value never appears in the process list:
 
 ```bash
-redshift login --bunker "bunker://pubkey?relay=wss://relay.example&secret=xxx"
+redshift login --bunker-stdin
 ```
 
-> **Important**: Always wrap the bunker URL in **quotes**! The `&` and other
-> special characters will be interpreted by your shell otherwise, causing errors
-> like `zsh: no matches found`.
+The `--bunker` flag accepts only secret-free restoration pointers. For
+non-persistent CI authentication, provide `REDSHIFT_BUNKER` to the command that
+needs access.
 
 ### Using NostrConnect (Client-Initiated)
 
@@ -219,8 +220,8 @@ nak serve --port 10547
 nak bunker --sec $TEST_KEY ws://localhost:10547
 # Note the bunker:// URL printed
 
-# Login with the bunker URL
-redshift login --bunker "bunker://..."
+# Login, then paste the bunker URL at the hidden prompt
+redshift login --bunker-stdin
 ```
 
 ## Architecture
@@ -389,8 +390,8 @@ nak serve --port 10547
 nak bunker --sec $(nak key generate) ws://localhost:10547
 # Copy the bunker:// URL from output
 
-# Terminal 3: Test login
-REDSHIFT_CONFIG_DIR=/tmp/redshift-test bun run dev -- login --bunker "bunker://..."
+# Terminal 3: Test login, then paste the bunker URL at the hidden prompt
+REDSHIFT_CONFIG_DIR=/tmp/redshift-test bun run dev -- login --bunker-stdin
 
 # Verify config was saved
 cat /tmp/redshift-test/config.json

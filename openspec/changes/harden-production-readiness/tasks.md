@@ -43,6 +43,7 @@ Every implementation task is tests-first. Check an audit item only after its foc
 - [ ] 3.9 Add keychain-failure and legacy-plaintext migration tests (SEC-013).
 - [ ] 3.10 Stop new plaintext credential fallback, warn/migrate legacy config, and preserve command-scoped auth path (SEC-013).
 - [x] 3.11 Reject unsupported Windows upgrade in pure platform tests and implementation (CLI-012).
+- [x] 3.12 Reject secret-bearing bunker pairing URIs from argv, support hidden piped input, and update user guidance (SEC-008).
 
 ## 4. Relay Integrity, Authorization, Quotas, and Reliability
 

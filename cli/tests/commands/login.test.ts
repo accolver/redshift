@@ -13,7 +13,13 @@ import { nsecEncode } from 'nostr-tools/nip19';
 import { generateSecretKey } from 'nostr-tools/pure';
 
 // We need to test the helper functions that are exported
-import { persistNsecCredential, sanitizeBunkerError, tryAuth } from '../../src/commands/login';
+import {
+	loginCommand,
+	persistNsecCredential,
+	sanitizeBunkerError,
+	tryAuth,
+	validateBunkerArgSafety,
+} from '../../src/commands/login';
 import { clearAuth, loadConfig, saveConfig } from '../../src/lib/config';
 
 describe('Login Command', () => {
@@ -133,6 +139,24 @@ describe('Login Command', () => {
 			const message = sanitizeBunkerError(error);
 			expect(message).not.toContain('pairing-secret');
 			expect(message).toContain('bunker://abc?[REDACTED]');
+		});
+
+		it('rejects secret-bearing bunker URIs passed through argv', async () => {
+			await expect(
+				loginCommand({
+					force: true,
+					bunker: 'bunker://abc?relay=wss%3A%2F%2Frelay.test&secret=pairing-secret',
+				}),
+			).rejects.toThrow('--bunker-stdin');
+			expect(() =>
+				validateBunkerArgSafety('bunker://abc?relay=wss%3A%2F%2Frelay.test&secret=pairing-secret'),
+			).toThrow('--bunker-stdin');
+			expect(() => validateBunkerArgSafety('not-a-uri?secret=pairing-secret')).toThrow(
+				'--bunker-stdin',
+			);
+			expect(() =>
+				validateBunkerArgSafety('bunker://abc?relay=wss%3A%2F%2Frelay.test'),
+			).not.toThrow();
 		});
 	});
 
