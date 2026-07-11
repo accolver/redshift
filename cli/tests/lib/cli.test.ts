@@ -148,6 +148,26 @@ describe('CLI Framework', () => {
 		});
 	});
 
+	describe('parse() - recovery command', () => {
+		it('parses list and exact-event operations', () => {
+			expect(cli.parse(['recovery', 'list']).subcommand).toBe('list');
+			const retry = cli.parse(['recovery', 'retry', 'a'.repeat(64)]);
+			expect(retry.command).toBe('recovery');
+			expect(retry.positionals).toEqual(['a'.repeat(64)]);
+		});
+
+		it('requires exactly one event ID for show, retry, and remove', () => {
+			for (const subcommand of ['show', 'retry', 'remove']) {
+				expect(() => cli.parse(['recovery', subcommand])).toThrow(
+					'Missing required positional argument',
+				);
+				expect(() => cli.parse(['recovery', subcommand, 'a'.repeat(64), 'extra'])).toThrow(
+					'Too many positional arguments',
+				);
+			}
+		});
+	});
+
 	describe('parse() - secrets command', () => {
 		it('parses secrets with no args (list)', () => {
 			const result = cli.parse(['secrets']);

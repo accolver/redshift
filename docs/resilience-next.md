@@ -1,23 +1,24 @@
 # Next Resilience Improvements
 
-These improvements are the next production-hardening tranche after the first attested individual release. They are **not shipped guarantees** and must receive separate Telos/OpenSpec approval before implementation.
+These improvements follow the first attested individual release. Per-relay publication recovery is implemented in the current development branch but is **not a published-release guarantee** until its full gates pass and a new release is certified. Sections 2–5 remain unshipped work that requires separate Telos/OpenSpec approval.
 
-## 1. Per-relay health and publication recovery
+## 1. Per-relay health and publication recovery — implementation candidate
 
-### Current limitation
+### Implemented behavior
 
-The CLI reports typed majority-quorum failure, but users do not yet receive a durable per-relay recovery plan after partial publication.
+- CLI and browser classify final relay outcomes as accepted, permanently rejected, or unavailable; browser retry exposes a transient retrying state.
+- The exact signed encrypted event is durably recorded before network publication.
+- Explicit retry targets unavailable relays only and never signs a replacement logical version.
+- Quorum success is reported separately from full configured-relay redundancy.
+- CLI records are atomic owner-only files; browser records are scoped to session storage and cleared on logout.
+- Permanent rejection remains inspectable until the user explicitly removes the local notice.
 
-### Intended guarantee
+### Evidence
 
-- Show accepted, rejected, unavailable, retrying, and permanently failed relay states.
-- Preserve the exact signed event needed to complete a partial publication without generating conflicting state.
-- Allow an explicit retry to missing relays while preventing duplicate logical versions.
-- Explain when quorum succeeded but redundancy remains degraded.
+- Compiled CLI E2E covers accepted/rejected/unavailable below-quorum publication, recovery, same-byte/event-ID retry, convergence, file modes, and cleanup.
+- Five-relay Playwright covers three-relay majority success, permanent rejection, outage, reload persistence, unavailable-only retry, per-relay publish counts, recovered-relay reads, and logout cleanup.
 
-### Required evidence
-
-Compiled CLI and browser E2E with three or more relays covering outage, permanent rejection, reconnect, partial acceptance, retry, and deterministic read convergence.
+This is local publication recovery, not automatic backup, retention, history, erasure, or an availability guarantee.
 
 ## 2. Encrypted backup and recovery
 

@@ -83,6 +83,7 @@ jobs:
           tests/integration/upgrade-binary-e2e.test.ts
           tests/integration/installer-integrity.test.ts
           tests/integration/nak-bunker-e2e.test.ts
+          tests/integration/relay-publication-recovery.test.ts
       - name: Run browser release gates
         run: |
           cd web

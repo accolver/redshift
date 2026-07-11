@@ -18,9 +18,16 @@ import {
 	wrapSecretsWithSigner,
 } from './crypto';
 import type { AsyncGiftWrapResult, GiftWrapResult, UnwrapResult } from './crypto';
-import { NotConnectedError, ValidationError } from './errors';
-import type { RelayPool } from './relay';
-import { createRelayPool, filterGiftWraps } from './relay';
+import { NotConnectedError, RecoveryError, ValidationError } from './errors';
+import {
+	createProvisionalRecoveryRecord,
+	removeRecoveryRecord,
+	saveRecoveryRecord,
+	updateRecoveryRecord,
+} from './publication-recovery';
+import type { RecoveryRecord } from './publication-recovery';
+import type { PublishReport, RelayPool } from './relay';
+import { PublishQuorumError, createRelayPool, filterGiftWraps } from './relay';
 import type { NostrEvent, SecretBundle } from './types';
 
 /**
@@ -33,6 +40,17 @@ export interface SecretManagerSigner {
 	nip44Encrypt(pubkey: string, plaintext: string): Promise<string>;
 	nip44Decrypt(pubkey: string, ciphertext: string): Promise<string>;
 	close?(): Promise<void>;
+}
+
+export interface SecretManagerOptions {
+	createPool?: typeof createRelayPool;
+	saveRecovery?: (record: RecoveryRecord, expectedRevision?: string) => Promise<void>;
+	removeRecovery?: (eventId: string) => Promise<void>;
+}
+
+export interface SecretPublication {
+	event: NostrEvent;
+	report: PublishReport;
 }
 
 /**
@@ -75,6 +93,8 @@ export class SecretManager {
 	private signer: SecretManagerSigner | null = null;
 	private publicKey: string;
 	private pool: RelayPool | null = null;
+	private lastPublication: SecretPublication | null = null;
+	private readonly options: Required<SecretManagerOptions>;
 
 	/** Decryption cache keyed by event ID - avoids re-decrypting known events */
 	private decryptionCache = new Map<string, DecryptionCacheEntry | null>();
@@ -82,7 +102,12 @@ export class SecretManager {
 	/** Short-lived cache for fetchAllSecrets Promise deduplication */
 	private fetchAllCache: FetchAllCache | null = null;
 
-	constructor(auth: Uint8Array | SecretManagerSigner) {
+	constructor(auth: Uint8Array | SecretManagerSigner, options: SecretManagerOptions = {}) {
+		this.options = {
+			createPool: options.createPool ?? createRelayPool,
+			saveRecovery: options.saveRecovery ?? saveRecoveryRecord,
+			removeRecovery: options.removeRecovery ?? removeRecoveryRecord,
+		};
 		if (auth instanceof Uint8Array) {
 			this.privateKey = auth.slice();
 			this.publicKey = getPublicKey(auth);
@@ -108,12 +133,16 @@ export class SecretManager {
 		return this.publicKey;
 	}
 
+	getLastPublication(): SecretPublication | null {
+		return this.lastPublication;
+	}
+
 	/**
 	 * Connect to relays
 	 */
 	connect(relayUrls: string[]): void {
 		if (this.pool) this.pool.close();
-		this.pool = createRelayPool(relayUrls, {
+		this.pool = this.options.createPool(relayUrls, {
 			authSigner: async (event) => {
 				if (this.privateKey) return finalizeEvent(event, this.privateKey);
 				if (!this.signer) throw new Error('No signer available for relay authentication');
@@ -367,12 +396,7 @@ export class SecretManager {
 
 		const dTag = createDTag(projectId, environment);
 		const { event } = await this.wrapSecrets(secrets, dTag);
-
-		await this.pool.publish(event);
-
-		// Invalidate caches so next fetch picks up the new event
-		this.clearCache();
-
+		await this.publishWithRecovery(event, projectId, environment);
 		return event;
 	}
 
@@ -380,6 +404,11 @@ export class SecretManager {
 	 * Delete secrets by publishing a tombstone (empty bundle).
 	 * Clears the decryption cache to ensure subsequent fetches see fresh data.
 	 */
+	async retryPublication(event: NostrEvent, relays: string[]): Promise<PublishReport> {
+		if (!this.pool) throw new NotConnectedError();
+		return this.pool.publishTo(relays, event, Math.max(1, relays.length));
+	}
+
 	async deleteSecrets(projectId: string, environment: string): Promise<NostrEvent> {
 		if (!this.pool) {
 			throw new NotConnectedError();
@@ -387,13 +416,59 @@ export class SecretManager {
 
 		const dTag = createDTag(projectId, environment);
 		const { event } = await this.wrapSecrets({}, dTag);
-
-		await this.pool.publish(event);
-
-		// Invalidate caches so next fetch picks up the tombstone
-		this.clearCache();
-
+		await this.publishWithRecovery(event, projectId, environment);
 		return event;
+	}
+
+	private async publishWithRecovery(
+		event: NostrEvent,
+		projectId: string,
+		environment: string,
+	): Promise<PublishReport> {
+		if (!this.pool) throw new NotConnectedError();
+		const provisional = createProvisionalRecoveryRecord({
+			ownerPubkey: this.publicKey,
+			project: projectId,
+			environment,
+			event,
+			relays: this.pool.relays,
+		});
+		await this.options.saveRecovery(provisional);
+
+		let report: PublishReport;
+		try {
+			report = await this.pool.publish(event);
+		} catch (error) {
+			if (!(error instanceof PublishQuorumError)) throw error;
+			report = error.report;
+			this.lastPublication = { event, report };
+			if (report.accepted.length > 0) this.clearCache();
+			await this.persistFinalRecovery(provisional, report);
+			throw error;
+		}
+
+		this.lastPublication = { event, report };
+		this.clearCache();
+		await this.persistFinalRecovery(provisional, report);
+		return report;
+	}
+
+	private async persistFinalRecovery(
+		provisional: RecoveryRecord,
+		report: PublishReport,
+	): Promise<void> {
+		const finalRecord = updateRecoveryRecord(provisional, report);
+		try {
+			await this.options.saveRecovery(finalRecord, provisional.revision);
+			if (report.outcomes.every(({ state }) => state === 'accepted')) {
+				await this.options.removeRecovery(provisional.event.id);
+			}
+		} catch (error) {
+			throw new RecoveryError(
+				`Remote publication may have succeeded, but local recovery persistence failed for event ${provisional.event.id}. Do not create a replacement event automatically.`,
+				error,
+			);
+		}
 	}
 }
 

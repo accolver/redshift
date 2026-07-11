@@ -87,8 +87,7 @@ redshift run -p myapp -c prod -- docker-compose up
 
 Complex values (objects/arrays) are automatically JSON-stringified.
 
-Use `redshift run --help` to see all available options including `--mount`,
-`--fallback`, and `--preserve-env`.
+Use `redshift run --help` to see the supported execution and environment options.
 
 ### `redshift secrets`
 
@@ -116,6 +115,25 @@ redshift secrets delete OLD_KEY
 # Download as .env file
 redshift secrets download > .env
 ```
+
+### `redshift recovery`
+
+Inspect and complete encrypted events that reached only part of the configured relay set.
+Redshift writes the exact signed event before the first network attempt, so retry never creates a
+conflicting logical version.
+
+```bash
+redshift recovery list
+redshift recovery show <event-id>
+redshift recovery retry <event-id>   # Same owner; unavailable relays only
+redshift recovery remove <event-id>  # Removes only the local notice
+```
+
+Recovery records live under `~/.redshift/recovery/` (or `REDSHIFT_CONFIG_DIR`) in
+owner-only files. They contain encrypted relay ciphertext and publication metadata—never the nsec,
+bunker key, passphrase, or decrypted secret. A permanently rejected relay remains visible until the
+record is explicitly removed. Recovery is not a backup and cannot erase ciphertext retained by a
+relay.
 
 ### `redshift serve`
 
@@ -170,8 +188,6 @@ These flags work with any command:
 | `--help`       | `-h`  | Show help for command     |
 | `--version`    | `-v`  | Show CLI version          |
 | `--json`       |       | Output JSON format        |
-| `--silent`     |       | Disable info messages     |
-| `--debug`      |       | Show debug output         |
 | `--config-dir` |       | Override config directory |
 
 ## NIP-46 Bunker Authentication

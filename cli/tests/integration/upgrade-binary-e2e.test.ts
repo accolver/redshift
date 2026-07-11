@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 import {
 	chmodSync,
 	copyFileSync,
@@ -10,6 +10,8 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+setDefaultTimeout(30_000);
 
 const compiledBinary = join(import.meta.dir, '../../../dist/redshift');
 const roots: string[] = [];

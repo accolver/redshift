@@ -23,6 +23,8 @@ import {
 import { nip19 } from 'nostr-tools';
 import GlobalSearch from '$lib/components/GlobalSearch.svelte';
 import LoginDialog from '$lib/components/LoginDialog.svelte';
+import PublicationRecoveryPanel from '$lib/components/PublicationRecoveryPanel.svelte';
+import { restorePublicationRecovery } from '$lib/stores/publication-recovery.svelte';
 
 let dropdownOpen = $state(false);
 let relayDropdownOpen = $state(false);
@@ -88,6 +90,7 @@ $effect(() => {
 		const lastPubkey = untrack(() => lastConnectedPubkey);
 		if (lastPubkey !== pubkey) {
 			lastConnectedPubkey = pubkey;
+			restorePublicationRecovery(pubkey);
 			// Connect to relays (check for managed relay access first)
 			(async () => {
 				const relays = await getRelaysForUser(pubkey);
@@ -216,10 +219,11 @@ function getDisplayName(pubkey: string): string {
 								<button
 									type="button"
 									class="flex w-full cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
-									onclick={() => {
+									onclick={async () => {
 										dropdownOpen = false;
-										authDisconnect();
-										goto('/');
+										nostrDisconnect();
+										await authDisconnect();
+										await goto('/');
 									}}
 								>
 									<LogOut class="size-4" />
@@ -284,6 +288,9 @@ function getDisplayName(pubkey: string): string {
 
 	<!-- Admin Content - same max-width as header -->
 	<main class="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-6 sm:py-8">
+		<div class="mb-4 sm:mb-6">
+			<PublicationRecoveryPanel />
+		</div>
 		{@render children()}
 	</main>
 </div>

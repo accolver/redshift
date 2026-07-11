@@ -12,6 +12,7 @@ export {
 	wrapSecrets,
 	unwrapSecrets,
 	unwrapGiftWrap,
+	validateGiftWrapEnvelope,
 	createTombstone,
 	wrapSecretsWithSigner,
 	unwrapGiftWrapWithSigner,

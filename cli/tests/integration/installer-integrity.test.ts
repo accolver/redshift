@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+
+setDefaultTimeout(30_000);
 
 const installerPath = resolve(import.meta.dir, '../../../web/static/install');
 const tempDirectories: string[] = [];

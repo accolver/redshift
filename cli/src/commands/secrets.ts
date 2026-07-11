@@ -8,6 +8,7 @@ import { chmodSync } from 'node:fs';
 import { formatEnvLine, parseEnvFileDetailed } from '@redshift/crypto';
 import { getRelays, loadProjectConfig } from '../lib/config';
 import { ValidationError } from '../lib/errors';
+import { PublishQuorumError } from '../lib/relay';
 import { SecretManager, mergeSecrets, validateInjectableSecretName } from '../lib/secret-manager';
 import {
 	formatValidationError,
@@ -157,6 +158,13 @@ export async function secretsCommand(options: SecretsOptions): Promise<void> {
 				console.error('Available: list, get, set, delete, download');
 				process.exit(1);
 		}
+	} catch (error) {
+		if (error instanceof PublishQuorumError) {
+			console.error(
+				`Publication failed below quorum. Exact encrypted event ${error.event.id} is preserved locally; run \`redshift recovery show ${error.event.id}\`.`,
+			);
+		}
+		throw error;
 	} finally {
 		await manager.close();
 	}
@@ -255,6 +263,7 @@ async function setSecret(
 	await manager.publishSecrets(projectId, environment, updatedSecrets);
 
 	console.log(`✓ Set ${key} in ${projectId}/${environment}`);
+	printPublicationWarning(manager);
 }
 
 /**
@@ -282,6 +291,7 @@ async function deleteSecret(
 	await manager.publishSecrets(projectId, environment, updatedSecrets);
 
 	console.log(`✓ Deleted ${key} from ${projectId}/${environment}`);
+	printPublicationWarning(manager);
 }
 
 /**
@@ -373,6 +383,22 @@ async function uploadSecrets(
 	await manager.publishSecrets(projectId, environment, updatedSecrets);
 
 	console.log(`✓ Uploaded ${newKeys.length} secrets from ${envFile}`);
+	printPublicationWarning(manager);
+}
+
+function printPublicationWarning(manager: SecretManager): void {
+	const publication = manager.getLastPublication();
+	if (!publication || publication.report.outcomes.every(({ state }) => state === 'accepted'))
+		return;
+	console.warn(
+		`Warning: saved with degraded relay redundancy (${publication.report.accepted.length}/${publication.report.outcomes.length} relays accepted).`,
+	);
+	for (const outcome of publication.report.outcomes.filter(({ state }) => state !== 'accepted')) {
+		console.warn(
+			`  ${outcome.relay}: ${outcome.state}${outcome.reason ? ` (${outcome.reason})` : ''}`,
+		);
+	}
+	console.warn(`Run \`redshift recovery show ${publication.event.id}\` to inspect or retry.`);
 }
 
 /**

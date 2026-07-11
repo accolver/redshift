@@ -94,6 +94,17 @@ export class ValidationError extends RedshiftError {
 	}
 }
 
+/** Local exact-event publication recovery failures. */
+export class RecoveryError extends RedshiftError {
+	readonly originalError: unknown;
+
+	constructor(message: string, originalError?: unknown) {
+		super(message, 'RECOVERY_ERROR');
+		this.name = 'RecoveryError';
+		this.originalError = originalError;
+	}
+}
+
 /**
  * Connection state error (operation requires connection)
  */

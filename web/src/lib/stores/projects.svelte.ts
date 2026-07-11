@@ -138,7 +138,10 @@ export async function createProject(slug: string, displayName: string): Promise<
 	const signedEvent = await signEvent(unsignedEvent);
 
 	// Publish to relays (also adds to local EventStore)
-	await publishEvent(signedEvent);
+	await publishEvent(signedEvent, undefined, {
+		ownerPubkey: auth.pubkey,
+		project: normalizedSlug,
+	});
 
 	// Return the project object
 	const project: Project = {
@@ -200,7 +203,10 @@ export async function deleteProject(id: string): Promise<void> {
 	};
 
 	const signedTombstone = await signEvent(tombstoneEvent);
-	await publishEvent(signedTombstone);
+	await publishEvent(signedTombstone, undefined, {
+		ownerPubkey: auth.pubkey,
+		project: project.slug,
+	});
 
 	// NIP-09 is valid only for this owner-authored project metadata address.
 	const deletionEvent = {
@@ -214,7 +220,10 @@ export async function deleteProject(id: string): Promise<void> {
 	};
 
 	const signedDeletion = await signEvent(deletionEvent);
-	await publishEvent(signedDeletion);
+	await publishEvent(signedDeletion, undefined, {
+		ownerPubkey: auth.pubkey,
+		project: project.slug,
+	});
 
 	// Remove local state only after every required publication reached quorum.
 	projectsState.projects = projectsState.projects.filter((p) => p.id !== id);
@@ -258,7 +267,10 @@ export async function updateProject(
 
 	// Sign and publish using the current auth method
 	const signedEvent = await signEvent(unsignedEvent);
-	await publishEvent(signedEvent);
+	await publishEvent(signedEvent, undefined, {
+		ownerPubkey: auth.pubkey,
+		project: project.slug,
+	});
 
 	// Return updated project
 	return {
@@ -327,7 +339,11 @@ export async function addEnvironment(
 
 	// Sign and publish using the current auth method
 	const signedEvent = await signEvent(unsignedEvent);
-	await publishEvent(signedEvent);
+	await publishEvent(signedEvent, undefined, {
+		ownerPubkey: auth.pubkey,
+		project: project.slug,
+		environment: newEnv.slug,
+	});
 
 	return newEnv;
 }
@@ -372,7 +388,11 @@ export async function deleteEnvironment(projectId: string, slug: string): Promis
 
 	// Sign and publish using the current auth method
 	const signedEvent = await signEvent(unsignedEvent);
-	await publishEvent(signedEvent);
+	await publishEvent(signedEvent, undefined, {
+		ownerPubkey: auth.pubkey,
+		project: project.slug,
+		environment: slug,
+	});
 }
 
 /**

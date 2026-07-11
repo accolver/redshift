@@ -66,7 +66,8 @@ phase "Release-critical compiled lifecycle tests"
     tests/integration/binary-cli.test.ts \
     tests/integration/upgrade-binary-e2e.test.ts \
     tests/integration/installer-integrity.test.ts \
-    tests/integration/nak-bunker-e2e.test.ts
+    tests/integration/nak-bunker-e2e.test.ts \
+    tests/integration/relay-publication-recovery.test.ts
 )
 
 phase "Hosted and embedded browser journeys"
