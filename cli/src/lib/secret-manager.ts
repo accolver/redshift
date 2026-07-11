@@ -8,6 +8,7 @@
 import type { EventTemplate, VerifiedEvent } from 'nostr-tools/core';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import {
+	MAX_RUMOR_FUTURE_SKEW_SECONDS,
 	compareSecretVersions,
 	createDTag,
 	parseDTag,
@@ -17,7 +18,7 @@ import {
 	wrapSecrets as wrapSecretsToEvent,
 	wrapSecretsWithSigner,
 } from './crypto';
-import type { AsyncGiftWrapResult, GiftWrapResult, UnwrapResult } from './crypto';
+import type { AsyncGiftWrapResult, GiftWrapResult, UnwrapResult, WrapOptions } from './crypto';
 import { NotConnectedError, RecoveryError, ValidationError } from './errors';
 import {
 	createProvisionalRecoveryRecord,
@@ -56,7 +57,7 @@ export interface SecretPublication {
 /**
  * Cached secret entry with metadata
  */
-interface SecretEntry {
+export interface SecretStateSnapshot {
 	secrets: SecretBundle;
 	dTag: string;
 	createdAt: number;
@@ -76,6 +77,16 @@ interface DecryptionCacheEntry {
 /**
  * Short-lived cache for fetchAllSecrets Promise deduplication
  */
+class SignerDecryptionError extends Error {
+	readonly originalError: unknown;
+
+	constructor(originalError: unknown) {
+		super('Remote signer decryption failed');
+		this.name = 'SignerDecryptionError';
+		this.originalError = originalError;
+	}
+}
+
 interface FetchAllCache {
 	promise: Promise<Map<string, SecretBundle>>;
 	expiresAt: number;
@@ -189,9 +200,11 @@ export class SecretManager {
 	async wrapSecrets(
 		secrets: SecretBundle,
 		dTag: string,
+		options?: WrapOptions,
 	): Promise<GiftWrapResult | AsyncGiftWrapResult> {
+		validatePublishTimestamp(options?.createdAt);
 		if (this.privateKey) {
-			return wrapSecretsToEvent(secrets, this.privateKey, dTag);
+			return wrapSecretsToEvent(secrets, this.privateKey, dTag, options);
 		}
 		if (!this.signer) {
 			throw new Error('No signing method available');
@@ -202,6 +215,7 @@ export class SecretManager {
 			dTag,
 			(pubkey, plaintext) => this.signer!.nip44Encrypt(pubkey, plaintext),
 			async (event) => this.signer!.signEvent(event),
+			options,
 		);
 	}
 
@@ -225,9 +239,14 @@ export class SecretManager {
 		if (!this.signer) {
 			throw new Error('No decryption method available');
 		}
-		return unwrapGiftWrapWithSigner(event, this.publicKey, (pubkey, ciphertext) =>
-			this.signer!.nip44Decrypt(pubkey, ciphertext),
-		);
+		return unwrapGiftWrapWithSigner(event, this.publicKey, async (pubkey, ciphertext) => {
+			try {
+				return await this.signer!.nip44Decrypt(pubkey, ciphertext);
+			} catch (error) {
+				if (isInvalidNip44CiphertextError(error)) throw error;
+				throw new SignerDecryptionError(error);
+			}
+		});
 	}
 
 	/**
@@ -276,10 +295,27 @@ export class SecretManager {
 		return promise;
 	}
 
-	/**
-	 * Internal implementation of fetchAllSecrets with decryption caching.
-	 */
+	/** Return latest authenticated state, including logical tombstones and version evidence. */
+	async fetchAllSecretStates(): Promise<Map<string, SecretStateSnapshot>> {
+		const states = await this._fetchAllSecretStatesInternal();
+		return new Map(
+			[...states].map(([dTag, state]) => [dTag, { ...state, secrets: { ...state.secrets } }]),
+		);
+	}
+
 	private async _fetchAllSecretsInternal(): Promise<Map<string, SecretBundle>> {
+		const states = await this._fetchAllSecretStatesInternal();
+		const secretsMap = new Map<string, SecretBundle>();
+		for (const [dTag, entry] of states) {
+			if (Object.keys(entry.secrets).length > 0) secretsMap.set(dTag, { ...entry.secrets });
+		}
+		return secretsMap;
+	}
+
+	/**
+	 * Internal implementation of authenticated state selection with decryption caching.
+	 */
+	private async _fetchAllSecretStatesInternal(): Promise<Map<string, SecretStateSnapshot>> {
 		if (!this.pool) {
 			throw new NotConnectedError();
 		}
@@ -288,7 +324,7 @@ export class SecretManager {
 		const giftWraps = await this.pool.query(filter);
 
 		// Unwrap all events and track latest by d-tag
-		const latestByDTag = new Map<string, SecretEntry>();
+		const latestByDTag = new Map<string, SecretStateSnapshot>();
 
 		for (const gw of giftWraps) {
 			// Check decryption cache first
@@ -319,21 +355,16 @@ export class SecretManager {
 				if (!existing || compareSecretVersions(entry, existing) > 0) {
 					latestByDTag.set(result.dTag, entry);
 				}
-			} catch {
-				// Cache the failure so we don't re-attempt (event not for us)
+			} catch (error) {
+				if (error instanceof SignerDecryptionError) {
+					throw new ValidationError('Remote signer could not decrypt the observed secret state');
+				}
+				// Cache cryptographically invalid or unrelated events, but never transient signer failures.
 				this.decryptionCache.set(gw.id, null);
 			}
 		}
 
-		// Convert to Map<string, SecretBundle>
-		const secretsMap = new Map<string, SecretBundle>();
-		for (const [dTag, entry] of latestByDTag) {
-			if (Object.keys(entry.secrets).length > 0) {
-				secretsMap.set(dTag, entry.secrets);
-			}
-		}
-
-		return secretsMap;
+		return latestByDTag;
 	}
 
 	/**
@@ -389,13 +420,15 @@ export class SecretManager {
 		projectId: string,
 		environment: string,
 		secrets: SecretBundle,
+		options?: WrapOptions,
 	): Promise<NostrEvent> {
 		if (!this.pool) {
 			throw new NotConnectedError();
 		}
+		this.lastPublication = null;
 
 		const dTag = createDTag(projectId, environment);
-		const { event } = await this.wrapSecrets(secrets, dTag);
+		const { event } = await this.wrapSecrets(secrets, dTag, options);
 		await this.publishWithRecovery(event, projectId, environment);
 		return event;
 	}
@@ -413,6 +446,7 @@ export class SecretManager {
 		if (!this.pool) {
 			throw new NotConnectedError();
 		}
+		this.lastPublication = null;
 
 		const dTag = createDTag(projectId, environment);
 		const { event } = await this.wrapSecrets({}, dTag);
@@ -528,6 +562,48 @@ export function injectSecrets(
 	}
 
 	return result;
+}
+
+function isInvalidNip44CiphertextError(error: unknown) {
+	if (!(error instanceof Error)) return false;
+	const message = error.message.toLowerCase();
+	return [
+		'invalid mac',
+		'invalid padding',
+		'invalid payload',
+		'invalid payload length',
+		'invalid data length',
+		'invalid base64',
+		'unknown encryption version',
+	].some((marker) => message.includes(marker));
+}
+
+function validatePublishTimestamp(createdAt?: number) {
+	if (createdAt === undefined) return;
+	const now = Math.floor(Date.now() / 1000);
+	if (
+		!Number.isSafeInteger(createdAt) ||
+		createdAt < 0 ||
+		createdAt > now + MAX_RUMOR_FUTURE_SKEW_SECONDS
+	) {
+		throw new ValidationError('Secret publication timestamp is outside the allowed range');
+	}
+}
+
+export function getNextSecretTimestamp(
+	observedCreatedAt?: number,
+	now = Math.floor(Date.now() / 1000),
+) {
+	if (!Number.isSafeInteger(now) || now < 0) throw new ValidationError('Invalid current timestamp');
+	if (observedCreatedAt === undefined) return now;
+	if (!Number.isSafeInteger(observedCreatedAt) || observedCreatedAt < 0) {
+		throw new ValidationError('Invalid observed secret timestamp');
+	}
+	const next = Math.max(now, observedCreatedAt + 1);
+	if (next > now + MAX_RUMOR_FUTURE_SKEW_SECONDS) {
+		throw new ValidationError('Cannot create a strictly newer secret within the future-skew bound');
+	}
+	return next;
 }
 
 /**

@@ -1,4 +1,3 @@
-import { Database } from 'bun:sqlite';
 import { constants } from 'node:fs';
 import { link, lstat, mkdir, open, readdir, rename, unlink } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -7,6 +6,7 @@ import { getConfigDir, normalizeRelayUrls } from './config';
 import { validateGiftWrapEnvelope } from './crypto';
 import { RecoveryError } from './errors';
 import type { PublishReport, RelayPublishOutcome } from './relay';
+import { acquireSqliteStorageLock } from './storage-lock';
 import type { NostrEvent } from './types';
 import { validateEnvironment, validateProjectId } from './validation';
 
@@ -14,7 +14,6 @@ export const RECOVERY_SCHEMA_VERSION = 1 as const;
 const EVENT_ID_PATTERN = /^[0-9a-f]{64}$/;
 const PUBKEY_PATTERN = /^[0-9a-f]{64}$/;
 const RECORD_SUFFIX = '.json';
-let storageMutexTail: Promise<void> = Promise.resolve();
 
 export interface RecoveryRecord {
 	version: typeof RECOVERY_SCHEMA_VERSION;
@@ -425,50 +424,17 @@ function reportFromOutcomes(eventId: string, outcomes: RelayPublishOutcome[]): P
 }
 
 async function acquireStorageLock(): Promise<() => Promise<void>> {
-	const releaseInProcess = await acquireInProcessStorageLock();
-	const lockPath = join(getRecoveryDir(), '.recovery-lock.sqlite');
-	let database: Database | null = null;
+	const releaseLock = await acquireSqliteStorageLock(
+		join(getRecoveryDir(), '.recovery-lock.sqlite'),
+		(message, error) => new RecoveryError(`Recovery ${message.toLowerCase()}`, error),
+	);
 	try {
-		const bootstrap = await open(
-			lockPath,
-			constants.O_RDWR | constants.O_CREAT | constants.O_NOFOLLOW,
-			0o600,
-		);
-		try {
-			const entry = await bootstrap.stat();
-			if (!entry.isFile()) throw new RecoveryError('Recovery storage lock must be a regular file');
-			await bootstrap.chmod(0o600);
-		} finally {
-			await bootstrap.close();
-		}
-		database = new Database(lockPath, { create: true, strict: true });
-		database.exec('PRAGMA busy_timeout = 5000; BEGIN IMMEDIATE');
 		await reconcileRecoveryBackups();
+		return releaseLock;
 	} catch (error) {
-		try {
-			database?.close(false);
-		} finally {
-			releaseInProcess();
-		}
-		if (error instanceof RecoveryError) throw error;
-		throw new RecoveryError('Recovery storage lock could not be acquired', error);
+		await releaseLock();
+		throw error;
 	}
-	const acquiredDatabase = database;
-	return async () => {
-		try {
-			try {
-				acquiredDatabase.exec('COMMIT');
-			} catch {
-				acquiredDatabase.exec('ROLLBACK');
-			}
-		} finally {
-			try {
-				acquiredDatabase.close(false);
-			} finally {
-				releaseInProcess();
-			}
-		}
-	};
 }
 
 async function reconcileRecoveryBackups() {
@@ -488,17 +454,6 @@ async function reconcileRecoveryBackups() {
 		await rename(backupPath, recordPath(eventId));
 		await syncDirectory();
 	}
-}
-
-async function acquireInProcessStorageLock() {
-	let releaseCurrent: (() => void) | undefined;
-	const current = new Promise<void>((resolve) => {
-		releaseCurrent = resolve;
-	});
-	const previous = storageMutexTail;
-	storageMutexTail = previous.then(() => current);
-	await previous;
-	return () => releaseCurrent?.();
 }
 
 async function ensureRecoveryDir() {

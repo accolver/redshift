@@ -51,6 +51,7 @@ describe('GitHub Actions policy', () => {
 				'tests/integration/installer-integrity.test.ts',
 				'tests/integration/nak-bunker-e2e.test.ts',
 				'tests/integration/relay-publication-recovery.test.ts',
+				'tests/integration/encrypted-backup-restore.test.ts',
 			]) {
 				expect(workflow).toContain(testPath);
 			}
@@ -83,7 +84,7 @@ describe('GitHub Actions policy', () => {
 		expect(release).toContain('--latest=false');
 	});
 
-	it('verifies public release installation on both Linux architectures', () => {
+	it('verifies public release installation on every supported native architecture', () => {
 		const packageJson = JSON.parse(readRepositoryFile('package.json')) as {
 			scripts: Record<string, string>;
 		};
@@ -96,11 +97,22 @@ describe('GitHub Actions policy', () => {
 		expect(release).toContain('platform: linux/amd64');
 		expect(release).toContain('platform: linux/arm64');
 		expect(release).toContain('runner: ubuntu-24.04-arm');
+		expect(release).toContain('verify-published-macos:');
+		expect(release).toContain('platform: darwin/x64');
+		expect(release).toContain('platform: darwin/arm64');
+		expect(release).toContain('runner: macos-15-intel');
+		expect(release).toContain('runner: macos-14');
+		expect(release).toContain('tests/release/container-entrypoint.sh');
+		expect(release).toContain('needs.verify-published-macos.result');
 		expect(release).toContain('attestations: read');
 
 		const manualVerification = readWorkflow('.github/workflows/verify-published-release.yml');
 		expect(manualVerification).toContain('workflow_dispatch:');
 		expect(manualVerification).toContain('scripts/test-release-containers.sh');
+		expect(manualVerification).toContain('verify-macos:');
+		expect(manualVerification).toContain('platform: darwin/x64');
+		expect(manualVerification).toContain('platform: darwin/arm64');
+		expect(manualVerification).toContain('tests/release/container-entrypoint.sh');
 	});
 
 	it('documents the immutable GitHub release ceremony and rollback', () => {

@@ -135,6 +135,33 @@ bunker key, passphrase, or decrypted secret. A permanently rejected relay remain
 record is explicitly removed. Recovery is not a backup and cannot erase ciphertext retained by a
 relay.
 
+### `redshift backup`
+
+Create a versioned, passphrase-encrypted local snapshot of the latest authenticated non-tombstoned state observed from responding configured relays:
+
+```bash
+redshift backup create secrets.redshift
+redshift backup create secrets.redshift --force
+printf '%s\n%s\n' "$PASSPHRASE" "$PASSPHRASE" \
+  | redshift backup create secrets.redshift --passphrase-stdin
+```
+
+Restore requires a separately authenticated target signer. A different signer must be explicitly authorized, and conflicting live bundles require explicit overwrite:
+
+```bash
+redshift backup restore secrets.redshift
+redshift backup restore secrets.redshift --allow-identity-change
+redshift backup restore secrets.redshift --allow-identity-change --overwrite
+printf '%s\n' "$PASSPHRASE" \
+  | redshift backup restore secrets.redshift --passphrase-stdin
+```
+
+Archives are atomic owner-only files and contain encrypted current secret state plus project/environment identifiers and source version evidence. They exclude nsec/bunker/keychain credentials, passphrases, relay configuration, raw events, recovery records, tombstones, and history. Passphrases are never accepted through argv, config, or environment variables.
+
+Default restore preflights all bundles and performs zero writes if live destination values conflict. Identical bundles are no-ops; `--overwrite` replaces a full bundle without merging destination-only keys. Multi-bundle restore is not globally atomic, but every attempted bundle uses normal publication quorum and exact-event recovery.
+
+This is user-initiated local portability—not automatic, managed, offsite, retained, or complete-relay backup; not key/account recovery; and not an RPO/RTO, availability, or SLA guarantee.
+
 ### `redshift serve`
 
 Start the web administration UI.

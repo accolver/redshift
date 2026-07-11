@@ -13,6 +13,7 @@ import { type ParsedArgs, createCLI } from './lib/cli';
 import { VERSION } from './version';
 
 // Import command handlers
+import { backupCommand } from './commands/backup';
 import { bunkerCommand } from './commands/bunker';
 import { loginCommand, logoutCommand } from './commands/login';
 import { recoveryCommand } from './commands/recovery';
@@ -100,6 +101,18 @@ async function executeCommand(parsed: ParsedArgs): Promise<void> {
 			return handleRunCommand(parsed);
 		case 'secrets':
 			return handleSecretsCommand(parsed);
+		case 'backup': {
+			const file = parsed.positionals[0];
+			if (!file) throw new Error('Backup file path is required');
+			return backupCommand({
+				subcommand: (parsed.subcommand ?? 'create') as 'create' | 'restore',
+				file,
+				force: parsed.flags.force === true,
+				overwrite: parsed.flags.overwrite === true,
+				allowIdentityChange: parsed.flags['allow-identity-change'] === true,
+				passphraseStdin: parsed.flags['passphrase-stdin'] === true,
+			});
+		}
 		case 'recovery':
 			return recoveryCommand({
 				subcommand: (parsed.subcommand ?? 'list') as 'list' | 'show' | 'retry' | 'remove',

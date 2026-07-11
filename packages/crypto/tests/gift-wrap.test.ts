@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { nip44 } from 'nostr-tools';
 import { createRumor, createSeal } from 'nostr-tools/nip59';
-import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
+import { finalizeEvent, generateSecretKey, getEventHash, getPublicKey } from 'nostr-tools/pure';
 import {
 	type NostrEvent,
 	NostrKinds,
@@ -33,7 +33,7 @@ interface CraftedGiftWrapOptions {
 
 function craftGiftWrap(options: CraftedGiftWrapOptions): NostrEvent {
 	const sealAuthorKey = options.sealAuthorKey ?? options.rumorAuthorKey;
-	const rumor = options.rumorPubkey
+	const customRumor = options.rumorPubkey
 		? {
 				pubkey: options.rumorPubkey,
 				created_at: options.rumorCreatedAt ?? Math.floor(Date.now() / 1000),
@@ -41,6 +41,9 @@ function craftGiftWrap(options: CraftedGiftWrapOptions): NostrEvent {
 				tags: [['d', 'proj|env']],
 				content: JSON.stringify({ KEY: 'attacker-controlled' }),
 			}
+		: null;
+	const rumor = customRumor
+		? { ...customRumor, id: getEventHash(customRumor) }
 		: createRumor(
 				{
 					created_at: options.rumorCreatedAt ?? Math.floor(Date.now() / 1000),

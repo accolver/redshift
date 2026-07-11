@@ -654,6 +654,7 @@ export function createCLI(version: string): CLI {
 	cli.registerCommand(createSetupCommand());
 	cli.registerCommand(createRunCommand());
 	cli.registerCommand(createSecretsCommand());
+	cli.registerCommand(createBackupCommand());
 	cli.registerCommand(createRecoveryCommand());
 	cli.registerCommand(createServeCommand());
 	cli.registerCommand(createBunkerCommand());
@@ -865,6 +866,59 @@ function createRunCommand(): CommandDef {
 				variadic: true,
 			},
 		],
+	};
+}
+
+function createBackupCommand(): CommandDef {
+	const filePosition = [
+		{
+			name: 'file',
+			description: 'encrypted Redshift backup archive path',
+			required: true,
+		},
+	];
+	const passphraseStdin = {
+		type: 'boolean' as const,
+		description: 'read exact passphrase line(s) from stdin instead of prompting',
+	};
+	return {
+		name: 'backup',
+		description: 'Create or restore a passphrase-encrypted local snapshot',
+		examples: [
+			'redshift backup create secrets.redshift',
+			'redshift backup restore secrets.redshift',
+			'redshift backup restore secrets.redshift --allow-identity-change',
+		],
+		subcommands: {
+			create: {
+				name: 'create',
+				description: 'Create an encrypted snapshot of current observed secret state',
+				positionals: filePosition,
+				flags: {
+					force: {
+						type: 'boolean',
+						description: 'atomically replace an existing regular archive',
+					},
+					'passphrase-stdin': passphraseStdin,
+				},
+			},
+			restore: {
+				name: 'restore',
+				description: 'Restore encrypted state under the authenticated signer',
+				positionals: filePosition,
+				flags: {
+					overwrite: {
+						type: 'boolean',
+						description: 'replace conflicting destination bundles without merging',
+					},
+					'allow-identity-change': {
+						type: 'boolean',
+						description: 'authorize migration to a different authenticated signer',
+					},
+					'passphrase-stdin': passphraseStdin,
+				},
+			},
+		},
 	};
 }
 

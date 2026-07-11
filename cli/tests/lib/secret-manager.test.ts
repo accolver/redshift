@@ -16,6 +16,7 @@ import type { RecoveryRecord } from '../../src/lib/publication-recovery';
 import {
 	SecretManager,
 	extractProjects,
+	getNextSecretTimestamp,
 	injectSecrets,
 	mergeSecrets,
 } from '../../src/lib/secret-manager';
@@ -144,6 +145,97 @@ describe('SecretManager', () => {
 		});
 	});
 
+	describe('authenticated state snapshots', () => {
+		it('exposes latest live and tombstoned state with deterministic version evidence', async () => {
+			const privateKey = generateSecretKey();
+			const manager = new SecretManager(privateKey);
+			const older = await manager.wrapSecrets({ OLD: 'value' }, 'alpha|dev', { createdAt: 100 });
+			const tombstone = await manager.wrapSecrets({}, 'alpha|dev', { createdAt: 101 });
+			const live = await manager.wrapSecrets({ API_KEY: 'secret' }, 'beta|prod', {
+				createdAt: 102,
+			});
+			const pool: RelayPool = {
+				relays: ['wss://relay.test/'],
+				pool: {} as RelayPool['pool'],
+				subscribe: () => ({ close: () => {} }),
+				publish: async () => {
+					throw new Error('not used');
+				},
+				publishTo: async () => {
+					throw new Error('not used');
+				},
+				query: async () => [older.event, tombstone.event, live.event],
+				close: () => {},
+				resetRateLimiter: () => {},
+			};
+			const connected = new SecretManager(privateKey, { createPool: () => pool });
+			connected.connect(pool.relays);
+
+			const states = await connected.fetchAllSecretStates();
+			expect(states.get('alpha|dev')).toEqual({
+				dTag: 'alpha|dev',
+				secrets: {},
+				createdAt: 101,
+				eventId: tombstone.event.id,
+			});
+			expect(states.get('beta|prod')?.secrets).toEqual({ API_KEY: 'secret' });
+			const mutableSecrets = states.get('beta|prod')?.secrets;
+			if (!mutableSecrets) throw new Error('Expected beta snapshot');
+			mutableSecrets.API_KEY = 'mutated';
+			expect((await connected.fetchAllSecretStates()).get('beta|prod')?.secrets).toEqual({
+				API_KEY: 'secret',
+			});
+			expect(await connected.fetchAllSecrets()).toEqual(
+				new Map([['beta|prod', { API_KEY: 'secret' }]]),
+			);
+			await manager.close();
+			await connected.close();
+		});
+
+		it('aborts snapshots on transient remote signer decryption failures without caching omission', async () => {
+			const privateKey = generateSecretKey();
+			const local = new SecretManager(privateKey);
+			const wrapped = await local.wrapSecrets({ API_KEY: 'secret' }, 'alpha|dev');
+			let decryptCalls = 0;
+			const signer = {
+				...createFakeSigner(privateKey),
+				nip44Decrypt: async () => {
+					decryptCalls += 1;
+					throw new Error('Timed out waiting for bunker to decrypt');
+				},
+			};
+			const pool: RelayPool = {
+				relays: ['wss://relay.test/'],
+				pool: {} as RelayPool['pool'],
+				subscribe: () => ({ close: () => {} }),
+				publish: async () => {
+					throw new Error('not used');
+				},
+				publishTo: async () => {
+					throw new Error('not used');
+				},
+				query: async () => [wrapped.event],
+				close: () => {},
+				resetRateLimiter: () => {},
+			};
+			const connected = new SecretManager(signer, { createPool: () => pool });
+			connected.connect(pool.relays);
+			await expect(connected.fetchAllSecretStates()).rejects.toThrow('could not decrypt');
+			await expect(connected.fetchAllSecretStates()).rejects.toThrow('could not decrypt');
+			expect(decryptCalls).toBe(2);
+			await local.close();
+			await connected.close();
+		});
+
+		it('chooses a strictly newer bounded restore timestamp', () => {
+			expect(getNextSecretTimestamp(undefined, 100)).toBe(100);
+			expect(getNextSecretTimestamp(99, 100)).toBe(100);
+			expect(getNextSecretTimestamp(100, 100)).toBe(101);
+			expect(getNextSecretTimestamp(399, 100)).toBe(400);
+			expect(() => getNextSecretTimestamp(400, 100)).toThrow('future-skew');
+		});
+	});
+
 	describe('publication recovery', () => {
 		function report(
 			eventId: string,
@@ -200,6 +292,40 @@ describe('SecretManager', () => {
 			manager.connect(pool.relays);
 			return manager;
 		}
+
+		it('publishes an explicit strictly newer inner timestamp', async () => {
+			const effects: string[] = [];
+			const records: RecoveryRecord[] = [];
+			const manager = managerWithPublication(
+				async (event) => report(event.id, ['accepted', 'accepted', 'accepted']),
+				effects,
+				records,
+			);
+			const event = await manager.publishSecrets(
+				'project',
+				'dev',
+				{ API_KEY: 'secret' },
+				{ createdAt: 123 },
+			);
+			expect((await manager.unwrapWithMetadata(event)).createdAt).toBe(123);
+			await manager.close();
+		});
+
+		it('rejects explicit publication timestamps beyond the future-skew tolerance', async () => {
+			const effects: string[] = [];
+			const records: RecoveryRecord[] = [];
+			const manager = managerWithPublication(
+				async (event) => report(event.id, ['accepted', 'accepted', 'accepted']),
+				effects,
+				records,
+			);
+			const future = Math.floor(Date.now() / 1000) + 301;
+			await expect(
+				manager.publishSecrets('project', 'dev', { API_KEY: 'secret' }, { createdAt: future }),
+			).rejects.toThrow('outside the allowed range');
+			expect(effects).toEqual([]);
+			await manager.close();
+		});
 
 		it('persists the exact event before network publication and stores degraded outcomes', async () => {
 			const effects: string[] = [];
