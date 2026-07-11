@@ -6,7 +6,7 @@
 
 This file is the exhaustive implementation register for every confirmed security issue, functional defect, test/tooling gap, documentation mismatch, and explicitly deferred opportunity found during the audit. Speculative Cloud/Teams/history work is recorded but is not treated as a defect in the individual/free product.
 
-**Local verification checkpoint (2026-07-10):** frozen installs, zero-advisory root/relay audits, scoped Biome, root/web/relay typechecks, 982 product unit/integration tests with no conditional relay skips, 17 managed-relay tests, two expanded Playwright release journeys, web/embed/relay/native CLI builds, deterministic generated outputs, strict OpenSpec validation, and `git diff --check` passed. Required compiled `nak` relay and bunker journeys ran rather than skipping. Real public release/attestation and clean-install certification plus operational backup/SLA evidence remain external gates as noted below.
+**Production release checkpoint (2026-07-11):** v0.11.1 completed the corrected release workflow on its first attempt with zero-advisory frozen graphs, scoped Biome, root/web/relay typechecks, 983 product unit/integration tests with no conditional relay skips, 17 managed-relay tests, two expanded Playwright release journeys, four native CLI builds, deterministic generated output, SPDX SBOM, exact checksums, repository-bound GitHub attestations, native Linux x64/arm64 fresh-install lifecycles, native macOS x64/arm64 smoke tests, and an independently verified macOS arm64 public install. Evidence is recorded in `piolium/release-v0.11.1-evidence.md`. Operational managed-relay backup/SLA evidence remains a separate gate.
 
 ## Security Issues
 

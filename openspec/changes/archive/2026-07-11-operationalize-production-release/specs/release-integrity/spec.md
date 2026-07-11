@@ -3,6 +3,14 @@
 ### Requirement: Authenticated Release Artifacts
 Production releases SHALL include exact-name SHA-256 metadata, SPDX SBOM, provenance, and artifact attestations bound to the expected repository, workflow, immutable tag, commit, artifact name, and digest. Every advertised platform artifact SHALL exist before the release is considered complete.
 
+#### Scenario: Complete trusted release
+- **WHEN** a release artifact and all trusted metadata verify
+- **THEN** it is eligible for installation or upgrade
+
+#### Scenario: Missing or invalid trust material
+- **WHEN** an attestation, exact manifest entry, digest, or expected identity is missing, malformed, duplicate, or invalid
+- **THEN** installation/upgrade fails closed
+
 #### Scenario: Public release certification
 - **WHEN** a release workflow reports success
 - **THEN** an independent verifier can download each supported artifact, verify its checksum and GitHub attestation against `accolver/redshift`, and execute its version/help smoke contract

@@ -3,12 +3,20 @@
 ### Requirement: Hermetic Owned-Source Gates
 The repository SHALL provide passing typechecks for root/CLI, web, packages, and relay; a Biome gate scoped to owned non-generated source; and root plus relay dependency audits with no known advisory unless an explicit reviewed exception records advisory, reachability, owner, and expiry.
 
+#### Scenario: External worktrees and generated output
+- **WHEN** lint runs from the repository root
+- **THEN** `.worktrees`, `.applesauce-src`, audit output, build output, embeds, and generated workers are excluded while an owned-source diagnostic fails the gate
+
 #### Scenario: Vulnerable locked dependency
 - **WHEN** either frozen dependency graph contains an unexcepted advisory
 - **THEN** CI and release fail before artifacts are built
 
 ### Requirement: Browser Journeys
 CI SHALL run the same primary secret journey against hosted and compiled embedded dashboards, include CLI interoperability through the same relay, capture CSP/console/network failures, prove custom relay configuration, and verify authentication refusal/fallback plus complete logout storage destruction.
+
+#### Scenario: Embedded lifecycle
+- **WHEN** a browser creates, saves, reloads, retrieves via CLI, and deletes secrets through the compiled dashboard
+- **THEN** every state transition persists or tombstones correctly with no CSP violation
 
 #### Scenario: Embedded production lifecycle
 - **WHEN** a browser authenticates, creates, saves, reloads, retrieves via CLI, deletes secrets, and logs out through the compiled dashboard
