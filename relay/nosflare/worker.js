@@ -98,14 +98,12 @@ var DB_PRUNE_BATCH_SIZE = 1e3;
 var DB_PRUNE_TARGET_GB = 8;
 var pruneProtectedKinds = /* @__PURE__ */ new Set([1059]);
 function isPubkeyAllowed(pubkey) {
-  if (allowedPubkeys.size > 0 && !allowedPubkeys.has(pubkey))
-    return false;
+  if (allowedPubkeys.size > 0 && !allowedPubkeys.has(pubkey)) return false;
   return !blockedPubkeys.has(pubkey);
 }
 __name(isPubkeyAllowed, "isPubkeyAllowed");
 function isEventKindAllowed(kind) {
-  if (allowedEventKinds.size > 0 && !allowedEventKinds.has(kind))
-    return false;
+  if (allowedEventKinds.size > 0 && !allowedEventKinds.has(kind)) return false;
   return !blockedEventKinds.has(kind);
 }
 __name(isEventKindAllowed, "isEventKindAllowed");
@@ -122,8 +120,7 @@ function containsBlockedContent(event) {
 }
 __name(containsBlockedContent, "containsBlockedContent");
 function isTagAllowed(tag) {
-  if (allowedTags.size > 0 && !allowedTags.has(tag))
-    return false;
+  if (allowedTags.size > 0 && !allowedTags.has(tag)) return false;
   return !blockedTags.has(tag);
 }
 __name(isTagAllowed, "isTagAllowed");
@@ -1072,37 +1069,37 @@ function Field(ORDER, bitLenOrOpts, isLE = false, opts = {}) {
     ZERO: _0n2,
     ONE: _1n2,
     allowedLengths,
-    create: (num2) => mod(num2, ORDER),
-    isValid: (num2) => {
+    create: /* @__PURE__ */ __name((num2) => mod(num2, ORDER), "create"),
+    isValid: /* @__PURE__ */ __name((num2) => {
       if (typeof num2 !== "bigint")
         throw new Error("invalid field element: expected bigint, got " + typeof num2);
       return _0n2 <= num2 && num2 < ORDER;
-    },
-    is0: (num2) => num2 === _0n2,
+    }, "isValid"),
+    is0: /* @__PURE__ */ __name((num2) => num2 === _0n2, "is0"),
     // is valid and invertible
-    isValidNot0: (num2) => !f.is0(num2) && f.isValid(num2),
-    isOdd: (num2) => (num2 & _1n2) === _1n2,
-    neg: (num2) => mod(-num2, ORDER),
-    eql: (lhs, rhs) => lhs === rhs,
-    sqr: (num2) => mod(num2 * num2, ORDER),
-    add: (lhs, rhs) => mod(lhs + rhs, ORDER),
-    sub: (lhs, rhs) => mod(lhs - rhs, ORDER),
-    mul: (lhs, rhs) => mod(lhs * rhs, ORDER),
-    pow: (num2, power) => FpPow(f, num2, power),
-    div: (lhs, rhs) => mod(lhs * invert(rhs, ORDER), ORDER),
+    isValidNot0: /* @__PURE__ */ __name((num2) => !f.is0(num2) && f.isValid(num2), "isValidNot0"),
+    isOdd: /* @__PURE__ */ __name((num2) => (num2 & _1n2) === _1n2, "isOdd"),
+    neg: /* @__PURE__ */ __name((num2) => mod(-num2, ORDER), "neg"),
+    eql: /* @__PURE__ */ __name((lhs, rhs) => lhs === rhs, "eql"),
+    sqr: /* @__PURE__ */ __name((num2) => mod(num2 * num2, ORDER), "sqr"),
+    add: /* @__PURE__ */ __name((lhs, rhs) => mod(lhs + rhs, ORDER), "add"),
+    sub: /* @__PURE__ */ __name((lhs, rhs) => mod(lhs - rhs, ORDER), "sub"),
+    mul: /* @__PURE__ */ __name((lhs, rhs) => mod(lhs * rhs, ORDER), "mul"),
+    pow: /* @__PURE__ */ __name((num2, power) => FpPow(f, num2, power), "pow"),
+    div: /* @__PURE__ */ __name((lhs, rhs) => mod(lhs * invert(rhs, ORDER), ORDER), "div"),
     // Same as above, but doesn't normalize
-    sqrN: (num2) => num2 * num2,
-    addN: (lhs, rhs) => lhs + rhs,
-    subN: (lhs, rhs) => lhs - rhs,
-    mulN: (lhs, rhs) => lhs * rhs,
-    inv: (num2) => invert(num2, ORDER),
+    sqrN: /* @__PURE__ */ __name((num2) => num2 * num2, "sqrN"),
+    addN: /* @__PURE__ */ __name((lhs, rhs) => lhs + rhs, "addN"),
+    subN: /* @__PURE__ */ __name((lhs, rhs) => lhs - rhs, "subN"),
+    mulN: /* @__PURE__ */ __name((lhs, rhs) => lhs * rhs, "mulN"),
+    inv: /* @__PURE__ */ __name((num2) => invert(num2, ORDER), "inv"),
     sqrt: _sqrt || ((n) => {
       if (!sqrtP)
         sqrtP = FpSqrt(ORDER);
       return sqrtP(f, n);
     }),
-    toBytes: (num2) => isLE ? numberToBytesLE(num2, BYTES) : numberToBytesBE(num2, BYTES),
-    fromBytes: (bytes, skipValidation = true) => {
+    toBytes: /* @__PURE__ */ __name((num2) => isLE ? numberToBytesLE(num2, BYTES) : numberToBytesBE(num2, BYTES), "toBytes"),
+    fromBytes: /* @__PURE__ */ __name((bytes, skipValidation = true) => {
       if (allowedLengths) {
         if (!allowedLengths.includes(bytes.length) || bytes.length > BYTES) {
           throw new Error("Field.fromBytes: expected " + allowedLengths + " bytes, got " + bytes.length);
@@ -1121,12 +1118,12 @@ function Field(ORDER, bitLenOrOpts, isLE = false, opts = {}) {
           throw new Error("invalid field element: outside of range 0..ORDER");
       }
       return scalar;
-    },
+    }, "fromBytes"),
     // TODO: we don't need it here, move out to separate fn
-    invertBatch: (lst) => FpInvertBatch(f, lst),
+    invertBatch: /* @__PURE__ */ __name((lst) => FpInvertBatch(f, lst), "invertBatch"),
     // We can't move this out because Fp6, Fp12 implement it
     // and it's unclear what to return in there.
-    cmov: (a, b, c) => c ? b : a
+    cmov: /* @__PURE__ */ __name((a, b, c) => c ? b : a, "cmov")
   });
   return Object.freeze(f);
 }
@@ -1499,7 +1496,7 @@ var DER = {
   Err: DERErr,
   // Basic building block is TLV (Tag-Length-Value)
   _tlv: {
-    encode: (tag, data) => {
+    encode: /* @__PURE__ */ __name((tag, data) => {
       const { Err: E } = DER;
       if (tag < 0 || tag > 256)
         throw new E("tlv.encode: wrong tag");
@@ -1512,7 +1509,7 @@ var DER = {
       const lenLen = dataLen > 127 ? numberToHexUnpadded(len.length / 2 | 128) : "";
       const t = numberToHexUnpadded(tag);
       return t + lenLen + len + data;
-    },
+    }, "encode"),
     // v - value, l - left bytes (unparsed)
     decode(tag, data) {
       const { Err: E } = DER;
@@ -2157,7 +2154,7 @@ function ecdh(Point, ecdhOpts = {}) {
     // TODO: remove
     isValidPrivateKey: isValidSecretKey,
     randomPrivateKey: randomSecretKey,
-    normPrivateKeyToScalar: (key) => _normFnElement(Fn, key),
+    normPrivateKeyToScalar: /* @__PURE__ */ __name((key) => _normFnElement(Fn, key), "normPrivateKeyToScalar"),
     precompute(windowSize = 8, point = Point.BASE) {
       return point.precompute(windowSize, false);
     }
@@ -2702,8 +2699,7 @@ function bytesToHex2(bytes) {
 }
 __name(bytesToHex2, "bytesToHex");
 function isNostrEvent(event) {
-  if (!event || typeof event !== "object")
-    return false;
+  if (!event || typeof event !== "object") return false;
   const candidate = event;
   return typeof candidate.id === "string" && EVENT_ID.test(candidate.id) && typeof candidate.pubkey === "string" && PUBKEY.test(candidate.pubkey) && typeof candidate.sig === "string" && SIGNATURE.test(candidate.sig) && Number.isSafeInteger(candidate.created_at) && (candidate.created_at ?? -1) >= 0 && Number.isSafeInteger(candidate.kind) && (candidate.kind ?? -1) >= 0 && typeof candidate.content === "string" && Array.isArray(candidate.tags) && candidate.tags.every(
     (tag) => Array.isArray(tag) && tag.every((part) => typeof part === "string")
@@ -2715,8 +2711,7 @@ function serializeEventForSigning(event) {
 }
 __name(serializeEventForSigning, "serializeEventForSigning");
 async function verifyEventSignature(event) {
-  if (!isNostrEvent(event))
-    return false;
+  if (!isNostrEvent(event)) return false;
   try {
     const digest = new Uint8Array(
       await crypto.subtle.digest(
@@ -2724,8 +2719,7 @@ async function verifyEventSignature(event) {
         new TextEncoder().encode(serializeEventForSigning(event))
       )
     );
-    if (bytesToHex2(digest) !== event.id)
-      return false;
+    if (bytesToHex2(digest) !== event.id) return false;
     return schnorr.verify(hexToBytes2(event.sig), digest, hexToBytes2(event.pubkey));
   } catch {
     return false;
@@ -2804,31 +2798,25 @@ var _PrincipalQuotaRegistry = class _PrincipalQuotaRegistry {
   reserveSubscription(principal, sessionId, subscriptionId) {
     const key = `${sessionId}\0${subscriptionId}`;
     const active = this.subscriptions.get(principal) ?? /* @__PURE__ */ new Set();
-    if (active.has(key))
-      return true;
-    if (active.size >= this.maxSubscriptions)
-      return false;
+    if (active.has(key)) return true;
+    if (active.size >= this.maxSubscriptions) return false;
     active.add(key);
     this.subscriptions.set(principal, active);
     return true;
   }
   releaseSubscription(principal, sessionId, subscriptionId) {
     const active = this.subscriptions.get(principal);
-    if (!active)
-      return;
+    if (!active) return;
     active.delete(`${sessionId}\0${subscriptionId}`);
-    if (active.size === 0)
-      this.subscriptions.delete(principal);
+    if (active.size === 0) this.subscriptions.delete(principal);
   }
   releaseSession(sessionId) {
     const prefix = `${sessionId}\0`;
     for (const [principal, active] of this.subscriptions) {
       for (const key of active) {
-        if (key.startsWith(prefix))
-          active.delete(key);
+        if (key.startsWith(prefix)) active.delete(key);
       }
-      if (active.size === 0)
-        this.subscriptions.delete(principal);
+      if (active.size === 0) this.subscriptions.delete(principal);
     }
   }
   getLimiter(limiters, principal, config) {
@@ -2849,38 +2837,31 @@ var REDSHIFT_SECRET_KIND = 30078;
 var REDSHIFT_TYPE_TAG = "redshift-secrets";
 var PUBKEY2 = /^[0-9a-f]{64}$/;
 function getRedshiftRecipient(event) {
-  if (event.kind !== REDSHIFT_GIFT_WRAP_KIND)
-    return null;
+  if (event.kind !== REDSHIFT_GIFT_WRAP_KIND) return null;
   const recipientTags = event.tags.filter((tag) => tag[0] === "p");
   const typeTags = event.tags.filter((tag) => tag[0] === "t" && tag[1] === REDSHIFT_TYPE_TAG);
   const recipient = recipientTags[0]?.[1];
-  if (recipientTags.length !== 1 || !recipient || !PUBKEY2.test(recipient))
-    return null;
-  if (typeTags.length !== 1)
-    return null;
+  if (recipientTags.length !== 1 || !recipient || !PUBKEY2.test(recipient)) return null;
+  if (typeTags.length !== 1) return null;
   return recipient;
 }
 __name(getRedshiftRecipient, "getRedshiftRecipient");
 function authorizeEventWrite(event, authenticatedPrincipal) {
-  if (!authenticatedPrincipal)
-    return { allowed: false, reason: "authentication required" };
+  if (!authenticatedPrincipal) return { allowed: false, reason: "authentication required" };
   if (event.kind === REDSHIFT_SECRET_KIND) {
     return { allowed: false, reason: "plaintext secret events are not allowed" };
   }
   if (event.kind === REDSHIFT_GIFT_WRAP_KIND) {
     const recipient = getRedshiftRecipient(event);
-    if (!recipient)
-      return { allowed: false, reason: "invalid Redshift recipient/type tags" };
+    if (!recipient) return { allowed: false, reason: "invalid Redshift recipient/type tags" };
     return recipient === authenticatedPrincipal ? { allowed: true, principal: recipient } : { allowed: false, reason: "Gift Wrap recipient does not match authenticated principal" };
   }
   return event.pubkey === authenticatedPrincipal ? { allowed: true, principal: event.pubkey } : { allowed: false, reason: "event author does not match authenticated principal" };
 }
 __name(authorizeEventWrite, "authorizeEventWrite");
 function authorizeReadFilters(filters, authenticatedPrincipal) {
-  if (!authenticatedPrincipal)
-    return { allowed: false, reason: "authentication required" };
-  if (filters.length === 0)
-    return { allowed: false, reason: "at least one filter is required" };
+  if (!authenticatedPrincipal) return { allowed: false, reason: "authentication required" };
+  if (filters.length === 0) return { allowed: false, reason: "at least one filter is required" };
   for (const filter of filters) {
     if (filter.kinds?.length !== 1 || filter.kinds[0] !== REDSHIFT_GIFT_WRAP_KIND || filter["#p"]?.length !== 1 || filter["#p"][0] !== authenticatedPrincipal || filter["#t"]?.length !== 1 || filter["#t"][0] !== REDSHIFT_TYPE_TAG) {
       return {
@@ -2895,10 +2876,8 @@ __name(authorizeReadFilters, "authorizeReadFilters");
 function normalizeAuthRelayUrl(value) {
   try {
     const url = new URL(value);
-    if (url.protocol !== "wss:" && url.protocol !== "ws:")
-      return null;
-    if (url.username || url.password || url.hash || url.search)
-      return null;
+    if (url.protocol !== "wss:" && url.protocol !== "ws:") return null;
+    if (url.username || url.password || url.hash || url.search) return null;
     return url.href;
   } catch {
     return null;
@@ -3202,8 +3181,7 @@ function shouldCheckForDuplicates(kind) {
 }
 __name(shouldCheckForDuplicates, "shouldCheckForDuplicates");
 async function hasPaidForRelay(pubkey, env) {
-  if (!PAY_TO_RELAY_ENABLED2)
-    return true;
+  if (!PAY_TO_RELAY_ENABLED2) return true;
   try {
     const session = env.RELAY_DATABASE.withSession("first-unconstrained");
     const result = await session.prepare("SELECT pubkey FROM paid_pubkeys WHERE pubkey = ? LIMIT 1").bind(pubkey).first();
@@ -3460,24 +3438,15 @@ async function saveEventToDatabase(event, env) {
           name: tag[0],
           value: tag[1] || ""
         });
-        if (tag[0] === "p" && !tagP)
-          tagP = tag[1];
-        if (tag[0] === "e" && !tagE)
-          tagE = tag[1];
-        if (tag[0] === "a" && !tagA)
-          tagA = tag[1];
-        if (tag[0] === "t" && !tagT)
-          tagT = tag[1];
-        if (tag[0] === "d" && !tagD)
-          tagD = tag[1];
-        if (tag[0] === "r" && !tagR)
-          tagR = tag[1];
-        if (tag[0] === "L" && !tagL)
-          tagL = tag[1];
-        if (tag[0] === "s" && !tagS)
-          tagS = tag[1];
-        if (tag[0] === "u" && !tagU)
-          tagU = tag[1];
+        if (tag[0] === "p" && !tagP) tagP = tag[1];
+        if (tag[0] === "e" && !tagE) tagE = tag[1];
+        if (tag[0] === "a" && !tagA) tagA = tag[1];
+        if (tag[0] === "t" && !tagT) tagT = tag[1];
+        if (tag[0] === "d" && !tagD) tagD = tag[1];
+        if (tag[0] === "r" && !tagR) tagR = tag[1];
+        if (tag[0] === "L" && !tagL) tagL = tag[1];
+        if (tag[0] === "s" && !tagS) tagS = tag[1];
+        if (tag[0] === "u" && !tagU) tagU = tag[1];
       }
     }
     const eTags = tagInserts.filter((t) => t.name === "e").map((t) => t.value);
@@ -4159,8 +4128,7 @@ async function queryEvents(filters, bookmark, env) {
       console.log(`Filter has arrays >${CHUNK_SIZE} items, using chunked query...`);
       const chunkedResult = await queryDatabaseChunked(filter, bookmark, env);
       for (const event of chunkedResult.events) {
-        if (totalEventsRead >= GLOBAL_MAX_EVENTS)
-          break;
+        if (totalEventsRead >= GLOBAL_MAX_EVENTS) break;
         eventSet.set(event.id, event);
         totalEventsRead++;
       }
@@ -4205,8 +4173,7 @@ async function queryEvents(filters, bookmark, env) {
             }
             if (result.success && result.results) {
               for (const row of result.results) {
-                if (totalEventsRead >= GLOBAL_MAX_EVENTS)
-                  break;
+                if (totalEventsRead >= GLOBAL_MAX_EVENTS) break;
                 allRows.push(row);
                 totalEventsRead++;
               }
@@ -5501,8 +5468,7 @@ var _RelayWebSocket = class _RelayWebSocket {
           body: JSON.stringify(request)
         })
       );
-      if (!response.ok)
-        return false;
+      if (!response.ok) return false;
       const result = await response.json();
       return result.allowed === true;
     } catch (error) {
@@ -5711,8 +5677,7 @@ var _RelayWebSocket = class _RelayWebSocket {
     const relayUrl = normalizeAuthRelayUrl(
       `${url.protocol === "http:" ? "ws:" : "wss:"}//${host}${url.pathname}`
     );
-    if (!relayUrl)
-      return new Response("Invalid relay URL", { status: 400 });
+    if (!relayUrl) return new Response("Invalid relay URL", { status: 400 });
     if (!await this.applyDurableQuota({ action: "reserve-preauth", sessionId })) {
       return new Response("Connection quota exceeded", { status: 429 });
     }
@@ -5865,8 +5830,7 @@ var _RelayWebSocket = class _RelayWebSocket {
       await this.broadcastToLocalSessions(event);
       const fiveMinutesAgo = Date.now() - 3e5;
       for (const [eventId, timestamp] of this.processedEvents) {
-        if (timestamp < fiveMinutesAgo)
-          this.processedEvents.delete(eventId);
+        if (timestamp < fiveMinutesAgo) this.processedEvents.delete(eventId);
       }
       return new Response(JSON.stringify({ success: true }));
     } catch (error) {
@@ -6303,8 +6267,7 @@ var _RelayWebSocket = class _RelayWebSocket {
     const activeWebSockets = this.state.getWebSockets();
     for (const ws of activeWebSockets) {
       const attachment = ws.deserializeAttachment();
-      if (!attachment)
-        continue;
+      if (!attachment) continue;
       let session = this.sessions.get(attachment.sessionId);
       if (!session) {
         const subscriptions = await this.loadSubscriptions(attachment.sessionId);
@@ -6351,8 +6314,7 @@ var _RelayWebSocket = class _RelayWebSocket {
   async broadcastToOtherDOs(event) {
     const broadcasts = [];
     for (const endpoint of _RelayWebSocket.ALLOWED_ENDPOINTS) {
-      if (endpoint === this.doName)
-        continue;
+      if (endpoint === this.doName) continue;
       broadcasts.push(this.sendToSpecificDO(endpoint, event));
     }
     const results = await Promise.allSettled(
@@ -6523,8 +6485,7 @@ var SUBSCRIPTION_LEASE_MS = 60 * 60 * 1e3;
 var PREAUTH_LEASE_MS = 10 * 60 * 1e3;
 var MAX_PREAUTH_CONNECTIONS = 500;
 function isQuotaRequest(value) {
-  if (!value || typeof value !== "object")
-    return false;
+  if (!value || typeof value !== "object") return false;
   const request = value;
   return typeof request.action === "string";
 }
@@ -6534,11 +6495,9 @@ var _PrincipalQuota = class _PrincipalQuota {
     this.state = state;
   }
   async fetch(request) {
-    if (request.method !== "POST")
-      return new Response("Method Not Allowed", { status: 405 });
+    if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
     const body = await request.json();
-    if (!isQuotaRequest(body))
-      return Response.json({ allowed: false }, { status: 400 });
+    if (!isQuotaRequest(body)) return Response.json({ allowed: false }, { status: 400 });
     const allowed = await this.apply(body);
     return Response.json({ allowed });
   }
@@ -6581,8 +6540,7 @@ var _PrincipalQuota = class _PrincipalQuota {
       const state = await transaction.get(key) ?? { entries: {} };
       const now = Date.now();
       for (const [entry2, expiresAt] of Object.entries(state.entries)) {
-        if (expiresAt <= now)
-          delete state.entries[entry2];
+        if (expiresAt <= now) delete state.entries[entry2];
       }
       const entry = `${sessionId}\0${subscriptionId}`;
       if (!Object.prototype.hasOwnProperty.call(state.entries, entry) && Object.keys(state.entries).length >= MAX_PRINCIPAL_SUBSCRIPTIONS) {
@@ -6597,8 +6555,7 @@ var _PrincipalQuota = class _PrincipalQuota {
     return this.state.storage.transaction(async (transaction) => {
       const key = `subscriptions:${principal}`;
       const state = await transaction.get(key);
-      if (!state)
-        return true;
+      if (!state) return true;
       delete state.entries[`${sessionId}\0${subscriptionId}`];
       await transaction.put(key, state);
       return true;
@@ -6608,12 +6565,10 @@ var _PrincipalQuota = class _PrincipalQuota {
     return this.state.storage.transaction(async (transaction) => {
       const key = `subscriptions:${principal}`;
       const state = await transaction.get(key);
-      if (!state)
-        return true;
+      if (!state) return true;
       const prefix = `${sessionId}\0`;
       for (const entry of Object.keys(state.entries)) {
-        if (entry.startsWith(prefix))
-          delete state.entries[entry];
+        if (entry.startsWith(prefix)) delete state.entries[entry];
       }
       await transaction.put(key, state);
       return true;
@@ -6625,8 +6580,7 @@ var _PrincipalQuota = class _PrincipalQuota {
       const state = await transaction.get(key) ?? { entries: {} };
       const now = Date.now();
       for (const [entry, expiresAt] of Object.entries(state.entries)) {
-        if (expiresAt <= now)
-          delete state.entries[entry];
+        if (expiresAt <= now) delete state.entries[entry];
       }
       if (!Object.prototype.hasOwnProperty.call(state.entries, sessionId) && Object.keys(state.entries).length >= MAX_PREAUTH_CONNECTIONS) {
         return false;
@@ -6639,8 +6593,7 @@ var _PrincipalQuota = class _PrincipalQuota {
   async releasePreAuth(sessionId) {
     return this.state.storage.transaction(async (transaction) => {
       const state = await transaction.get("preauth");
-      if (!state)
-        return true;
+      if (!state) return true;
       delete state.entries[sessionId];
       await transaction.put("preauth", state);
       return true;
@@ -6660,20 +6613,10 @@ export {
   (*! noble-hashes - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
 
 @noble/curves/esm/utils.js:
-  (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-
 @noble/curves/esm/abstract/modular.js:
-  (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-
 @noble/curves/esm/abstract/curve.js:
-  (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-
 @noble/curves/esm/abstract/weierstrass.js:
-  (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-
 @noble/curves/esm/_shortw_utils.js:
-  (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-
 @noble/curves/esm/secp256k1.js:
   (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
 */

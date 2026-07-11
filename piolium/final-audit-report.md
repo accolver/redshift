@@ -105,23 +105,23 @@ The product surface has release-blocking correctness gaps: the compiled `redshif
 |---|---|
 | Frozen dependency resolution | Root and relay `bun install --frozen-lockfile` passed with Bun 1.3.14. |
 | Scoped quality/type gates | Biome reported no owned-source errors; root `tsc`, web `svelte-check`, and relay `tsc` passed with zero diagnostics. |
-| Product tests | Crypto/package 130, auxiliary package 2, CLI 477, and web 340 tests passed: **949 passed** total. Ten legacy optional-relay cases remained skipped, while required compiled local-`nak` relay and bunker journeys ran and passed. |
+| Product tests | Crypto/package 130, rate-limiter package 6, CLI 506, and web 340 tests passed: **982 passed** total with no conditional relay skips. Required compiled local-`nak` relay and bunker journeys ran and passed. |
 | Managed relay | **17 passed**, covering canonical verification, recipient policy, principal quotas, metadata, and landing-page integrity. |
-| Browser release journeys | **2 Playwright tests passed**: standalone hydration/login UI and compiled embedded login → project → secret save → reload → compiled CLI retrieval over a configured local relay. |
+| Browser release journeys | **2 Playwright tests passed**: standalone hydration with secure NIP-07 fallback, plus compiled embedded nsec login → project → secret save/reload → compiled CLI retrieval → deletion → logout storage destruction over a configured local relay. |
 | Builds | Web, deterministic embeds, root CLI, Darwin/Linux x64/arm64 native CLIs, relay worker, and Wrangler deployment dry-run passed. |
 | Generated output | Rebuilding `embedded-files.ts` and `worker.js` produced identical SHA-256 hashes; `git diff --check` passed. |
 | Specification | `bunx @fission-ai/openspec validate --all --strict` passed after archiving completed NIP-46 and hardening changes into current specs; final Telos L9→L1→L9 review converged. |
 
-Follow-up work closed local production-readiness gates for bunker pairing/custody (`SEC-008`, `SEC-013`), resilient NIP-46 transport (`REL-003`), hosted/embedded script CSP (`WEB-004`), compiled/install/release coverage (`TEST-001`, `TEST-007`, `TEST-008`), and OpenSpec/commercial custody truth (`GOV-002`, `GOV-003`). The remaining local audit gate is `SEC-017`, skipped under the explicit instruction not to run further dependency/security scanning. Production relay deployment and real release-attestation verification require external Cloudflare/GitHub credentials and environments. Backup, retention, recovery, uptime, and SLA claims require operational evidence and drills.
+Follow-up work closed local production-readiness gates for bunker pairing/custody (`SEC-008`, `SEC-013`), resilient NIP-46 transport (`REL-003`), hosted/embedded script CSP (`WEB-004`), compiled/install/release coverage (`TEST-001`, `TEST-007`, `TEST-008`), OpenSpec/commercial custody truth (`GOV-002`, `GOV-003`), and dependency advisories (`SEC-017`). The SEC-017 baseline was 37 root/workspace and 15 relay advisories; both frozen graphs now pass `bun audit --audit-level=low` with zero known advisories and release-blocking policy. Production relay deployment and real release-attestation verification still require external Cloudflare/GitHub execution. Backup, retention, recovery, uptime, and SLA claims require operational evidence and drills.
 
 ## Feature Gaps and Suggested Work
 
-### Next 1 — Stabilize the individual/free product
+### Next 1 — Certify the individual/free release
 
-- Add automated local-relay E2E: `login/setup/secrets set/get/run`, exact argv, shell command, child exit/signal, environment scrubbing, author rejection, same-second writes, and one-relay-fails scenarios.
-- Add Playwright/real-browser E2E for hosted and embedded dashboard: NIP-07 capability detection, nsec login/logout, project create/edit/delete, refresh/reload, import/export, and CLI interoperability.
-- Make the capability matrix truthful: distinguish CLI client, web client, local bunker prototype, hosted relay, Teams proposal, and Cloud proposal.
-- Fix root typecheck/lint/CI scope, then make typecheck, lint, dependency audit, browser E2E, and real compiled-binary tests required release gates.
+- Complete the Release Please ceremony and verify the real public tag, checksums, SPDX SBOM, GitHub attestations, and four native artifacts.
+- Run public installer/upgrade journeys in fresh Linux x64/arm64 containers and native macOS x64/arm64 runners.
+- Preserve the compiled local-relay, NIP-46, authorization, process-isolation, browser, CSP, and logout journeys as release blockers.
+- Record the release tag, commit, workflow, digests, attestation evidence, and known deferred limitations.
 
 ### Next 2 — Recovery and trustworthy state
 
@@ -133,7 +133,7 @@ Follow-up work closed local production-readiness gates for bunker pairing/custod
 ### Defer
 
 - **Teams:** key custody, RBAC, member removal, and rotation threat model is unresolved across roadmap/spec/proposal. Do not build until a minimal invite → read/write → readonly denial → removal/rotation E2E contract is approved.
-- **Cloud:** pricing conflicts (one-time sats vs monthly USD), managed relay is currently incompatible with normal Gift Wrap publishing, and backup/deletion guarantees are unresolved. Fix core sovereignty and reliability first.
+- **Cloud:** the managed relay protocol path is locally compatible, but payment operations, backup/retention, recovery, uptime, and sovereignty guarantees lack production evidence. Keep the paid tier unavailable until those operations converge.
 
 ## Telos Validation (L9→L1→L9)
 
@@ -141,4 +141,4 @@ Both directions converge on the same priority: secure author authorization, key 
 
 ## Conclusion
 
-The original C1/H1 and core journey blockers are fixed and locally verified against shipped binaries, real local relays, the embedded dashboard, and managed-relay policy tests. The sovereign individual product now has a substantially stronger, truthful core, but a production release remains conditional on the residual custody/transport/CSP/dependency gates and credentialed deployment/release verification above. History/restore, Teams, Cloud, backup, and SLA expansion remain deferred until those contracts and operational evidence are approved.
+The original C1/H1, core journey blockers, custody/transport/CSP gaps, and SEC-017 dependency advisories are fixed and locally verified against compiled binaries, real local relays, the embedded dashboard, and managed-relay policy tests. The sovereign individual product is a production release candidate; certification now depends on executing and independently verifying the real GitHub release and clean-install matrix. History/restore, Teams, Cloud, backup, and SLA expansion remain deferred until their contracts and operational evidence are approved.

@@ -31,6 +31,8 @@ jobs:
       - name: Install locked relay dependencies
         working-directory: relay/nosflare
         run: bun install --frozen-lockfile
+      - name: Audit frozen dependency graphs
+        run: bun run audit:dependencies
       - name: Typecheck product surfaces
         run: |
           bun run typecheck

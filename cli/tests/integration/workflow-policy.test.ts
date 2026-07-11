@@ -9,9 +9,11 @@ const workflowPaths = [
 	'.github/workflows/deploy-relay.yml',
 ];
 
-function readWorkflow(path: string) {
+function readRepositoryFile(path: string) {
 	return readFileSync(resolve(repositoryRoot, path), 'utf8');
 }
+
+const readWorkflow = readRepositoryFile;
 
 describe('GitHub Actions policy', () => {
 	it('pins every action and Bun version and freezes every dependency install', () => {
@@ -48,6 +50,56 @@ describe('GitHub Actions policy', () => {
 			]) {
 				expect(workflow).toContain(testPath);
 			}
+		}
+	});
+
+	it('blocks CI and releases on root and relay dependency advisories', () => {
+		const packageJson = JSON.parse(readRepositoryFile('package.json')) as {
+			scripts: Record<string, string>;
+		};
+		expect(packageJson.scripts['audit:dependencies']).toContain('bun audit --audit-level=low');
+		expect(packageJson.scripts['audit:dependencies']).toContain('relay/nosflare');
+		for (const path of ['.github/workflows/ci.yml', '.github/workflows/release.yml']) {
+			expect(readWorkflow(path)).toContain('bun run audit:dependencies');
+		}
+	});
+
+	it('keeps releases draft until verified and withdraws failed publication', () => {
+		const releasePlease = JSON.parse(readRepositoryFile('release-please-config.json')) as {
+			packages: Record<string, { draft?: boolean }>;
+		};
+		expect(releasePlease.packages['.']?.draft).toBe(true);
+		const release = readWorkflow('.github/workflows/release.yml');
+		expect(release).toContain('name: Publish the verified draft release');
+		expect(release).toContain('--draft=false');
+		expect(release).toContain('name: Withdraw Failed Release');
+		expect(release).toContain('--latest=false');
+	});
+
+	it('verifies public release installation on both Linux architectures', () => {
+		const packageJson = JSON.parse(readRepositoryFile('package.json')) as {
+			scripts: Record<string, string>;
+		};
+		expect(packageJson.scripts['test:release:containers']).toContain(
+			'scripts/test-release-containers.sh',
+		);
+		const release = readWorkflow('.github/workflows/release.yml');
+		expect(release).toContain('name: Verify Published Release');
+		expect(release).toContain('scripts/test-release-containers.sh');
+		expect(release).toContain('platforms: arm64,amd64');
+		expect(release).toContain('attestations: read');
+	});
+
+	it('documents the immutable GitHub release ceremony and rollback', () => {
+		const agents = readRepositoryFile('AGENTS.md');
+		for (const requiredText of [
+			'## Full GitHub Release Procedure',
+			'gh pr checks',
+			'gh run watch',
+			'gh attestation verify',
+			'Never replace published release assets',
+		]) {
+			expect(agents).toContain(requiredText);
 		}
 	});
 
