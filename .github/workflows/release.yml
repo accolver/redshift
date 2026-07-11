@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ github.sha }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
@@ -113,7 +113,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ github.sha }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
@@ -174,9 +174,8 @@ jobs:
       - name: Verify staged release attestations
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
         run: |
-          SOURCE_DIGEST=$(gh api "repos/${{ github.repository }}/commits/$TAG_NAME" --jq .sha)
+          SOURCE_DIGEST=${{ github.sha }}
           for artifact in dist/redshift-* dist/checksums.txt dist/sbom.spdx.json; do
             gh attestation verify "$artifact" \
               --repo "${{ github.repository }}" \
@@ -206,25 +205,33 @@ jobs:
             --latest
 
   verify-published-release:
-    name: Verify Published Release
+    name: Verify Published Release (${{ matrix.platform }})
     needs: [release-please, publish-release]
     if: ${{ needs.release-please.outputs.release_created }}
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       attestations: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
-      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
-        with:
-          platforms: arm64,amd64
+          ref: ${{ github.sha }}
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - name: Verify fresh Linux installations from the public release
+      - name: Verify fresh Linux installation from the public release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bash scripts/test-release-containers.sh "${{ needs.release-please.outputs.tag_name }}"
+        run: >-
+          bash scripts/test-release-containers.sh
+          "${{ needs.release-please.outputs.tag_name }}"
+          "${{ matrix.platform }}"
 
   recover-failed-release:
     name: Withdraw Failed Release

@@ -17,6 +17,7 @@ function createHarness(ghExitCode: number, executablePayload = true, checksumMan
 	const bin = join(root, 'bin');
 	const installDir = join(root, 'install');
 	const ghLog = join(root, 'gh.log');
+	const curlLog = join(root, 'curl.log');
 	Bun.spawnSync(['mkdir', '-p', bin]);
 	executable(
 		join(bin, 'uname'),
@@ -29,6 +30,7 @@ function createHarness(ghExitCode: number, executablePayload = true, checksumMan
 	executable(
 		join(bin, 'curl'),
 		`#!/bin/sh
+printf '%s\n' "$*" >> "$CURL_LOG"
 case "$*" in
   *releases/latest*) printf '%s\\n' '{"tag_name":"v1.2.3"}'; exit 0 ;;
 esac
@@ -60,10 +62,13 @@ fi
 exit "$GH_EXIT"
 `,
 	);
-	return { root, bin, installDir, ghLog, ghExitCode };
+	return { root, bin, installDir, ghLog, curlLog, ghExitCode };
 }
 
-async function runInstaller(harness: ReturnType<typeof createHarness>) {
+async function runInstaller(
+	harness: ReturnType<typeof createHarness>,
+	extraEnvironment: Record<string, string> = {},
+) {
 	const process = Bun.spawn(['sh', installerPath], {
 		env: {
 			...globalThis.process.env,
@@ -71,7 +76,9 @@ async function runInstaller(harness: ReturnType<typeof createHarness>) {
 			HOME: harness.root,
 			REDSHIFT_INSTALL_DIR: harness.installDir,
 			GH_LOG: harness.ghLog,
+			CURL_LOG: harness.curlLog,
 			GH_EXIT: String(harness.ghExitCode),
+			...extraEnvironment,
 		},
 		stdout: 'pipe',
 		stderr: 'pipe',
@@ -102,6 +109,15 @@ describe('release installer integrity', () => {
 		);
 		expect(verificationLog).toContain('--source-digest aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
 		expect(verificationLog).toContain('--deny-self-hosted-runners');
+	});
+
+	it('installs an explicitly pinned release without resolving latest', async () => {
+		const harness = createHarness(0);
+		const result = await runInstaller(harness, { REDSHIFT_VERSION: 'v1.2.3' });
+		expect(result.exitCode).toBe(0);
+		const curlLog = readFileSync(harness.curlLog, 'utf8');
+		expect(curlLog).not.toContain('releases/latest');
+		expect(curlLog).toContain('/releases/download/v1.2.3/redshift-linux-x64');
 	});
 
 	it('fails closed and preserves an existing binary when attestation verification fails', async () => {

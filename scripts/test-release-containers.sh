@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TAG=${1:-}
+REQUESTED_PLATFORM=${2:-}
 if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
   echo "usage: GH_TOKEN=... bun run test:release:containers -- vX.Y.Z" >&2
   exit 2
@@ -24,7 +25,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-platforms=(linux/amd64 linux/arm64)
+if [[ -n "$REQUESTED_PLATFORM" ]]; then
+  case "$REQUESTED_PLATFORM" in
+    linux/amd64|linux/arm64) platforms=("$REQUESTED_PLATFORM") ;;
+    *) echo "unsupported release-test platform: $REQUESTED_PLATFORM" >&2; exit 2 ;;
+  esac
+else
+  platforms=(linux/amd64 linux/arm64)
+fi
 for platform in "${platforms[@]}"; do
   arch=${platform#linux/}
   image="redshift-release-test:${TAG#v}-${arch}"
