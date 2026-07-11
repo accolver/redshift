@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
-import type { NostrEvent } from 'nostr-tools';
+import type { QuorumReport } from '$lib/rate-limiter';
 import {
 	PUBLICATION_RECOVERY_STORAGE_KEY,
 	clearPublicationRecovery,
@@ -15,15 +13,25 @@ import {
 	restorePublicationRecovery,
 	setPublicationRetrying,
 } from '$lib/stores/publication-recovery.svelte';
-import type { QuorumReport } from '$lib/rate-limiter';
+import type { NostrEvent } from 'nostr-tools';
+import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const privateKey = generateSecretKey();
 const ownerPubkey = getPublicKey(privateKey);
 
 function signedEvent(content = 'encrypted-ciphertext') {
 	return finalizeEvent(
-		{ kind: 30078, created_at: Math.floor(Date.now() / 1000), tags: [['d', 'project']], content },
-		privateKey,
+		{
+			kind: 1059,
+			created_at: Math.floor(Date.now() / 1000),
+			tags: [
+				['p', ownerPubkey],
+				['t', 'redshift-secrets'],
+			],
+			content,
+		},
+		generateSecretKey(),
 	) as NostrEvent;
 }
 
@@ -189,6 +197,42 @@ describe('browser publication recovery', () => {
 		restorePublicationRecovery(ownerPubkey);
 		expect(getPublicationRecoveryState().records).toEqual([]);
 		expect(sessionStorage.getItem(PUBLICATION_RECOVERY_STORAGE_KEY)).toBeNull();
+	});
+
+	it('rejects public metadata at the recovery-store trust boundary', () => {
+		const publicEvent = finalizeEvent(
+			{
+				kind: 30078,
+				created_at: Math.floor(Date.now() / 1000),
+				tags: [['d', 'project']],
+				content: '{}',
+			},
+			privateKey,
+		) as NostrEvent;
+		expect(() =>
+			preparePublicationRecovery(publicEvent, ['wss://1.test'], { ownerPubkey }),
+		).toThrow('kind 1059');
+	});
+
+	it('contains session storage read and cleanup failures while clearing in-memory state', () => {
+		const event = signedEvent();
+		preparePublicationRecovery(event, ['wss://1.test'], { ownerPubkey });
+		vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+			throw new DOMException('disabled', 'SecurityError');
+		});
+		expect(() => clearPublicationRecovery()).not.toThrow();
+		expect(getPublicationRecoveryState().records).toEqual([]);
+
+		vi.restoreAllMocks();
+		vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+			throw new DOMException('disabled', 'SecurityError');
+		});
+		vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+			throw new DOMException('disabled', 'SecurityError');
+		});
+		expect(() => restorePublicationRecovery(ownerPubkey)).not.toThrow();
+		expect(getPublicationRecoveryState().records).toEqual([]);
+		expect(getPublicationRecoveryState().error).toContain('could not be read');
 	});
 
 	it('aborts synchronously when provisional persistence fails', () => {

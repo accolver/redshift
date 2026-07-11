@@ -108,6 +108,7 @@ async function retryRecord(
 		const unavailable = getUnavailableRelays(record.report);
 		if (unavailable.length === 0) {
 			printRecord(record, json);
+			if (record.report.accepted.length < record.report.required) process.exitCode = 1;
 			return;
 		}
 		manager.connect(record.report.outcomes.map(({ relay }) => relay));
@@ -125,7 +126,9 @@ async function retryRecord(
 			await deps.removeRecord(record.event.id);
 		}
 		printRecord(updated, json);
-		if (getUnavailableRelays(merged).length > 0) process.exitCode = 1;
+		if (merged.accepted.length < merged.required || getUnavailableRelays(merged).length > 0) {
+			process.exitCode = 1;
+		}
 	} finally {
 		await manager.close();
 	}

@@ -30,6 +30,15 @@ function statusClass(state: 'accepted' | 'rejected' | 'unavailable') {
 }
 </script>
 
+{#if recovery.error}
+	<Card.Root class="border-destructive/30 bg-destructive/5" data-testid="publication-recovery-error">
+		<Card.Content class="flex items-start gap-3 pt-6">
+			<AlertTriangle class="mt-0.5 size-5 shrink-0 text-destructive" />
+			<p class="text-sm text-destructive" role="alert">{recovery.error}</p>
+		</Card.Content>
+	</Card.Root>
+{/if}
+
 {#if recovery.records.length > 0}
 	<Card.Root class="border-tokyo-orange/30 bg-tokyo-orange/5" data-testid="publication-recovery-panel">
 		<Card.Header class="gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -120,7 +129,6 @@ function statusClass(state: 'accepted' | 'rejected' | 'unavailable') {
 						</p>
 					</div>
 				{/each}
-				{#if recovery.error}<p class="text-sm text-destructive" role="alert">{recovery.error}</p>{/if}
 			</Card.Content>
 		{/if}
 	</Card.Root>

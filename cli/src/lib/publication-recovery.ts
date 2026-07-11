@@ -1,10 +1,10 @@
-import { constants } from 'node:fs';
-import { lstat, mkdir, open, readdir, rename, unlink } from 'node:fs/promises';
-import { basename, join } from 'node:path';
 import { Database } from 'bun:sqlite';
+import { constants } from 'node:fs';
+import { link, lstat, mkdir, open, readdir, rename, unlink } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { PUBLICATION_RECOVERY_LIMITS, sanitizeRelayReason } from '@redshift/rate-limiter';
-import { validateGiftWrapEnvelope } from './crypto';
 import { getConfigDir, normalizeRelayUrls } from './config';
+import { validateGiftWrapEnvelope } from './crypto';
 import { RecoveryError } from './errors';
 import type { PublishReport, RelayPublishOutcome } from './relay';
 import type { NostrEvent } from './types';
@@ -143,7 +143,7 @@ export function validateRecoveryRecord(value: unknown): RecoveryRecord {
 export async function saveRecoveryRecord(
 	record: RecoveryRecord,
 	expectedRevision?: string,
-	options: { maxRecords?: number } = {},
+	options: { maxRecords?: number; syncDirectory?: () => Promise<void> } = {},
 ): Promise<void> {
 	const validated = validateRecoveryRecord(record);
 	await ensureRecoveryDir();
@@ -161,10 +161,14 @@ export async function saveRecoveryRecord(
 			),
 		);
 		await enforceRecordCapacity(validated.event.id, maxRecords);
+		let previous: RecoveryRecord | null = null;
 		if (expectedRevision !== undefined) {
-			const current = await loadRecoveryRecord(validated.event.id);
-			if (current.revision !== expectedRevision) {
+			previous = await loadRecoveryRecordFile(validated.event.id);
+			if (previous.revision !== expectedRevision) {
 				throw new RecoveryError('Recovery record changed concurrently; reload before retrying');
+			}
+			if (validated.revision === expectedRevision) {
+				throw new RecoveryError('Recovery record updates require a new revision');
 			}
 		} else {
 			const existing = await lstat(recordPath(validated.event.id)).catch((error: unknown) => {
@@ -175,11 +179,13 @@ export async function saveRecoveryRecord(
 				throw new RecoveryError('Existing recovery records require an expected revision');
 		}
 		const finalPath = recordPath(validated.event.id);
-		const tempPath = join(
-			getRecoveryDir(),
-			`.${validated.event.id}.${process.pid}.${crypto.randomUUID()}.tmp`,
-		);
+		const operationId = `${process.pid}.${crypto.randomUUID()}`;
+		const tempPath = join(getRecoveryDir(), `.${validated.event.id}.${operationId}.tmp`);
+		const backupPath = recoveryBackupPath(validated.event.id);
+		const syncRecoveryDirectory = options.syncDirectory ?? syncDirectory;
 		let handle: Awaited<ReturnType<typeof open>> | null = null;
+		let backupCreated = false;
+		let finalReplaced = false;
 		try {
 			handle = await open(
 				tempPath,
@@ -190,13 +196,37 @@ export async function saveRecoveryRecord(
 			await handle.sync();
 			await handle.close();
 			handle = null;
+			if (previous) {
+				await link(finalPath, backupPath);
+				backupCreated = true;
+				await syncRecoveryDirectory();
+			}
 			await rename(tempPath, finalPath);
-			await syncDirectory();
+			finalReplaced = true;
+			await syncRecoveryDirectory();
+			if (backupCreated) {
+				await unlink(backupPath);
+				backupCreated = false;
+			}
 		} catch (error) {
-			if (handle) await handle.close().catch(() => {});
-			await unlink(tempPath).catch(() => {});
+			if (finalReplaced && backupCreated) {
+				try {
+					await rename(backupPath, finalPath);
+					backupCreated = false;
+					await syncRecoveryDirectory();
+				} catch (restoreError) {
+					throw new RecoveryError(
+						`Failed to persist recovery event ${validated.event.id}; previous recovery state could not be restored`,
+						restoreError,
+					);
+				}
+			}
 			if (error instanceof RecoveryError) throw error;
 			throw new RecoveryError(`Failed to persist recovery event ${validated.event.id}`, error);
+		} finally {
+			if (handle) await handle.close().catch(() => {});
+			await unlink(tempPath).catch(() => {});
+			if (backupCreated) await unlink(backupPath).catch(() => {});
 		}
 	} finally {
 		await releaseLock();
@@ -205,6 +235,16 @@ export async function saveRecoveryRecord(
 
 export async function loadRecoveryRecord(eventId: string): Promise<RecoveryRecord> {
 	assertEventId(eventId);
+	await ensureRecoveryDir();
+	const releaseLock = await acquireStorageLock();
+	try {
+		return await loadRecoveryRecordFile(eventId);
+	} finally {
+		await releaseLock();
+	}
+}
+
+async function loadRecoveryRecordFile(eventId: string): Promise<RecoveryRecord> {
 	const path = recordPath(eventId);
 	let handle: Awaited<ReturnType<typeof open>>;
 	try {
@@ -217,6 +257,9 @@ export async function loadRecoveryRecord(eventId: string): Promise<RecoveryRecor
 	try {
 		const entry = await handle.stat();
 		if (!entry.isFile()) throw new RecoveryError('Recovery record must be a regular file');
+		if ((entry.mode & 0o077) !== 0) {
+			throw new RecoveryError('Recovery record must use owner-only permissions');
+		}
 		if (entry.size > PUBLICATION_RECOVERY_LIMITS.maxRecordBytes) {
 			throw new RecoveryError('Recovery record is too large');
 		}
@@ -239,17 +282,24 @@ export async function loadRecoveryRecord(eventId: string): Promise<RecoveryRecor
 
 export async function listRecoveryRecords(): Promise<RecoveryRecord[]> {
 	await ensureRecoveryDir();
-	const entries = await readdir(getRecoveryDir());
-	const recordNames = entries.filter((name) => name.endsWith(RECORD_SUFFIX));
-	if (recordNames.length > PUBLICATION_RECOVERY_LIMITS.maxRecords) {
-		throw new RecoveryError('Recovery directory exceeds the record limit');
+	const releaseLock = await acquireStorageLock();
+	try {
+		const entries = await readdir(getRecoveryDir());
+		const recordNames = entries.filter((name) => name.endsWith(RECORD_SUFFIX));
+		if (recordNames.length > PUBLICATION_RECOVERY_LIMITS.maxRecords) {
+			throw new RecoveryError('Recovery directory exceeds the record limit');
+		}
+		const records: RecoveryRecord[] = [];
+		for (const name of recordNames.sort()) {
+			const eventId = basename(name, RECORD_SUFFIX);
+			records.push(await loadRecoveryRecordFile(eventId));
+		}
+		return records.sort(
+			(a, b) => a.createdAt - b.createdAt || a.event.id.localeCompare(b.event.id),
+		);
+	} finally {
+		await releaseLock();
 	}
-	const records: RecoveryRecord[] = [];
-	for (const name of recordNames.sort()) {
-		const eventId = basename(name, RECORD_SUFFIX);
-		records.push(await loadRecoveryRecord(eventId));
-	}
-	return records.sort((a, b) => a.createdAt - b.createdAt || a.event.id.localeCompare(b.event.id));
 }
 
 export async function removeRecoveryRecord(eventId: string): Promise<void> {
@@ -377,55 +427,67 @@ function reportFromOutcomes(eventId: string, outcomes: RelayPublishOutcome[]): P
 async function acquireStorageLock(): Promise<() => Promise<void>> {
 	const releaseInProcess = await acquireInProcessStorageLock();
 	const lockPath = join(getRecoveryDir(), '.recovery-lock.sqlite');
-	let bootstrap: Awaited<ReturnType<typeof open>>;
+	let database: Database | null = null;
 	try {
-		bootstrap = await open(
+		const bootstrap = await open(
 			lockPath,
 			constants.O_RDWR | constants.O_CREAT | constants.O_NOFOLLOW,
 			0o600,
 		);
-	} catch (error) {
-		releaseInProcess();
-		throw new RecoveryError('Recovery storage lock must be a regular file', error);
-	}
-	try {
-		const entry = await bootstrap.stat();
-		if (!entry.isFile()) throw new RecoveryError('Recovery storage lock must be a regular file');
-		await bootstrap.chmod(0o600);
-	} catch (error) {
-		releaseInProcess();
-		throw error;
-	} finally {
-		await bootstrap.close();
-	}
-
-	let database: Database;
-	try {
-		database = new Database(lockPath, { create: true, strict: true });
-	} catch (error) {
-		releaseInProcess();
-		throw new RecoveryError('Failed to open recovery storage lock', error);
-	}
-	try {
-		database.exec('PRAGMA busy_timeout = 5000; BEGIN IMMEDIATE');
-	} catch (error) {
-		database.close(false);
-		releaseInProcess();
-		throw new RecoveryError(
-			'Recovery storage is busy; retry after the active writer finishes',
-			error,
-		);
-	}
-	return async () => {
 		try {
-			database.exec('COMMIT');
-		} catch {
-			database.exec('ROLLBACK');
+			const entry = await bootstrap.stat();
+			if (!entry.isFile()) throw new RecoveryError('Recovery storage lock must be a regular file');
+			await bootstrap.chmod(0o600);
 		} finally {
-			database.close(false);
+			await bootstrap.close();
+		}
+		database = new Database(lockPath, { create: true, strict: true });
+		database.exec('PRAGMA busy_timeout = 5000; BEGIN IMMEDIATE');
+		await reconcileRecoveryBackups();
+	} catch (error) {
+		try {
+			database?.close(false);
+		} finally {
 			releaseInProcess();
 		}
+		if (error instanceof RecoveryError) throw error;
+		throw new RecoveryError('Recovery storage lock could not be acquired', error);
+	}
+	const acquiredDatabase = database;
+	return async () => {
+		try {
+			try {
+				acquiredDatabase.exec('COMMIT');
+			} catch {
+				acquiredDatabase.exec('ROLLBACK');
+			}
+		} finally {
+			try {
+				acquiredDatabase.close(false);
+			} finally {
+				releaseInProcess();
+			}
+		}
 	};
+}
+
+async function reconcileRecoveryBackups() {
+	const backupPattern = /^\.([0-9a-f]{64})\.backup$/;
+	const backupNames = (await readdir(getRecoveryDir())).filter((name) => backupPattern.test(name));
+	if (backupNames.length > PUBLICATION_RECOVERY_LIMITS.maxRecords) {
+		throw new RecoveryError('Recovery directory exceeds the backup limit');
+	}
+	for (const name of backupNames.sort()) {
+		const eventId = backupPattern.exec(name)?.[1];
+		if (!eventId) continue;
+		const backupPath = recoveryBackupPath(eventId);
+		const entry = await lstat(backupPath);
+		if (!entry.isFile() || entry.isSymbolicLink() || (entry.mode & 0o077) !== 0) {
+			throw new RecoveryError('Recovery backup must be a regular owner-only file');
+		}
+		await rename(backupPath, recordPath(eventId));
+		await syncDirectory();
+	}
 }
 
 async function acquireInProcessStorageLock() {
@@ -482,6 +544,11 @@ async function syncDirectory() {
 function recordPath(eventId: string) {
 	assertEventId(eventId);
 	return join(getRecoveryDir(), `${eventId}${RECORD_SUFFIX}`);
+}
+
+function recoveryBackupPath(eventId: string) {
+	assertEventId(eventId);
+	return join(getRecoveryDir(), `.${eventId}.backup`);
 }
 
 function assertEventId(eventId: string) {

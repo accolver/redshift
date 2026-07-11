@@ -1,18 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
 	chmod,
+	link,
 	lstat,
 	mkdir,
 	mkdtemp,
 	readFile,
+	rename,
 	rm,
 	stat,
 	symlink,
 	unlink,
 	writeFile,
 } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { getPublicKey } from 'nostr-tools/pure';
 import {
 	createProvisionalRecoveryRecord,
@@ -93,6 +95,56 @@ describe('publication recovery storage', () => {
 		expect(loaded.report).toEqual(report);
 	});
 
+	it('restores the previous provisional record when post-rename directory sync fails', async () => {
+		const { record } = await fixture();
+		await saveRecoveryRecord(record);
+		const report: PublishReport = {
+			...record.report,
+			accepted: [record.report.outcomes[0]?.relay ?? ''],
+			failed: record.report.failed.slice(1),
+			outcomes: record.report.outcomes.map((outcome, index) =>
+				index === 0 ? { relay: outcome.relay, state: 'accepted' as const } : outcome,
+			),
+		};
+		const updated = updateRecoveryRecord(record, report);
+		let syncCalls = 0;
+		await expect(
+			saveRecoveryRecord(updated, record.revision, {
+				syncDirectory: async () => {
+					syncCalls += 1;
+					if (syncCalls === 2) throw new Error('simulated directory sync failure');
+				},
+			}),
+		).rejects.toThrow('Failed to persist');
+		const restored = await loadRecoveryRecord(record.event.id);
+		expect(restored.revision).toBe(record.revision);
+		expect(restored.report).toEqual(record.report);
+	});
+
+	it('reconciles a crash-orphaned backup before exposing recovery state', async () => {
+		const { record } = await fixture();
+		await saveRecoveryRecord(record);
+		const report: PublishReport = {
+			...record.report,
+			accepted: [record.report.outcomes[0]?.relay ?? ''],
+			failed: record.report.failed.slice(1),
+			outcomes: record.report.outcomes.map((outcome, index) =>
+				index === 0 ? { relay: outcome.relay, state: 'accepted' as const } : outcome,
+			),
+		};
+		const updated = updateRecoveryRecord(record, report);
+		const finalPath = join(getRecoveryDir(), `${record.event.id}.json`);
+		const backupPath = join(getRecoveryDir(), `.${record.event.id}.backup`);
+		const replacementPath = join(getRecoveryDir(), '.simulated-replacement.tmp');
+		await link(finalPath, backupPath);
+		await writeFile(replacementPath, `${JSON.stringify(updated)}\n`, { mode: 0o600 });
+		await rename(replacementPath, finalPath);
+
+		const reconciled = await loadRecoveryRecord(record.event.id);
+		expect(reconciled.revision).toBe(record.revision);
+		await expect(lstat(backupPath)).rejects.toThrow();
+	});
+
 	it('serializes distinct-event capacity checks at the configured boundary', async () => {
 		const existing = (await fixture()).record;
 		await saveRecoveryRecord(existing, undefined, { maxRecords: 2 });
@@ -105,6 +157,14 @@ describe('publication recovery storage', () => {
 		expect(results.filter(({ status }) => status === 'fulfilled')).toHaveLength(1);
 		expect(results.filter(({ status }) => status === 'rejected')).toHaveLength(1);
 		expect(await listRecoveryRecords()).toHaveLength(2);
+	});
+
+	it('rejects updates that reuse the expected revision', async () => {
+		const { record } = await fixture();
+		await saveRecoveryRecord(record);
+		await expect(
+			saveRecoveryRecord({ ...record, updatedAt: record.updatedAt + 1 }, record.revision),
+		).rejects.toThrow('new revision');
 	});
 
 	it('rejects stale concurrent outcome replacement', async () => {
@@ -222,7 +282,9 @@ describe('publication recovery storage', () => {
 		await expect(loadRecoveryRecord(directoryId)).rejects.toThrow('regular file');
 
 		const oversizedId = 'c'.repeat(64);
-		await writeFile(join(getRecoveryDir(), `${oversizedId}.json`), 'x'.repeat(256 * 1024 + 1));
+		await writeFile(join(getRecoveryDir(), `${oversizedId}.json`), 'x'.repeat(256 * 1024 + 1), {
+			mode: 0o600,
+		});
 		await expect(loadRecoveryRecord(oversizedId)).rejects.toThrow('too large');
 	});
 
@@ -234,17 +296,19 @@ describe('publication recovery storage', () => {
 		await removeRecoveryRecord(record.event.id);
 	});
 
-	it('refuses malformed JSON and insecure existing directory permissions are corrected', async () => {
+	it('refuses malformed JSON and insecure record modes while correcting directory permissions', async () => {
 		const { record } = await fixture();
 		await mkdir(getRecoveryDir(), { recursive: true, mode: 0o777 });
 		await chmod(getRecoveryDir(), 0o777);
-		await writeFile(join(getRecoveryDir(), `${record.event.id}.json`), '{broken');
+		const path = join(getRecoveryDir(), `${record.event.id}.json`);
+		await writeFile(path, '{broken', { mode: 0o600 });
 		await expect(loadRecoveryRecord(record.event.id)).rejects.toThrow('valid JSON');
-		await unlink(join(getRecoveryDir(), `${record.event.id}.json`));
-		await saveRecoveryRecord(record);
 		expect((await stat(getRecoveryDir())).mode & 0o777).toBe(0o700);
-		expect(
-			JSON.parse(await readFile(join(getRecoveryDir(), `${record.event.id}.json`), 'utf8')),
-		).toEqual(JSON.parse(JSON.stringify(record)));
+		await unlink(path);
+		await saveRecoveryRecord(record);
+		await chmod(path, 0o644);
+		await expect(loadRecoveryRecord(record.event.id)).rejects.toThrow('owner-only permissions');
+		await chmod(path, 0o600);
+		expect(JSON.parse(await readFile(path, 'utf8'))).toEqual(JSON.parse(JSON.stringify(record)));
 	});
 });

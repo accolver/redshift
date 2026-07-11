@@ -91,16 +91,21 @@ export async function startNostrTestRelay(
 	};
 }
 
-export async function reserveTcpPort(): Promise<number> {
+export function startUnavailableTestEndpoint() {
 	const server = Bun.serve({
 		port: 0,
 		hostname: '127.0.0.1',
-		fetch: () => new Response('reserved'),
+		fetch: () => new Response('temporarily unavailable', { status: 503 }),
 	});
 	const port = server.port;
-	await server.stop(true);
-	if (!port) throw new Error('Unable to reserve a TCP port');
-	return port;
+	if (!port) throw new Error('Unable to bind an unavailable test endpoint');
+	return {
+		port,
+		url: `ws://127.0.0.1:${port}/`,
+		async stop() {
+			await server.stop(true);
+		},
+	};
 }
 
 type TestFilter = Record<string, unknown>;

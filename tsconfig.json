@@ -40,6 +40,6 @@
 		"skipLibCheck": true,
 		"types": ["bun"]
 	},
-	"include": ["cli/**/*"],
+	"include": ["cli/**/*", "tests/helpers/**/*.ts"],
 	"exclude": ["node_modules", "web", "packages"]
 }

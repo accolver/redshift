@@ -107,9 +107,21 @@ export function restorePublicationRecovery(ownerPubkey: string) {
 		clearPublicationRecovery();
 		return;
 	}
-	const storage = getSessionStorage();
+	let storage: Storage | null = null;
+	let raw: string | null = null;
+	try {
+		storage = getSessionStorage();
+		raw = storage?.getItem(PUBLICATION_RECOVERY_STORAGE_KEY) ?? null;
+	} catch {
+		recoveryState = {
+			records: [],
+			retryingEventIds: new Set(),
+			error: 'Stored relay recovery state could not be read and was ignored.',
+			hydratedForPubkey: ownerPubkey,
+		};
+		return;
+	}
 	if (!storage) return;
-	const raw = storage.getItem(PUBLICATION_RECOVERY_STORAGE_KEY);
 	if (!raw) {
 		recoveryState = { ...recoveryState, records: [], hydratedForPubkey: ownerPubkey, error: null };
 		return;
@@ -137,7 +149,11 @@ export function restorePublicationRecovery(ownerPubkey: string) {
 		};
 		persistRecords(records, 'Unable to sanitize browser recovery state');
 	} catch {
-		storage.removeItem(PUBLICATION_RECOVERY_STORAGE_KEY);
+		try {
+			storage.removeItem(PUBLICATION_RECOVERY_STORAGE_KEY);
+		} catch {
+			// Logout and in-memory cleanup must continue when storage is inaccessible.
+		}
 		recoveryState = {
 			records: [],
 			retryingEventIds: new Set(),
@@ -153,13 +169,18 @@ export function removePublicationRecovery(eventId: string) {
 }
 
 export function clearPublicationRecovery() {
-	getSessionStorage()?.removeItem(PUBLICATION_RECOVERY_STORAGE_KEY);
-	recoveryState = {
-		records: [],
-		retryingEventIds: new Set(),
-		error: null,
-		hydratedForPubkey: null,
-	};
+	try {
+		getSessionStorage()?.removeItem(PUBLICATION_RECOVERY_STORAGE_KEY);
+	} catch {
+		// Authentication teardown must not be blocked by inaccessible session storage.
+	} finally {
+		recoveryState = {
+			records: [],
+			retryingEventIds: new Set(),
+			error: null,
+			hydratedForPubkey: null,
+		};
+	}
 }
 
 export function setPublicationRetrying(eventId: string, retrying: boolean) {
@@ -266,8 +287,9 @@ function validateEventForOwner(event: NostrEvent, ownerPubkey: string) {
 	) {
 		throw new Error('Invalid recovery event signature or ID');
 	}
-	if (event.kind === 1059) validateGiftWrapEnvelope(event, ownerPubkey);
-	else if (event.pubkey !== ownerPubkey) throw new Error('Recovery event owner does not match');
+	if (event.kind !== 1059)
+		throw new Error('Recovery events must be encrypted kind 1059 Gift Wraps');
+	validateGiftWrapEnvelope(event, ownerPubkey);
 }
 
 function validateReport(value: unknown, eventId: string): QuorumReport<string> {

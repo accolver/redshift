@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
+import { recoveryCommand } from '../../src/commands/recovery';
 import {
 	createProvisionalRecoveryRecord,
 	updateRecoveryRecord,
@@ -7,7 +8,6 @@ import {
 import type { RecoveryRecord } from '../../src/lib/publication-recovery';
 import type { PublishReport } from '../../src/lib/relay';
 import { SecretManager } from '../../src/lib/secret-manager';
-import { recoveryCommand } from '../../src/commands/recovery';
 
 const originalLog = console.log;
 afterEach(() => {
@@ -111,6 +111,60 @@ describe('recovery command', () => {
 			'accepted',
 		]);
 		expect(removed).not.toHaveBeenCalled();
+	});
+
+	it('returns a failure status when retry resolves unavailable relays into permanent rejection below quorum', async () => {
+		const { record } = await fixture(['accepted', 'unavailable', 'unavailable']);
+		await recoveryCommand(
+			{ subcommand: 'retry', eventId: record.event.id },
+			{
+				loadRecord: async () => record,
+				requireCurrentAuth: async () => ({ pubkey: record.ownerPubkey }),
+				createManager: () => ({
+					getPublicKey: () => record.ownerPubkey,
+					unwrapWithMetadata: async () => ({ dTag: 'project|dev' }),
+					connect: () => {},
+					retryPublication: async (_event, relays) => ({
+						eventId: record.event.id,
+						required: 2,
+						accepted: [],
+						failed: relays.map((relay) => ({ relay, reason: 'restricted: policy' })),
+						outcomes: relays.map((relay) => ({
+							relay,
+							state: 'rejected' as const,
+							reason: 'restricted: policy',
+						})),
+					}),
+					close: async () => {},
+				}),
+				saveRecord: async () => {},
+				removeRecord: async () => {},
+			},
+		);
+		expect(process.exitCode).toBe(1);
+	});
+
+	it('returns a failure status for a persisted terminal record below quorum', async () => {
+		const { record } = await fixture(['accepted', 'rejected', 'rejected']);
+		await recoveryCommand(
+			{ subcommand: 'retry', eventId: record.event.id },
+			{
+				loadRecord: async () => record,
+				requireCurrentAuth: async () => ({ pubkey: record.ownerPubkey }),
+				createManager: () => ({
+					getPublicKey: () => record.ownerPubkey,
+					unwrapWithMetadata: async () => ({ dTag: 'project|dev' }),
+					connect: () => {
+						throw new Error('must not connect without unavailable relays');
+					},
+					retryPublication: async () => {
+						throw new Error('must not retry without unavailable relays');
+					},
+					close: async () => {},
+				}),
+			},
+		);
+		expect(process.exitCode).toBe(1);
 	});
 
 	it('refuses a different owner before unwrap or publication', async () => {

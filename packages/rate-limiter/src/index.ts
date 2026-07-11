@@ -59,10 +59,10 @@ export function parseNip20Reason(error: unknown): {
 	code: Nip20ReasonCode;
 	message: string;
 } {
-	const reason = error instanceof Error ? error.message.trim() : String(error).trim();
+	const reason = error instanceof Error ? error.message : String(error);
 	const separator = reason.indexOf(':');
 	if (separator <= 0) return { code: 'unknown', message: reason };
-	const candidate = reason.slice(0, separator).trim().toLowerCase() as Nip20ReasonCode;
+	const candidate = reason.slice(0, separator) as Nip20ReasonCode;
 	if (!NIP20_REASON_CODES.has(candidate)) return { code: 'unknown', message: reason };
 	return { code: candidate, message: reason.slice(separator + 1).trim() };
 }

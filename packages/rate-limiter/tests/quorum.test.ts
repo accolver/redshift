@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import {
+	QuorumError,
 	classifyQuorumFailure,
 	executeWithQuorum,
 	getUnavailableTargets,
 	mergeQuorumReports,
 	parseNip20Reason,
 	sanitizeRelayReason,
-	QuorumError,
 } from '../src';
 
 describe('executeWithQuorum', () => {
@@ -51,10 +51,13 @@ describe('executeWithQuorum', () => {
 		]) {
 			expect(classifyQuorumFailure(new Error(reason))).toBe('unavailable');
 		}
-		expect(parseNip20Reason(new Error(' restricted: private relay '))).toEqual({
-			code: 'restricted',
-			message: 'private relay',
-		});
+		for (const misleading of [' restricted: private relay', 'INVALID: forged']) {
+			expect(parseNip20Reason(new Error(misleading))).toEqual({
+				code: 'unknown',
+				message: misleading,
+			});
+			expect(classifyQuorumFailure(new Error(misleading))).toBe('unavailable');
+		}
 		expect(parseNip20Reason(new Error('not-a-code: blocked'))).toEqual({
 			code: 'unknown',
 			message: 'not-a-code: blocked',

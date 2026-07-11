@@ -32,8 +32,8 @@ bun run typecheck:web
 )
 
 phase "Owned-source lint and format"
-bunx biome lint cli/src packages web/src web/tests relay/nosflare/src relay/nosflare/tests --diagnostic-level=error
-bunx biome format cli/src packages web/src web/tests relay/nosflare/src relay/nosflare/tests
+bunx biome lint cli/src packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests --diagnostic-level=error
+bunx biome format cli/src packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests
 
 phase "Deterministic dashboard and CLI builds"
 bun run verify:embeds
@@ -76,6 +76,10 @@ phase "Hosted and embedded browser journeys"
   bunx playwright install chromium
   bun run test:e2e
 )
+if pgrep -f "$ROOT/node_modules/.bun/@cloudflare.*workerd" >/dev/null; then
+  echo "Browser gates leaked a repository workerd process" >&2
+  exit 1
+fi
 
 phase "Specification and working-tree integrity"
 bunx @fission-ai/openspec validate --all --strict

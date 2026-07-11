@@ -42,15 +42,19 @@ describe('GitHub Actions policy', () => {
 			expect(workflow).toContain('bun run verify:embeds');
 			expect(workflow).toContain('cmp /tmp/embedded-files.ts cli/src/lib/embedded-files.ts');
 			expect(workflow).toContain('bun run verify:generated');
-			expect(workflow).toContain('bunx biome format cli/src packages web/src web/tests');
+			expect(workflow).toContain(
+				'bunx biome format cli/src packages tests/helpers web/src web/tests',
+			);
 			for (const testPath of [
 				'tests/integration/binary-cli.test.ts',
 				'tests/integration/upgrade-binary-e2e.test.ts',
 				'tests/integration/installer-integrity.test.ts',
 				'tests/integration/nak-bunker-e2e.test.ts',
+				'tests/integration/relay-publication-recovery.test.ts',
 			]) {
 				expect(workflow).toContain(testPath);
 			}
+			expect(workflow).toContain('Browser gates leaked a repository workerd process');
 		}
 	});
 

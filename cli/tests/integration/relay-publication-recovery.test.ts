@@ -1,27 +1,32 @@
 import { afterEach, beforeAll, describe, expect, it } from 'bun:test';
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { existsSync } from 'node:fs';
-import { generateSecretKey } from 'nostr-tools/pure';
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { nip19 } from 'nostr-tools';
+import { generateSecretKey } from 'nostr-tools/pure';
 import {
-	reserveTcpPort,
-	startNostrTestRelay,
 	type NostrTestRelay,
+	startNostrTestRelay,
+	startUnavailableTestEndpoint,
 } from '../../../tests/helpers/nostr-test-relay';
 
 const binary = join(import.meta.dir, '../../../dist/redshift');
 const roots: string[] = [];
 const relays: NostrTestRelay[] = [];
+const unavailableEndpoints: Array<ReturnType<typeof startUnavailableTestEndpoint>> = [];
 
 beforeAll(() => {
 	expect(existsSync(binary)).toBe(true);
 });
 
 afterEach(async () => {
+	while (unavailableEndpoints.length > 0) await unavailableEndpoints.pop()?.stop();
 	while (relays.length > 0) await relays.pop()?.stop();
-	while (roots.length > 0) await rm(roots.pop()!, { recursive: true, force: true });
+	while (roots.length > 0) {
+		const root = roots.pop();
+		if (root) await rm(root, { recursive: true, force: true });
+	}
 });
 
 async function runCli(args: string[], cwd: string, configDir: string, nsec: string) {
@@ -68,8 +73,10 @@ describe('compiled relay publication recovery', () => {
 		const accepted = await startNostrTestRelay({ behavior: 'accept' });
 		const rejected = await startNostrTestRelay({ behavior: 'reject' });
 		relays.push(accepted, rejected);
-		const offlinePort = await reserveTcpPort();
-		const offlineUrl = `ws://127.0.0.1:${offlinePort}/`;
+		const unavailableEndpoint = startUnavailableTestEndpoint();
+		unavailableEndpoints.push(unavailableEndpoint);
+		const offlinePort = unavailableEndpoint.port;
+		const offlineUrl = unavailableEndpoint.url;
 		await writeFile(
 			join(root, 'redshift.yaml'),
 			[
@@ -99,7 +106,9 @@ describe('compiled relay publication recovery', () => {
 		const recoveryDir = join(configDir, 'recovery');
 		const files = (await readdir(recoveryDir)).filter((name) => name.endsWith('.json'));
 		expect(files).toHaveLength(1);
-		const recoveryPath = join(recoveryDir, files[0]!);
+		const recoveryFile = files[0];
+		if (!recoveryFile) throw new Error('Missing recovery record');
+		const recoveryPath = join(recoveryDir, recoveryFile);
 		expect((await stat(recoveryPath)).mode & 0o777).toBe(0o600);
 		const record = JSON.parse(await readFile(recoveryPath, 'utf8'));
 		const eventId = record.event.id as string;
@@ -111,6 +120,8 @@ describe('compiled relay publication recovery', () => {
 		const originalEvent = accepted.publishedEvents[0];
 		expect(originalEvent?.id).toBe(eventId);
 
+		await unavailableEndpoint.stop();
+		unavailableEndpoints.splice(unavailableEndpoints.indexOf(unavailableEndpoint), 1);
 		const recovered = await startNostrTestRelay({ port: offlinePort, behavior: 'accept' });
 		relays.push(recovered);
 		const retry = await runCli(['recovery', 'retry', eventId], root, configDir, nsec);

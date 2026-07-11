@@ -1,9 +1,10 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { type Server as HttpServer, createServer as createHttpServer } from 'node:http';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { type Page, expect, test } from '@playwright/test';
 import { nip19 } from 'nostr-tools';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 const compiledBinary = resolve(import.meta.dirname, '../../../dist/redshift');
@@ -42,6 +43,25 @@ async function getFreePort() {
 			server.close(() => resolvePort(address.port));
 		});
 	});
+}
+
+async function startUnavailableEndpoint() {
+	const server = createHttpServer((_request, response) => {
+		response.writeHead(503, { 'Content-Type': 'text/plain' });
+		response.end('temporarily unavailable');
+	});
+	await new Promise<void>((resolveListen, reject) => {
+		server.once('error', reject);
+		server.listen(0, '127.0.0.1', resolveListen);
+	});
+	const address = server.address();
+	if (!address || typeof address === 'string') throw new Error('No unavailable endpoint port');
+	return { server, port: address.port, url: `ws://127.0.0.1:${address.port}/` };
+}
+
+async function stopHttpServer(server: HttpServer | undefined) {
+	if (!server?.listening) return;
+	await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
 }
 
 async function waitForHealth(url: string) {
@@ -204,6 +224,7 @@ test('browser exposes degraded relay state and retries only the unavailable rela
 	const root = mkdtempSync(join(tmpdir(), 'redshift-browser-recovery-e2e-'));
 	const relayProcesses: RelayProcess[] = [];
 	let recovered: RelayProcess | undefined;
+	let unavailableServer: HttpServer | undefined;
 	let server: ChildProcess | undefined;
 	try {
 		const accepting: RelayProcess[] = [];
@@ -214,8 +235,10 @@ test('browser exposes degraded relay state and retries only the unavailable rela
 		}
 		const rejected = await startRelayProcess(0, 'reject');
 		relayProcesses.push(rejected);
-		const offlinePort = await getFreePort();
-		const offlineUrl = `ws://127.0.0.1:${offlinePort}/`;
+		const unavailableEndpoint = await startUnavailableEndpoint();
+		unavailableServer = unavailableEndpoint.server;
+		const offlinePort = unavailableEndpoint.port;
+		const offlineUrl = unavailableEndpoint.url;
 		const configDir = join(root, 'config');
 		mkdirSync(configDir, { recursive: true });
 		writeFileSync(
@@ -285,6 +308,8 @@ test('browser exposes degraded relay state and retries only the unavailable rela
 
 		await page.reload({ waitUntil: 'networkidle' });
 		await expect(page.getByTestId('publication-recovery-panel')).toBeVisible();
+		await stopHttpServer(unavailableServer);
+		unavailableServer = undefined;
 		recovered = await startRelayProcess(offlinePort, 'accept');
 		relayProcesses.push(recovered);
 		await openRecoveryDetails(page);
@@ -335,6 +360,7 @@ test('browser exposes degraded relay state and retries only the unavailable rela
 			await page.evaluate(() => sessionStorage.getItem('redshift_publication_recovery_v1')),
 		).toBeNull();
 	} finally {
+		await stopHttpServer(unavailableServer);
 		await stopChild(server);
 		await Promise.all(relayProcesses.map(({ child }) => stopChild(child)));
 		rmSync(root, { recursive: true, force: true });

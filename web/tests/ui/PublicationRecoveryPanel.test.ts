@@ -11,9 +11,11 @@ vi.mock('$lib/stores/nostr.svelte', () => ({ retryPublication }));
 
 import PublicationRecoveryPanel from '$lib/components/PublicationRecoveryPanel.svelte';
 import {
+	PUBLICATION_RECOVERY_STORAGE_KEY,
 	clearPublicationRecovery,
 	finalizePublicationRecovery,
 	preparePublicationRecovery,
+	restorePublicationRecovery,
 } from '$lib/stores/publication-recovery.svelte';
 
 beforeEach(() => {
@@ -33,12 +35,15 @@ describe('PublicationRecoveryPanel', () => {
 		const ownerPubkey = getPublicKey(privateKey);
 		const event = finalizeEvent(
 			{
-				kind: 30078,
+				kind: 1059,
 				created_at: Math.floor(Date.now() / 1000),
-				tags: [['d', 'project']],
+				tags: [
+					['p', ownerPubkey],
+					['t', 'redshift-secrets'],
+				],
 				content: 'ciphertext-must-not-render',
 			},
-			privateKey,
+			generateSecretKey(),
 		);
 		preparePublicationRecovery(
 			event,
@@ -86,6 +91,14 @@ describe('PublicationRecoveryPanel', () => {
 		await waitFor(() =>
 			expect(screen.queryByText('Saved with degraded relay redundancy')).not.toBeInTheDocument(),
 		);
+	});
+
+	it('renders invalid-storage feedback even when no recovery records remain', () => {
+		const ownerPubkey = getPublicKey(generateSecretKey());
+		sessionStorage.setItem(PUBLICATION_RECOVERY_STORAGE_KEY, '{invalid');
+		restorePublicationRecovery(ownerPubkey);
+		render(PublicationRecoveryPanel);
+		expect(screen.getByRole('alert')).toHaveTextContent('invalid and was removed');
 	});
 
 	it('does not label a below-quorum publication as saved and contains retry rejection', async () => {
