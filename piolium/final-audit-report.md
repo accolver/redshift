@@ -2,12 +2,12 @@
 
 **Snapshot:** `main@9b98467`  
 **Original assessment:** **NEEDS CHANGES before production use**  
-**Remediation checkpoint (2026-07-10):** **CORE HARDENING VERIFIED LOCALLY; PRODUCTION RELEASE STILL GATED**  
+**Production checkpoint (2026-07-11):** **SOVEREIGN INDIVIDUAL RELEASE v0.11.1 CERTIFIED; MANAGED-SERVICE GUARANTEES REMAIN DEFERRED**
 **Scope:** README promises, CLI commands/flags, shared crypto, web dashboard, embedded dashboard, managed relay, distribution pipeline, tests, and roadmap/spec alignment.
 
-The findings below preserve the audit evidence from the original snapshot. The remediation program fixed the release-blocking authorization, process-isolation, CLI, managed-relay, deletion, browser-auth, release-integrity, embedded-dashboard, and product-truth defects and added regressions listed in `piolium/ALL-ISSUES-AND-GAPS.md`. This does not claim that production deployment, live release attestations, backup/recovery operations, uptime/SLA controls, or a fresh dependency-security review have been completed.
+The findings below preserve the audit evidence from the original snapshot. The remediation program fixed the release-blocking authorization, process-isolation, CLI, managed-relay, deletion, browser-auth, release-integrity, embedded-dashboard, dependency, and product-truth defects. The attested v0.11.1 individual release, public installer, updater, native artifacts, and fresh-install matrix are certified in `piolium/release-v0.11.1-evidence.md`. This does not claim managed-relay backup/recovery operations, uptime/SLA, Teams, Cloud, or Enterprise readiness.
 
-## Executive Summary
+## Original Executive Summary (Audit Snapshot)
 
 Redshift has a credible cryptographic core and a substantial working prototype: NIP-59 wrapping, NIP-44/NIP-46 integrations, local key storage protections, CRUD, the built web dashboard, and hundreds of tests work. The core README journey can set and retrieve a secret against a local relay.
 
@@ -105,7 +105,7 @@ The product surface has release-blocking correctness gaps: the compiled `redshif
 |---|---|
 | Frozen dependency resolution | Root and relay `bun install --frozen-lockfile` passed with Bun 1.3.14. |
 | Scoped quality/type gates | Biome reported no owned-source errors; root `tsc`, web `svelte-check`, and relay `tsc` passed with zero diagnostics. |
-| Product tests | Crypto/package 130, rate-limiter package 6, CLI 506, and web 340 tests passed: **982 passed** total with no conditional relay skips. Required compiled local-`nak` relay and bunker journeys ran and passed. |
+| Product tests | Crypto/package 130, rate-limiter package 6, CLI 507, and web 340 tests passed: **983 passed** total with no conditional relay skips. Required compiled local-`nak` relay and bunker journeys ran and passed. |
 | Managed relay | **17 passed**, covering canonical verification, recipient policy, principal quotas, metadata, and landing-page integrity. |
 | Browser release journeys | **2 Playwright tests passed**: standalone hydration with secure NIP-07 fallback, plus compiled embedded nsec login → project → secret save/reload → compiled CLI retrieval → deletion → logout storage destruction over a configured local relay. |
 | Builds | Web, deterministic embeds, root CLI, Darwin/Linux x64/arm64 native CLIs, relay worker, and Wrangler deployment dry-run passed. |
@@ -141,4 +141,4 @@ Both directions converge on the same priority: secure author authorization, key 
 
 ## Conclusion
 
-The original C1/H1, core journey blockers, custody/transport/CSP gaps, and SEC-017 dependency advisories are fixed and locally verified against compiled binaries, real local relays, the embedded dashboard, and managed-relay policy tests. The sovereign individual product is a production release candidate; certification now depends on executing and independently verifying the real GitHub release and clean-install matrix. History/restore, Teams, Cloud, backup, and SLA expansion remain deferred until their contracts and operational evidence are approved.
+The original C1/H1, core journey blockers, custody/transport/CSP gaps, and SEC-017 dependency advisories are fixed. The sovereign individual product is certified in the attested v0.11.1 release: the complete workflow passed on its first attempt, all four native artifacts and checksums/SBOM verified independently, Linux x64/arm64 fresh-install and forced-upgrade lifecycles passed on native runners, and the latest public installer passed on macOS arm64. See `piolium/release-v0.11.1-evidence.md`. History/restore, Teams, Cloud, managed-relay backup/retention, and SLA expansion remain deferred until their contracts and operational evidence are approved.

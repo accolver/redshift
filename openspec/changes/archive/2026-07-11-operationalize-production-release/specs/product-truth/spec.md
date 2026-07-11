@@ -3,6 +3,10 @@
 ### Requirement: Test-Backed Capability Claims
 README, roadmap, docs, help, and release notes SHALL describe only capabilities proven by named passing local and production gates and SHALL distinguish prototype, release-candidate, production, proposed, deferred, and unsupported behavior.
 
+#### Scenario: Capability without a gate
+- **WHEN** a user-facing claim cannot be linked to a passing capability test
+- **THEN** it is removed, qualified, or marked proposed
+
 #### Scenario: Production release claim
 - **WHEN** Redshift is described as production-ready
 - **THEN** the referenced release has passing dependency, native artifact, attestation, clean-install, compiled CLI, relay, and browser evidence

@@ -22,10 +22,10 @@
 
 ## 3. Fresh setup and installer validation
 
-- [ ] 3.1 Add a Linux container fresh-install test that consumes a real or controlled release and exercises version/help/setup/auth/secret/run/delete behavior.
-- [ ] 3.2 Run the container journey for Linux arm64 and x64 where the Docker host supports each architecture.
-- [ ] 3.3 Exercise macOS arm64 locally and macOS arm64/x64 through native GitHub runners; document the Docker limitation.
-- [ ] 3.4 Verify unsupported Windows behavior remains explicit.
+- [x] 3.1 Add a Linux container fresh-install test that consumes a real or controlled release and exercises version/help/setup/auth/secret/run/delete behavior.
+- [x] 3.2 Run the container journey for Linux arm64 and x64 on native GitHub runners.
+- [x] 3.3 Exercise macOS arm64 locally and macOS arm64/x64 through native GitHub runners; document the Docker limitation.
+- [x] 3.4 Verify unsupported Windows behavior remains explicit.
 
 ## 4. Browser and E2E confidence
 
@@ -36,11 +36,11 @@
 
 ## 5. Real release execution
 
-- [ ] 5.1 Complete PR QA and merge this change.
-- [ ] 5.2 Review and merge the Release Please PR.
-- [ ] 5.3 Monitor every release workflow job to success.
-- [ ] 5.4 Verify public release assets, exact checksums, SBOM, repository-bound GitHub attestations, installer, updater, and native smoke behavior.
-- [ ] 5.5 Record release URL, tag, workflow run, artifact digests, and supported-platform results.
+- [x] 5.1 Complete PR QA and merge this change.
+- [x] 5.2 Review and merge the Release Please PR.
+- [x] 5.3 Monitor the corrected v0.11.1 release workflow to first-attempt success, including both native Linux certification jobs.
+- [x] 5.4 Verify public release assets, exact checksums, SBOM, repository-bound GitHub attestations, installer, updater, and native smoke behavior.
+- [x] 5.5 Record release URL, tag, workflow run, artifact digests, and supported-platform results.
 
 ## 6. Next resilience tranche
 
@@ -51,5 +51,5 @@
 
 - [x] 7.1 Root, web, relay, and package typechecks pass.
 - [x] 7.2 Scoped Biome lint/format and `git diff --check` pass.
-- [ ] 7.3 Product, relay, compiled CLI, fresh-install, Playwright, and release verification pass without skips.
-- [ ] 7.4 Strict OpenSpec validation passes and no temporary processes, credentials, or generated artifacts remain.
+- [x] 7.3 Product, relay, compiled CLI, fresh-install, Playwright, and release verification pass without skips.
+- [x] 7.4 Strict OpenSpec validation passes and no temporary processes, credentials, or generated artifacts remain.
