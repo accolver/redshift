@@ -51,4 +51,4 @@
 - [x] 7.1 Zero-advisory audits, typechecks, Biome, generated-source checks, all package/CLI/web/relay tests, and compiled lifecycle tests pass.
 - [x] 7.2 Independent cryptographic, filesystem, protocol, UX/truth, and release reviewers report no unresolved blocker/high/medium findings.
 - [x] 7.3 Strict OpenSpec validation and `git diff --check` pass; no processes, plaintext, credentials, archives, temp files, ports, or generated artifacts remain.
-- [ ] 7.4 Archive the completed OpenSpec change, merge through a passing PR, and certify the published immutable release artifact before marking backup shipped.
+- [x] 7.4 Archive the completed OpenSpec change, merge through a passing PR, and certify the published immutable release artifact before marking backup shipped.

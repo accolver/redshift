@@ -69,4 +69,16 @@ All blocker/high/medium findings were addressed in code and tests. Generated emb
 - strict validation of all active OpenSpec changes and canonical specs;
 - no leaked repository workerd, local relay, or compiled CLI server process.
 
-Public installed-binary certification is wired for Linux x64/arm64 and macOS x64/arm64. Release URL, workflow run, source digest, attestations, and public installation results are recorded only after an immutable release is published.
+## Published release certification
+
+- Release: https://github.com/accolver/redshift/releases/tag/v0.13.0
+- Source: `0d92a207435b3c16b16ec4627f4e4b96012fa0b4`
+- Release workflow: https://github.com/accolver/redshift/actions/runs/29167037057
+- Main CI: https://github.com/accolver/redshift/actions/runs/29167037052
+- Published: 2026-07-11T20:38:45Z as latest, non-draft, and non-prerelease
+
+The release workflow passed its complete verify stage, built all four native assets, generated checksums and an SPDX SBOM, attested and source-bound every artifact, published the verified draft, and then passed fresh public installed-binary backup/restore/tamper/upgrade certification on native Linux x64, Linux arm64, macOS x64, and macOS arm64 runners. The automatic withdrawal job was correctly skipped because every certification job passed.
+
+A separate local public-artifact check downloaded all v0.13.0 assets, verified every checksum, verified the macOS arm64 artifact's GitHub attestation against the release workflow and exact source digest, confirmed `redshift v0.13.0`, and confirmed installed help exposes `backup create` and `backup restore`.
+
+Greptile was requested on PR #43 and polled for the full 15-minute window, but it produced no reaction, review, or finding. No Greptile result is represented as evidence. PR #43's Product Verification, Build Artifacts, and Cloudflare Pages checks passed, and no unresolved review thread existed before merge.
