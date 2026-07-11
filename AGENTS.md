@@ -282,8 +282,11 @@ Review the Release Please PR carefully:
 - expected semantic-version increment;
 - all CI checks passing.
 
-Merge the Release Please PR. This creates the immutable tag and starts the full
-release jobs. Record the tag and workflow run ID.
+Merge the Release Please PR. Release Please first creates a draft release. The
+release workflow checks out the immutable release commit (`github.sha`) because
+a draft release may not create its Git tag until publication. After verification,
+the workflow publishes the draft and GitHub creates the tag at that same commit.
+Record the tag, source commit, and workflow run ID.
 
 ### 3. Monitor the release workflow
 
@@ -335,13 +338,16 @@ Run the fresh-install matrix after attestation verification:
 
 ```bash
 GH_TOKEN="$(gh auth token)" bun run test:release:containers -- "$TAG"
+gh workflow run verify-published-release.yml -f tag="$TAG"
 curl -fsSL https://redshiftapp.com/install | sh
 redshift --version
 redshift --help
 ```
 
-Docker proves Linux x64/arm64 behavior only. macOS must be exercised on native
-Darwin hosts/runners; a Linux container is not macOS validation.
+The container matrix pins `REDSHIFT_VERSION=$TAG`, so certification never
+silently tests a different latest release. Docker proves Linux x64/arm64
+behavior only, using native x64 and ARM GitHub runners; macOS must be exercised
+on native Darwin hosts/runners because a Linux container is not macOS validation.
 
 ### 5. Record release evidence
 

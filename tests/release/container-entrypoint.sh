@@ -16,6 +16,7 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 export HOME="$ROOT/home"
+export REDSHIFT_VERSION="$EXPECTED_TAG"
 export REDSHIFT_INSTALL_DIR="$HOME/.local/bin"
 export PATH="$REDSHIFT_INSTALL_DIR:$PATH"
 mkdir -p "$HOME" "$REDSHIFT_INSTALL_DIR" "$ROOT/work" "$ROOT/config"

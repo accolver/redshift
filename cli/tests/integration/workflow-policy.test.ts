@@ -7,6 +7,7 @@ const workflowPaths = [
 	'.github/workflows/ci.yml',
 	'.github/workflows/release.yml',
 	'.github/workflows/deploy-relay.yml',
+	'.github/workflows/verify-published-release.yml',
 ];
 
 function readRepositoryFile(path: string) {
@@ -71,6 +72,8 @@ describe('GitHub Actions policy', () => {
 		expect(releasePlease.packages['.']?.draft).toBe(true);
 		const release = readWorkflow('.github/workflows/release.yml');
 		expect(release).toContain('name: Publish the verified draft release');
+		expect(release).toContain('ref: ${{ github.sha }}');
+		expect(release).not.toContain('ref: ${{ needs.release-please.outputs.tag_name }}');
 		expect(release).toContain('--draft=false');
 		expect(release).toContain('name: Withdraw Failed Release');
 		expect(release).toContain('--latest=false');
@@ -84,10 +87,16 @@ describe('GitHub Actions policy', () => {
 			'scripts/test-release-containers.sh',
 		);
 		const release = readWorkflow('.github/workflows/release.yml');
-		expect(release).toContain('name: Verify Published Release');
+		expect(release).toContain('name: Verify Published Release (${{ matrix.platform }})');
 		expect(release).toContain('scripts/test-release-containers.sh');
-		expect(release).toContain('platforms: arm64,amd64');
+		expect(release).toContain('platform: linux/amd64');
+		expect(release).toContain('platform: linux/arm64');
+		expect(release).toContain('runner: ubuntu-24.04-arm');
 		expect(release).toContain('attestations: read');
+
+		const manualVerification = readWorkflow('.github/workflows/verify-published-release.yml');
+		expect(manualVerification).toContain('workflow_dispatch:');
+		expect(manualVerification).toContain('scripts/test-release-containers.sh');
 	});
 
 	it('documents the immutable GitHub release ceremony and rollback', () => {

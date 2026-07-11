@@ -51,14 +51,18 @@ detect_arch() {
     esac
 }
 
-# Get latest release version from GitHub
+# Resolve an explicitly pinned version or the latest release from GitHub.
 get_latest_version() {
-    VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [ -z "$VERSION" ]; then
-        error "Failed to fetch latest version from GitHub"
+    if [ -n "${REDSHIFT_VERSION:-}" ]; then
+        VERSION=$REDSHIFT_VERSION
+    else
+        VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        if [ -z "$VERSION" ]; then
+            error "Failed to fetch latest version from GitHub"
+        fi
     fi
     if ! printf '%s' "$VERSION" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$'; then
-        error "GitHub returned an invalid release tag"
+        error "Invalid release tag"
     fi
 }
 
