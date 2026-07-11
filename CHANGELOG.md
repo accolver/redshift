@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/accolver/redshift/compare/v0.11.0...v0.11.1) (2026-07-11)
+
+
+### Bug Fixes
+
+* **release:** certify draft artifacts before publication ([#38](https://github.com/accolver/redshift/issues/38)) ([187aa63](https://github.com/accolver/redshift/commit/187aa63b1d5cfa601505b990e6b84633e37f2e19))
+
 ## [0.11.0](https://github.com/accolver/redshift/compare/v0.10.5...v0.11.0) (2026-07-11)
 
 
