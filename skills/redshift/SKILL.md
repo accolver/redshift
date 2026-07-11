@@ -1,6 +1,6 @@
 ---
 name: redshift
-description: Manages application secrets with the Redshift CLI — decentralized, encrypted secret management built on Nostr. Use when setting, getting, deleting, listing, uploading, or downloading secrets, injecting secrets into commands, configuring projects/environments, or authenticating with Nostr keys. Covers redshift login, redshift setup, redshift secrets, redshift run, redshift configure, redshift serve, and redshift upgrade.
+description: Manages application secrets with the Redshift CLI — decentralized, encrypted secret management built on Nostr. Use when setting, getting, deleting, listing, uploading, or downloading secrets, recovering partial relay publications, injecting secrets into commands, configuring projects/environments, or authenticating with Nostr keys. Covers redshift login, redshift setup, redshift secrets, redshift recovery, redshift run, redshift configure, redshift serve, and redshift upgrade.
 ---
 
 # Redshift CLI
@@ -98,6 +98,19 @@ Override project/environment on any secrets command with `-p` / `-c`:
 redshift secrets -p backend -c production --raw
 redshift secrets set -p myapp -c staging FEATURE_FLAG true
 ```
+
+## Relay publication recovery
+
+When a mutation reports degraded redundancy or fails below quorum, inspect the owner-only local record and retry the exact signed encrypted event. Never create a replacement event automatically.
+
+```bash
+redshift recovery list
+redshift recovery show <event-id>
+redshift recovery retry <event-id>   # unavailable relays only
+redshift recovery remove <event-id>  # local notice only; does not delete relay data
+```
+
+Recovery is not a backup, history, cryptographic erasure, or an availability guarantee.
 
 ## Run with secrets injected
 

@@ -36,6 +36,7 @@ export {
 	wrapSecrets,
 	unwrapSecrets,
 	unwrapGiftWrap,
+	validateGiftWrapEnvelope,
 	createTombstone,
 	isRedshiftSecretsEvent,
 	getRedshiftSecretsFilter,

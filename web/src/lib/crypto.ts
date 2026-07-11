@@ -13,6 +13,7 @@ export {
 	wrapSecrets,
 	unwrapSecrets,
 	unwrapGiftWrap,
+	validateGiftWrapEnvelope,
 	compareSecretVersions,
 	createTombstone,
 	isRedshiftSecretsEvent,

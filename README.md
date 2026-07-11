@@ -61,6 +61,16 @@ redshift secrets get API_KEY --raw
 redshift run -- npm start
 ```
 
+If a write reaches quorum but not every configured relay, Redshift reports degraded redundancy and
+preserves the exact encrypted event for unavailable-only retry:
+
+```bash
+redshift recovery list
+redshift recovery retry <event-id>
+```
+
+This recovery record is not a backup or a relay-data deletion mechanism.
+
 ### Project Setup
 
 The `redshift setup` command creates a `redshift.yaml` file in your project

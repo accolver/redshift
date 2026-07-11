@@ -5,10 +5,13 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
 import { RateLimiter } from '../../src/lib/rate-limiter';
 import {
 	PublishQuorumError,
 	createRelayPool,
+	getUnavailableRelays,
+	mergePublishReports,
 	filterGiftWraps,
 	getLatestByDTag,
 	publishWithQuorum,
@@ -22,12 +25,11 @@ describe('Relay Module', () => {
 			const pool = createRelayPool(relays);
 
 			expect(pool).toBeDefined();
-			expect(pool.relays).toEqual(relays);
+			expect(pool.relays).toEqual(relays.map((relay) => `${relay}/`));
 		});
 
-		it('creates pool with empty relay list', () => {
-			const pool = createRelayPool([]);
-			expect(pool.relays).toEqual([]);
+		it('rejects an empty relay list', () => {
+			expect(() => createRelayPool([])).toThrow('at least one relay');
 		});
 
 		it('creates pool with rate limiting enabled by default', () => {
@@ -89,6 +91,12 @@ describe('Relay Module', () => {
 			expect(report.required).toBe(2);
 			expect(report.accepted).toEqual(['wss://one.test', 'wss://two.test']);
 			expect(report.failed).toEqual([{ relay: 'wss://three.test', reason: 'offline' }]);
+			expect(report.outcomes).toEqual([
+				{ relay: 'wss://one.test', state: 'accepted' },
+				{ relay: 'wss://two.test', state: 'accepted' },
+				{ relay: 'wss://three.test', state: 'unavailable', reason: 'offline' },
+			]);
+			expect(getUnavailableRelays(report)).toEqual(['wss://three.test']);
 		});
 
 		it('throws a typed report when partial acceptance is below quorum', async () => {
@@ -115,6 +123,121 @@ describe('Relay Module', () => {
 			await expect(publishWithQuorum([], event, async () => {})).rejects.toBeInstanceOf(
 				PublishQuorumError,
 			);
+		});
+
+		it('classifies typed permanent rejection separately from outage', async () => {
+			const report = await publishWithQuorum(
+				['wss://accepted.test', 'wss://rejected.test', 'wss://offline.test'],
+				event,
+				async (relay) => {
+					if (relay.includes('rejected')) throw new Error('restricted: private relay');
+					if (relay.includes('offline')) throw new Error('timeout');
+				},
+				1,
+			);
+			expect(report.outcomes.map(({ state }) => state)).toEqual([
+				'accepted',
+				'rejected',
+				'unavailable',
+			]);
+		});
+
+		it('merges an unavailable-only retry without changing the original threshold', async () => {
+			const previous = await publishWithQuorum(
+				['wss://accepted.test', 'wss://offline.test'],
+				event,
+				async (relay) => {
+					if (relay.includes('offline')) throw new Error('timeout');
+				},
+				1,
+			);
+			const retry = await publishWithQuorum(['wss://offline.test'], event, async () => {}, 1);
+			const merged = mergePublishReports(previous, retry);
+			expect(merged.required).toBe(1);
+			expect(merged.accepted).toEqual(['wss://accepted.test', 'wss://offline.test']);
+			expect(merged.outcomes.every(({ state }) => state === 'accepted')).toBe(true);
+		});
+
+		it('confirms duplicate acceptance only with a byte-identical same-relay event', async () => {
+			const signed = finalizeEvent(
+				{ kind: 1059, created_at: 1, tags: [['t', 'redshift-secrets']], content: 'ciphertext' },
+				generateSecretKey(),
+			) as NostrEvent;
+			let queryCount = 0;
+			const relayPool = createRelayPool(['wss://duplicate.test'], {
+				enableRateLimiting: false,
+				enableRetry: false,
+				publishRelay: async () => {
+					throw new Error('duplicate: already have this event');
+				},
+				queryRelay: async () => {
+					queryCount++;
+					return [signed];
+				},
+			});
+			const report = await relayPool.publish(signed);
+			expect(queryCount).toBe(1);
+			expect(report.accepted).toEqual(['wss://duplicate.test/']);
+			relayPool.close();
+		});
+
+		it('does not accept an unconfirmed duplicate', async () => {
+			const signed = finalizeEvent(
+				{ kind: 1059, created_at: 1, tags: [['t', 'redshift-secrets']], content: 'ciphertext' },
+				generateSecretKey(),
+			) as NostrEvent;
+			const relayPool = createRelayPool(['wss://duplicate.test'], {
+				enableRateLimiting: false,
+				enableRetry: false,
+				publishRelay: async () => {
+					throw new Error('duplicate: content already exists');
+				},
+				queryRelay: async () => [],
+			});
+			await expect(relayPool.publish(signed)).rejects.toBeInstanceOf(PublishQuorumError);
+			relayPool.close();
+		});
+
+		it('keeps a duplicate unavailable when confirmation query itself is rejected', async () => {
+			const signed = finalizeEvent(
+				{ kind: 1059, created_at: 1, tags: [['t', 'redshift-secrets']], content: 'ciphertext' },
+				generateSecretKey(),
+			) as NostrEvent;
+			const relayPool = createRelayPool(['wss://duplicate.test'], {
+				enableRateLimiting: false,
+				enableRetry: false,
+				publishRelay: async () => {
+					throw new Error('duplicate: content already exists');
+				},
+				queryRelay: async () => {
+					throw new Error('restricted: query denied');
+				},
+			});
+			try {
+				await relayPool.publish(signed);
+				throw new Error('Expected duplicate confirmation failure');
+			} catch (error) {
+				expect(error).toBeInstanceOf(PublishQuorumError);
+				if (error instanceof PublishQuorumError) {
+					expect(error.report.outcomes[0]?.state).toBe('unavailable');
+					expect(error.report.outcomes[0]?.reason).toContain('duplicate:');
+				}
+			}
+			relayPool.close();
+		});
+
+		it('publishes an exact event only to an explicit relay subset', async () => {
+			const attempted: string[] = [];
+			const relayPool = createRelayPool(['wss://one.test', 'wss://two.test'], {
+				enableRateLimiting: false,
+				enableRetry: false,
+				publishRelay: async (relay) => {
+					attempted.push(relay);
+				},
+			});
+			await relayPool.publishTo(['wss://two.test/'], event, 1);
+			expect(attempted).toEqual(['wss://two.test/']);
+			relayPool.close();
 		});
 	});
 

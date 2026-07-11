@@ -10,6 +10,9 @@ import { nip44 } from 'nostr-tools';
 import type { EventTemplate } from 'nostr-tools/core';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { createNip46BunkerHandler } from '../../src/lib/nip46-bunker';
+import { PublishQuorumError } from '../../src/lib/relay';
+import type { PublishReport, RelayPool } from '../../src/lib/relay';
+import type { RecoveryRecord } from '../../src/lib/publication-recovery';
 import {
 	SecretManager,
 	extractProjects,
@@ -137,6 +140,118 @@ describe('SecretManager', () => {
 			expect(manager.getPublicKey()).toBe(getPublicKey(userSecretKey));
 			expect(wrapped.event.pubkey).not.toBe(manager.getPublicKey());
 			expect(unwrapped).toEqual(secrets);
+			await manager.close();
+		});
+	});
+
+	describe('publication recovery', () => {
+		function report(
+			eventId: string,
+			states: Array<'accepted' | 'rejected' | 'unavailable'>,
+		): PublishReport {
+			const outcomes = states.map((state, index) => ({
+				relay: `wss://${index + 1}.test/`,
+				state,
+				...(state === 'accepted'
+					? {}
+					: { reason: state === 'rejected' ? 'restricted: policy' : 'timeout' }),
+			}));
+			return {
+				eventId,
+				required: Math.floor(states.length / 2) + 1,
+				accepted: outcomes.filter(({ state }) => state === 'accepted').map(({ relay }) => relay),
+				failed: outcomes
+					.filter(({ state }) => state !== 'accepted')
+					.map(({ relay, reason }) => ({ relay, reason: reason ?? 'unknown' })),
+				outcomes,
+			};
+		}
+
+		function managerWithPublication(
+			publish: (event: NostrEvent) => Promise<PublishReport>,
+			effects: string[],
+			records: RecoveryRecord[],
+		) {
+			const pool: RelayPool = {
+				relays: ['wss://1.test/', 'wss://2.test/', 'wss://3.test/'],
+				pool: {} as RelayPool['pool'],
+				subscribe: () => ({ close: () => {} }),
+				publish: async (event) => {
+					effects.push('publish');
+					return publish(event);
+				},
+				publishTo: async () => {
+					throw new Error('not used');
+				},
+				query: async () => [],
+				close: () => {},
+				resetRateLimiter: () => {},
+			};
+			const manager = new SecretManager(generateSecretKey(), {
+				createPool: () => pool,
+				saveRecovery: async (record) => {
+					effects.push(`save:${record.report.accepted.length}`);
+					records.push(structuredClone(record));
+				},
+				removeRecovery: async () => {
+					effects.push('remove');
+				},
+			});
+			manager.connect(pool.relays);
+			return manager;
+		}
+
+		it('persists the exact event before network publication and stores degraded outcomes', async () => {
+			const effects: string[] = [];
+			const records: RecoveryRecord[] = [];
+			const manager = managerWithPublication(
+				async (event) => report(event.id, ['accepted', 'accepted', 'unavailable']),
+				effects,
+				records,
+			);
+			const event = await manager.publishSecrets('project', 'dev', { API_KEY: 'secret' });
+			expect(effects).toEqual(['save:0', 'publish', 'save:2']);
+			expect(records).toHaveLength(2);
+			expect(records[0]?.event).toEqual(event);
+			expect(records[1]?.event).toEqual(event);
+			expect(manager.getLastPublication()?.report.outcomes[2]?.state).toBe('unavailable');
+			await manager.close();
+		});
+
+		it('stores below-quorum outcomes and rethrows with the exact signed event', async () => {
+			const effects: string[] = [];
+			const records: RecoveryRecord[] = [];
+			const manager = managerWithPublication(
+				async (event) => {
+					throw new PublishQuorumError(
+						report(event.id, ['accepted', 'rejected', 'unavailable']),
+						event,
+					);
+				},
+				effects,
+				records,
+			);
+			try {
+				await manager.deleteSecrets('project', 'dev');
+				throw new Error('expected failure');
+			} catch (error) {
+				expect(error).toBeInstanceOf(PublishQuorumError);
+				if (error instanceof PublishQuorumError) expect(records[1]?.event).toEqual(error.event);
+			}
+			expect(effects).toEqual(['save:0', 'publish', 'save:1']);
+			await manager.close();
+		});
+
+		it('records full acceptance before removing local recovery state', async () => {
+			const effects: string[] = [];
+			const records: RecoveryRecord[] = [];
+			const manager = managerWithPublication(
+				async (event) => report(event.id, ['accepted', 'accepted', 'accepted']),
+				effects,
+				records,
+			);
+			await manager.publishSecrets('project', 'dev', { KEY: 'value' });
+			expect(effects).toEqual(['save:0', 'publish', 'save:3', 'remove']);
 			await manager.close();
 		});
 	});

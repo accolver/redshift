@@ -3,15 +3,32 @@ import { getRedshiftSecretsFilter } from '$lib/crypto';
 import { clearDecryptionCache } from '$lib/models/gift-wrap-secrets';
 import {
 	type QuorumReport,
+	QuorumError,
 	RateLimiter,
 	executeWithQuorum,
+	getUnavailableTargets,
+	hasQuorum,
+	parseNip20Reason,
 	withPublishBackoff,
 } from '$lib/rate-limiter';
 import { DEFAULT_RELAYS as CRYPTO_DEFAULT_RELAYS } from '@redshift/crypto';
 import { EventStore } from 'applesauce-core';
 import { RelayPool, onlyEvents } from 'applesauce-relay';
 import type { EventTemplate, NostrEvent } from 'nostr-tools';
+import { firstValueFrom, take, timeout } from 'rxjs';
 import type { Subscription } from 'rxjs';
+import {
+	clearPublicationRecovery,
+	finalizePublicationRecovery,
+	getPublicationRecoveryRecord,
+	isExactPublicationEvent,
+	mergePublicationRecovery,
+	normalizePublicationRelayUrls,
+	preparePublicationRecovery,
+	setPublicationRecoveryError,
+	setPublicationRetrying,
+} from './publication-recovery.svelte';
+import type { PublicationContext } from './publication-recovery.svelte';
 
 // Re-export constants for backward compatibility with existing imports
 export { REDSHIFT_KIND, getProjectDTag } from '$lib/constants';
@@ -372,6 +389,8 @@ export function disconnect(): void {
 	lastSeenTimestamp = null;
 	// Reset sync flag so next session will sync again
 	resetManagedRelaySync();
+	// Recovery state is scoped to the authenticated browser session.
+	clearPublicationRecovery();
 }
 
 export async function withPublishTimeout<T>(
@@ -396,17 +415,93 @@ export async function withPublishTimeout<T>(
 export async function publishEvent(
 	event: NostrEvent,
 	relays?: string[],
+	context?: PublicationContext,
 ): Promise<QuorumReport<string>> {
-	const targets = relays ?? (relayState.relays.length > 0 ? relayState.relays : DEFAULT_RELAYS);
-	const report = await executeWithQuorum(targets, event.id, async (relay) => {
-		await withPublishBackoff(async () => {
-			await rateLimiter.waitForSlot();
-			const publishPromise = relayPool.publish([relay], event).then(() => undefined);
-			await withPublishTimeout(publishPromise, relay);
-		});
-	});
-
+	const targets = normalizePublicationRelayUrls(
+		relays ?? (relayState.relays.length > 0 ? relayState.relays : DEFAULT_RELAYS),
+	);
+	const recoverableSecretEvent = event.kind === 1059;
+	if (recoverableSecretEvent) {
+		const ownerPubkey = context?.ownerPubkey ?? eventOwner(event);
+		preparePublicationRecovery(event, targets, { ...context, ownerPubkey });
+	}
+	let report: QuorumReport<string>;
+	try {
+		report = await executeWithQuorum(targets, event.id, (relay) =>
+			publishEventToRelay(relay, event),
+		);
+	} catch (error) {
+		if (!(error instanceof QuorumError)) throw error;
+		if (recoverableSecretEvent) {
+			finalizePublicationRecovery(event.id, error.report as QuorumReport<string>);
+		}
+		throw error;
+	}
+	if (recoverableSecretEvent) finalizePublicationRecovery(event.id, report);
 	// Only expose the event as durable local state after publication quorum succeeds.
 	eventStore.add(event);
 	return report;
+}
+
+export async function retryPublication(eventId: string): Promise<QuorumReport<string>> {
+	const record = getPublicationRecoveryRecord(eventId);
+	if (!record) throw new Error(`Publication recovery record not found: ${eventId}`);
+	const unavailable = getUnavailableTargets(record.report);
+	if (unavailable.length === 0) return record.report;
+	setPublicationRetrying(eventId, true);
+	setPublicationRecoveryError(null);
+	try {
+		let retryReport: QuorumReport<string>;
+		try {
+			retryReport = await executeWithQuorum(unavailable, eventId, (relay) =>
+				publishEventToRelay(relay, record.event),
+			);
+		} catch (error) {
+			if (!(error instanceof QuorumError)) throw error;
+			retryReport = error.report as QuorumReport<string>;
+		}
+		const merged = mergePublicationRecovery(eventId, retryReport);
+		if (hasQuorum(merged)) eventStore.add(record.event);
+		return merged;
+	} catch (error) {
+		setPublicationRecoveryError(error instanceof Error ? error.message : String(error));
+		throw error;
+	} finally {
+		setPublicationRetrying(eventId, false);
+	}
+}
+
+async function publishEventToRelay(relay: string, event: NostrEvent) {
+	await withPublishBackoff(async () => {
+		await rateLimiter.waitForSlot();
+		try {
+			const publishPromise = relayPool
+				.publish([relay], event, { reconnect: false, timeout: 5000 })
+				.then((responses) => {
+					const response = responses[0];
+					if (!response?.ok)
+						throw new Error(response?.message || `Relay rejected event at ${relay}`);
+				});
+			await withPublishTimeout(publishPromise, relay);
+		} catch (error) {
+			if (parseNip20Reason(error).code !== 'duplicate') throw error;
+			try {
+				const candidate = await firstValueFrom(
+					relayPool.request([relay], [{ ids: [event.id] }]).pipe(take(1), timeout({ first: 2000 })),
+				);
+				if (isExactPublicationEvent(candidate, event)) return;
+			} catch {
+				// Unconfirmed duplicate remains unavailable and follows normal retry policy.
+			}
+			throw error;
+		}
+	});
+}
+
+function eventOwner(event: NostrEvent) {
+	if (event.kind !== 1059) return event.pubkey;
+	const recipients = event.tags.filter((tag) => tag[0] === 'p');
+	const owner = recipients.length === 1 ? recipients[0]?.[1] : undefined;
+	if (!owner) throw new Error('Gift Wrap publication requires exactly one owner recipient');
+	return owner;
 }

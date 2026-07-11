@@ -654,6 +654,7 @@ export function createCLI(version: string): CLI {
 	cli.registerCommand(createSetupCommand());
 	cli.registerCommand(createRunCommand());
 	cli.registerCommand(createSecretsCommand());
+	cli.registerCommand(createRecoveryCommand());
 	cli.registerCommand(createServeCommand());
 	cli.registerCommand(createBunkerCommand());
 	cli.registerCommand(createConfigureCommand());
@@ -864,6 +865,47 @@ function createRunCommand(): CommandDef {
 				variadic: true,
 			},
 		],
+	};
+}
+
+function createRecoveryCommand(): CommandDef {
+	const eventIdPosition = [
+		{
+			name: 'event-id',
+			description: '64-character pending publication event ID',
+			required: true,
+		},
+	];
+	return {
+		name: 'recovery',
+		description: 'Inspect and retry incomplete relay publications',
+		examples: [
+			'redshift recovery list',
+			'redshift recovery show <event-id>',
+			'redshift recovery retry <event-id>',
+			'redshift recovery remove <event-id>',
+		],
+		subcommands: {
+			list: {
+				name: 'list',
+				description: 'List incomplete relay publications',
+			},
+			show: {
+				name: 'show',
+				description: 'Show classified per-relay publication outcomes',
+				positionals: eventIdPosition,
+			},
+			retry: {
+				name: 'retry',
+				description: 'Retry the exact signed event only to unavailable relays',
+				positionals: eventIdPosition,
+			},
+			remove: {
+				name: 'remove',
+				description: 'Remove only the local recovery record',
+				positionals: eventIdPosition,
+			},
+		},
 	};
 }
 

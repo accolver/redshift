@@ -6,6 +6,13 @@ export {
 	withRateLimit,
 	createResilientOperation,
 	executeWithQuorum,
+	getUnavailableTargets,
+	hasQuorum,
+	isFullyAccepted,
+	mergeQuorumReports,
+	parseNip20Reason,
+	sanitizeRelayReason,
+	PUBLICATION_RECOVERY_LIMITS,
 	QuorumError,
 	isPermanentError,
 	DEFAULT_BACKOFF_OPTIONS,
@@ -13,4 +20,8 @@ export {
 	QUERY_BACKOFF_OPTIONS,
 } from '@redshift/rate-limiter';
 
-export type { QuorumReport } from '@redshift/rate-limiter';
+export type {
+	QuorumOutcome,
+	QuorumOutcomeState,
+	QuorumReport,
+} from '@redshift/rate-limiter';

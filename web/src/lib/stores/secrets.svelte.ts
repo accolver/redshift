@@ -527,7 +527,7 @@ export async function publishSecretTombstone(
 ): Promise<NostrEvent> {
 	const dTag = createDTag(projectSlug, environmentSlug);
 	const event = await wrapSecretsForPublish({}, dTag);
-	await publishEvent(event);
+	await publishEvent(event, undefined, publicationContext(projectSlug, environmentSlug));
 	return event;
 }
 
@@ -564,7 +564,11 @@ export async function setSecret(key: string, value: string): Promise<void> {
 		const event = await wrapSecretsForPublish(bundle, dTag);
 
 		// Publish the Gift Wrap event
-		await publishEvent(event);
+		await publishEvent(
+			event,
+			undefined,
+			publicationContext(currentProjectSlug, currentEnvironmentSlug),
+		);
 
 		// Optimistically update local state
 		secretsState.secrets = updatedSecrets;
@@ -621,7 +625,7 @@ export async function setSecretToMultipleEnvs(
 		// Phase 2: Publish sequentially (respecting relay rate limits)
 		for (const { envSlug, event } of preparedEvents) {
 			try {
-				await publishEvent(event);
+				await publishEvent(event, undefined, publicationContext(projectSlug, envSlug));
 			} catch (err) {
 				errors.push({
 					envSlug,
@@ -675,7 +679,11 @@ export async function deleteSecret(key: string): Promise<void> {
 		const event = await wrapSecretsForPublish(bundle, dTag);
 
 		// Publish the Gift Wrap event
-		await publishEvent(event);
+		await publishEvent(
+			event,
+			undefined,
+			publicationContext(currentProjectSlug, currentEnvironmentSlug),
+		);
 
 		// Optimistically update local state
 		secretsState.secrets = updatedSecrets;
@@ -692,6 +700,12 @@ export async function deleteSecret(key: string): Promise<void> {
  */
 export function clearSaveError(): void {
 	secretsState.saveError = null;
+}
+
+function publicationContext(project: string, environment: string) {
+	const ownerPubkey = getAuthState().pubkey;
+	if (!ownerPubkey) throw new Error('Authentication required for publication recovery');
+	return { ownerPubkey, project, environment };
 }
 
 /**

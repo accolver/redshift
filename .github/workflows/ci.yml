@@ -40,8 +40,8 @@ jobs:
           cd relay/nosflare && bun run typecheck
       - name: Run scoped product lint and format checks
         run: |
-          bunx biome lint cli/src packages web/src web/tests relay/nosflare/src relay/nosflare/tests --diagnostic-level=error
-          bunx biome format cli/src packages web/src web/tests relay/nosflare/src relay/nosflare/tests
+          bunx biome lint cli/src packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests --diagnostic-level=error
+          bunx biome format cli/src packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests
       - name: Build dashboard and compiled CLI test subject
         run: |
           bun run verify:embeds
@@ -65,6 +65,7 @@ jobs:
           tests/integration/upgrade-binary-e2e.test.ts
           tests/integration/installer-integrity.test.ts
           tests/integration/nak-bunker-e2e.test.ts
+          tests/integration/relay-publication-recovery.test.ts
       - name: Run managed relay tests
         working-directory: relay/nosflare
         run: bun test
@@ -78,7 +79,12 @@ jobs:
         working-directory: web
         env:
           CI: 'true'
-        run: bun run test:e2e
+        run: |
+          bun run test:e2e
+          if pgrep -f "$GITHUB_WORKSPACE/node_modules/.bun/@cloudflare.*workerd" >/dev/null; then
+            echo "Browser gates leaked a repository workerd process" >&2
+            exit 1
+          fi
 
   build:
     name: Build Artifacts

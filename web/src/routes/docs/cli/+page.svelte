@@ -121,6 +121,24 @@ redshift secrets upload .env`} />
 
 	<hr />
 
+	<ProseHeading level={2} id="recovery">redshift recovery</ProseHeading>
+	<p>
+		Inspect a mutation that reached only part of the configured relay set and retry its exact signed,
+		encrypted event only to relays that were unavailable. Permanent relay rejection remains visible
+		until you remove the local notice.
+	</p>
+	<CodeBlock language="bash" code={`redshift recovery list
+redshift recovery show <event-id>
+redshift recovery retry <event-id>
+redshift recovery remove <event-id>`} />
+	<p>
+		The owner-only local record contains relay ciphertext and publication metadata, never a private key
+		or plaintext secret. Retry is not a backup, does not create a new logical version, and cannot erase
+		historical ciphertext retained by relays.
+	</p>
+
+	<hr />
+
 	<ProseHeading level={2} id="configure">redshift configure</ProseHeading>
 	<p>Inspect or atomically modify non-secret CLI configuration.</p>
 	<CodeBlock language="bash" code={`redshift configure

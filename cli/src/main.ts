@@ -15,6 +15,7 @@ import { VERSION } from './version';
 // Import command handlers
 import { bunkerCommand } from './commands/bunker';
 import { loginCommand, logoutCommand } from './commands/login';
+import { recoveryCommand } from './commands/recovery';
 import { runCommand } from './commands/run';
 import { type SecretsSubcommand, secretsCommand } from './commands/secrets';
 import { serveCommand } from './commands/serve';
@@ -99,6 +100,12 @@ async function executeCommand(parsed: ParsedArgs): Promise<void> {
 			return handleRunCommand(parsed);
 		case 'secrets':
 			return handleSecretsCommand(parsed);
+		case 'recovery':
+			return recoveryCommand({
+				subcommand: (parsed.subcommand ?? 'list') as 'list' | 'show' | 'retry' | 'remove',
+				...(parsed.positionals[0] ? { eventId: parsed.positionals[0] } : {}),
+				json: parsed.globalFlags.json,
+			});
 		case 'serve':
 			return handleServeCommand(parsed);
 		case 'bunker':

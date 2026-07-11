@@ -8,7 +8,13 @@
 import { nip44 } from 'nostr-tools';
 import type { Event as NostrToolsEvent } from 'nostr-tools/core';
 import { createRumor, createSeal } from 'nostr-tools/nip59';
-import { finalizeEvent, generateSecretKey, getPublicKey, verifyEvent } from 'nostr-tools/pure';
+import {
+	finalizeEvent,
+	generateSecretKey,
+	getEventHash,
+	getPublicKey,
+	verifyEvent,
+} from 'nostr-tools/pure';
 import type {
 	GiftWrapResult,
 	NostrEvent,
@@ -126,7 +132,7 @@ function resolveNow(options?: UnwrapOptions) {
 	return now;
 }
 
-function validateOuterEnvelope(giftWrap: NostrEvent, expectedAuthor: string): void {
+export function validateGiftWrapEnvelope(giftWrap: NostrEvent, expectedAuthor: string): void {
 	assertCanonicalPubkey(expectedAuthor, 'expected author');
 	if (giftWrap.kind !== NostrKinds.GIFT_WRAP) {
 		throw new Error(`Invalid gift wrap event: expected kind ${NostrKinds.GIFT_WRAP}`);
@@ -153,7 +159,16 @@ function validateOuterEnvelope(giftWrap: NostrEvent, expectedAuthor: string): vo
 		throw new Error('Invalid gift wrap event: expected exactly one redshift-secrets type tag');
 	}
 
-	if (!verifyEvent(giftWrap as NostrToolsEvent)) {
+	const uncachedEvent: NostrToolsEvent = {
+		id: giftWrap.id,
+		pubkey: giftWrap.pubkey,
+		created_at: giftWrap.created_at,
+		kind: giftWrap.kind,
+		tags: giftWrap.tags,
+		content: giftWrap.content,
+		sig: giftWrap.sig,
+	};
+	if (giftWrap.id !== getEventHash(uncachedEvent) || !verifyEvent(uncachedEvent)) {
 		throw new Error('Invalid gift wrap event: signature verification failed');
 	}
 }
@@ -351,7 +366,7 @@ export function unwrapGiftWrap(
 ): UnwrapResult {
 	validatePrivateKey(privateKey);
 	const expectedAuthor = getPublicKey(privateKey);
-	validateOuterEnvelope(giftWrap, expectedAuthor);
+	validateGiftWrapEnvelope(giftWrap, expectedAuthor);
 
 	const outerConversationKey = nip44.v2.utils.getConversationKey(privateKey, giftWrap.pubkey);
 	const sealJson = nip44.v2.decrypt(giftWrap.content, outerConversationKey);
@@ -462,7 +477,7 @@ export async function unwrapGiftWrapWithSigner(
 	decryptFn: DecryptFn,
 	options?: UnwrapOptions,
 ): Promise<UnwrapResult> {
-	validateOuterEnvelope(giftWrap, expectedAuthor);
+	validateGiftWrapEnvelope(giftWrap, expectedAuthor);
 	const sealJson = await decryptFn(giftWrap.pubkey, giftWrap.content);
 	const seal = parseAndValidateSeal(sealJson, expectedAuthor);
 	const rumorJson = await decryptFn(seal.pubkey, seal.content);
