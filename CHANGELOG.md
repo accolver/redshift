@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/accolver/redshift/compare/v0.12.0...v0.13.0) (2026-07-11)
+
+
+### Features
+
+* **backup:** add encrypted local backup and restore ([#43](https://github.com/accolver/redshift/issues/43)) ([db1ec0b](https://github.com/accolver/redshift/commit/db1ec0b2aa5ffd3856bd71c9980c4eddf7367925))
+
 ## [0.12.0](https://github.com/accolver/redshift/compare/v0.11.1...v0.12.0) (2026-07-11)
 
 
