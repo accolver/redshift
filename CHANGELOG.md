@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.11.0](https://github.com/accolver/redshift/compare/v0.10.5...v0.11.0) (2026-07-11)
+
+
+### Features
+
+* **cli:** show QR code for Nostr Connect login ([254e237](https://github.com/accolver/redshift/commit/254e23738e2a01f7ca1fd4950303034409d627ec))
+
+
+### Bug Fixes
+
+* complete production readiness follow-up ([#35](https://github.com/accolver/redshift/issues/35)) ([28a6299](https://github.com/accolver/redshift/commit/28a6299abb68cdcee3241abc9326518b70c9547a))
+* harden production readiness ([13c6942](https://github.com/accolver/redshift/commit/13c69424f9d3992c87fb0af3d0650de4f02e13e6))
+* **web:** align homepage CLI login preview ([ba2e559](https://github.com/accolver/redshift/commit/ba2e559667149f40fde6c6f1715c29d5cb261462))
+
 ## [0.10.0](https://github.com/accolver/redshift/compare/v0.9.0...v0.10.0) (2025-12-09)
 
 
