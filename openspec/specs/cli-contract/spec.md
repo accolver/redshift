@@ -45,7 +45,7 @@ Setup SHALL validate slugs before side effects, distinguish overwrite force from
 - **THEN** nothing is written and the command exits nonzero
 
 ### Requirement: Consistent Secret Operations
-The CLI SHALL support one validated secret per get/set/delete invocation, redacted listing, explicit raw reveal, and env upload/download to stdout or an explicit path. Unsupported batch mutation, clipboard, mount, fallback, and encrypted-export claims SHALL be removed.
+The CLI SHALL support one validated secret per get/set/delete invocation, redacted listing, explicit raw reveal, env upload/download to stdout or an explicit path, and a distinct versioned passphrase-encrypted local backup/restore workflow. Unsupported batch mutation, clipboard, mount, fallback, and claims that plaintext env download is encrypted SHALL be removed.
 
 #### Scenario: Invalid mutation
 - **WHEN** a secret name or value is invalid
@@ -58,6 +58,10 @@ The CLI SHALL support one validated secret per get/set/delete invocation, redact
 #### Scenario: Upload validation
 - **WHEN** an env upload contains malformed, reserved, duplicate-after-normalization, or invalid entries
 - **THEN** upload fails before publishing
+
+#### Scenario: Plaintext download versus backup
+- **WHEN** a user requests env download or encrypted backup
+- **THEN** help and output distinguish explicit plaintext `.env` export from the encrypted backup archive
 
 ### Requirement: Explicit Secret Reveal
 Full secret values SHALL appear only through an explicitly documented reveal path or explicitly secret-bearing export operation; warnings SHALL use stderr and machine-readable stdout SHALL remain parseable.
@@ -134,4 +138,19 @@ The CLI SHALL provide list, show, retry, and remove operations for pending publi
 #### Scenario: Explicit removal
 - **WHEN** the user removes a pending or permanently rejected record
 - **THEN** the local recovery record is deleted without publishing or claiming relay deletion
+
+### Requirement: Strict Encrypted Backup Commands
+The CLI SHALL provide `backup create <file>` and `backup restore <file>` with subcommand-specific force, overwrite, identity-change, and explicit stdin flags; it SHALL reject unknown flags, missing/excess positional values, passphrase argv flags, and unsupported combinations with a nonzero usage result.
+
+#### Scenario: Create parsing
+- **WHEN** a user invokes `backup create <file>` with optional `--force` or `--passphrase-stdin`
+- **THEN** the CLI dispatches exactly one validated output path without exposing a passphrase in argv
+
+#### Scenario: Restore parsing
+- **WHEN** a user invokes `backup restore <file>` with optional `--overwrite`, `--allow-identity-change`, or `--passphrase-stdin`
+- **THEN** the CLI dispatches exactly one validated input path and the explicit conflict/identity policy
+
+#### Scenario: Machine-readable boundary
+- **WHEN** backup create/restore reports success, no-op, conflict, degraded publication, or failure
+- **THEN** prompts and warnings use stderr and stdout contains only documented non-secret results
 
