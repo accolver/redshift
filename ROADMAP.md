@@ -62,7 +62,21 @@ become a prerequisite for reading, writing, or exporting a user's secrets.
 - Resolve dependency advisories without weakening compatibility or deterministic
   builds.
 
-### P1 — operationalize the managed relay
+### P1 — complete the next resilience tranche
+
+The detailed non-shipped plan is in
+[`docs/resilience-next.md`](docs/resilience-next.md). Priorities are:
+
+- per-relay health, degraded-redundancy reporting, and safe partial-publication recovery;
+- passphrase-encrypted backup plus fresh-machine restore drills;
+- authenticated history, compare, and restore with explicit tombstone semantics;
+- production monitoring, incident response, credential rotation, and recovery exercises;
+- scheduled native/container release and installer canaries.
+
+Each guarantee remains unavailable until its listed tests and operational drills
+pass.
+
+### P2 — operationalize the managed relay
 
 - Deploy through the reviewed workflow using least-scope Cloudflare credentials.
 - Prove NIP-42 authentication, payment authorization, recipient-scoped reads,
@@ -70,14 +84,14 @@ become a prerequisite for reading, writing, or exporting a user's secrets.
 - Add retention, backup/restore drills, monitoring, and incident runbooks.
 - Publish an SLA only after measured production evidence supports it.
 
-### P2 — trustworthy history and recovery
+### P3 — trustworthy history and recovery
 
 History, compare, and restore may be added only after authorization and version
 ordering are stable. The UI and CLI must distinguish current logical state from
 historical ciphertext and must never describe a tombstone as cryptographic
 erasure.
 
-### P3 — collaboration research
+### P4 — collaboration research
 
 Teams, RBAC, invitations, revocation, rotation, and audit trails are not
 implemented. Any proposal must use current Nostr encryption primitives (for

@@ -235,6 +235,150 @@ cd cli && bun test        # CLI / Bun test
 
 ---
 
+## Full GitHub Release Procedure
+
+Use this procedure for every production CLI release. Redshift uses Release
+Please; do not create or move release tags manually and never upload unverified
+binaries.
+
+### 1. Preflight the release change
+
+1. Start from a clean branch based on `origin/main`.
+2. Read `.telos/TELOS.md`, run L9→L1→L9 validation, and verify convergence.
+3. Confirm the relevant OpenSpec change is approved and strictly valid.
+4. Run the complete local gate:
+
+   ```bash
+   bun install --frozen-lockfile
+   (cd relay/nosflare && bun install --frozen-lockfile)
+   bun run test:production
+   git diff --check
+   ```
+
+5. Confirm `git status --short` is empty and no relay, browser, or Redshift
+   process remains.
+6. Open a draft PR, complete normal review, and wait for all checks:
+
+   ```bash
+   gh pr checks <PR_NUMBER> --watch --interval 20
+   ```
+
+7. Merge only when the PR is mergeable, clean, and every required check passes.
+
+### 2. Create the release through Release Please
+
+Merging conventional commits to `main` causes `.github/workflows/release.yml` to
+open or update the Release Please PR. Do not tag the repository yourself.
+
+```bash
+gh run list --workflow release.yml --branch main --limit 5
+gh pr list --state open --search 'release: in:title' --json number,title,url
+```
+
+Review the Release Please PR carefully:
+
+- version in `package.json` and `.release-please-manifest.json`;
+- changelog accuracy and absence of unsupported production claims;
+- expected semantic-version increment;
+- all CI checks passing.
+
+Merge the Release Please PR. This creates the immutable tag and starts the full
+release jobs. Record the tag and workflow run ID.
+
+### 3. Monitor the release workflow
+
+```bash
+gh run list --workflow release.yml --branch main --limit 5
+gh run watch <RUN_ID> --interval 20 --exit-status
+```
+
+A release is incomplete unless all of these succeed:
+
+- Verify Release;
+- Linux x64 and arm64 builds;
+- macOS x64 and arm64 builds;
+- SPDX SBOM and checksum generation;
+- GitHub build-provenance attestations;
+- final release asset upload and draft publication;
+- Verify Published Release, including Linux x64/arm64 fresh installation,
+  attestation, secret lifecycle, forced updater replacement, and cleanup.
+
+If any job fails, stop, confirm the release is draft or marked non-latest, and
+follow the rollback procedure below. Do not describe the release as production-ready and do
+not replace individual files by hand.
+
+### 4. Verify the public release independently
+
+```bash
+TAG=vX.Y.Z
+REPO=accolver/redshift
+SOURCE_DIGEST=$(gh api "repos/$REPO/commits/$TAG" --jq .sha)
+gh release view "$TAG" --repo "$REPO" --json tagName,isDraft,isPrerelease,url,assets
+mkdir -p "/tmp/redshift-$TAG" && cd "/tmp/redshift-$TAG"
+gh release download "$TAG" --repo "$REPO"
+sha256sum --check checksums.txt
+gh attestation verify checksums.txt \
+  --repo "$REPO" \
+  --signer-workflow "$REPO/.github/workflows/release.yml" \
+  --source-digest "$SOURCE_DIGEST" \
+  --deny-self-hosted-runners
+for artifact in redshift-linux-x64 redshift-linux-arm64 redshift-darwin-x64 redshift-darwin-arm64 sbom.spdx.json; do
+  gh attestation verify "$artifact" \
+    --repo "$REPO" \
+    --signer-workflow "$REPO/.github/workflows/release.yml" \
+    --source-digest "$SOURCE_DIGEST" \
+    --deny-self-hosted-runners
+done
+```
+
+Run the fresh-install matrix after attestation verification:
+
+```bash
+GH_TOKEN="$(gh auth token)" bun run test:release:containers -- "$TAG"
+curl -fsSL https://redshiftapp.com/install | sh
+redshift --version
+redshift --help
+```
+
+Docker proves Linux x64/arm64 behavior only. macOS must be exercised on native
+Darwin hosts/runners; a Linux container is not macOS validation.
+
+### 5. Record release evidence
+
+Record in the release PR or audit evidence:
+
+- release URL, tag, and source commit;
+- release workflow run URL and conclusions;
+- asset names and SHA-256 digests;
+- attestation verification result;
+- Linux container and native macOS smoke results;
+- installer and updater result;
+- known deferred limitations.
+
+### 6. Rollback and incident handling
+
+**Never replace published release assets** or use `gh release upload --clobber`
+to repair trusted bytes. If post-release verification fails:
+
+1. Preserve logs, digests, and the affected artifacts as evidence.
+2. Mark the release non-latest and clearly warn users:
+
+   ```bash
+   gh release edit <BAD_TAG> --latest=false --prerelease
+   ```
+
+3. If exposure is serious, remove the installer recommendation or temporarily
+   unpublish the release while retaining an incident record.
+4. Fix forward on a new patch version through Release Please.
+5. Re-run this entire procedure and publish a security/incident note when user
+   action is required.
+
+Never delete and recreate a tag to hide a failed release. Existing installers
+and updaters fail closed when provenance, checksum, identity, or smoke checks do
+not match.
+
+---
+
 ## Project Coding Standards
 
 ### UI Components

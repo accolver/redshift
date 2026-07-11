@@ -47,6 +47,8 @@ jobs:
         run: |
           bun install --frozen-lockfile
           cd relay/nosflare && bun install --frozen-lockfile
+      - name: Audit frozen dependency graphs
+        run: bun run audit:dependencies
       - name: Typecheck all product surfaces
         run: |
           bun run typecheck
@@ -169,6 +171,19 @@ jobs:
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           subject-path: dist/*
+      - name: Verify staged release attestations
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          SOURCE_DIGEST=$(gh api "repos/${{ github.repository }}/commits/$TAG_NAME" --jq .sha)
+          for artifact in dist/redshift-* dist/checksums.txt dist/sbom.spdx.json; do
+            gh attestation verify "$artifact" \
+              --repo "${{ github.repository }}" \
+              --signer-workflow "${{ github.repository }}/.github/workflows/release.yml" \
+              --source-digest "$SOURCE_DIGEST" \
+              --deny-self-hosted-runners
+          done
       - name: Upload verified release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -181,3 +196,64 @@ jobs:
             dist/checksums.txt \
             dist/sbom.spdx.json \
             --repo "${{ github.repository }}"
+      - name: Publish the verified draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${{ needs.release-please.outputs.tag_name }}" \
+            --repo "${{ github.repository }}" \
+            --draft=false \
+            --latest
+
+  verify-published-release:
+    name: Verify Published Release
+    needs: [release-please, publish-release]
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        with:
+          platforms: arm64,amd64
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Verify fresh Linux installations from the public release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/test-release-containers.sh "${{ needs.release-please.outputs.tag_name }}"
+
+  recover-failed-release:
+    name: Withdraw Failed Release
+    needs:
+      - release-please
+      - verify-release
+      - build-binaries
+      - publish-release
+      - verify-published-release
+    if: >-
+      ${{ always() && needs.release-please.outputs.release_created == 'true' &&
+          (needs.verify-release.result == 'failure' ||
+           needs.build-binaries.result == 'failure' ||
+           needs.publish-release.result == 'failure' ||
+           needs.verify-published-release.result == 'failure') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Prevent a failed release from remaining latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          IS_DRAFT=$(gh release view "$TAG_NAME" --repo "${{ github.repository }}" --json isDraft --jq .isDraft)
+          if [ "$IS_DRAFT" = "false" ]; then
+            gh release edit "$TAG_NAME" \
+              --repo "${{ github.repository }}" \
+              --latest=false \
+              --prerelease
+          fi
+          echo "Release $TAG_NAME failed certification and must be fixed by a new patch release." >> "$GITHUB_STEP_SUMMARY"

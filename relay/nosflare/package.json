@@ -15,8 +15,8 @@
 		"@noble/curves": "^1.9.7"
 	},
 	"devDependencies": {
-		"@cloudflare/workers-types": "^4.20260228.1",
-		"esbuild": "^0.19.12",
-		"wrangler": "^4.69.0"
+		"@cloudflare/workers-types": "4.20260702.1",
+		"esbuild": "0.28.1",
+		"wrangler": "4.110.0"
 	}
 }

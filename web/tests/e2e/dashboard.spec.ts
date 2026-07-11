@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { nip19 } from 'nostr-tools';
-import { generateSecretKey } from 'nostr-tools/pure';
+import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 
 const compiledBinary = resolve(import.meta.dirname, '../../../dist/redshift');
 
@@ -87,6 +87,17 @@ async function runCli(args: string[], env: NodeJS.ProcessEnv, cwd: string) {
 	return { exitCode, stdout, stderr };
 }
 
+function captureChildDiagnostics(child: ChildProcess, label: string) {
+	let output = '';
+	const append = (message: string) => {
+		output = `${output}${message}`.slice(-8192);
+	};
+	child.stderr?.on('data', (chunk) => append(String(chunk)));
+	child.once('error', (error) => append(`\n${label} error: ${error.message}`));
+	child.once('exit', (code, signal) => append(`\n${label} exited: code=${code} signal=${signal}`));
+	return () => output;
+}
+
 async function stopChild(child: ChildProcess | undefined) {
 	if (!child || child.exitCode !== null || child.signalCode !== null) return;
 	let resolveExit: (() => void) | undefined;
@@ -103,8 +114,16 @@ async function stopChild(child: ChildProcess | undefined) {
 	if (resolveExit) child.removeListener('exit', resolveExit);
 }
 
-test('standalone dashboard hydrates and opens authentication UI', async ({ page, baseURL }) => {
+test('standalone dashboard hydrates and offers secure fallback when NIP-07 is unavailable', async ({
+	page,
+	baseURL,
+}) => {
 	await assertHydratedDashboard(page, baseURL ?? 'http://127.0.0.1:4173', true);
+	const extension = page.getByRole('button', { name: /Browser Extension/ });
+	await expect(extension).toBeDisabled();
+	await expect(extension).toContainText('No extension detected');
+	await expect(page.getByRole('button', { name: /Private Key \(nsec\)/ })).toBeEnabled();
+	await expect(page.getByRole('button', { name: /Bunker URL \(NIP-46\)/ })).toBeEnabled();
 });
 
 test('embedded browser and compiled CLI share a custom local relay journey', async ({ page }) => {
@@ -122,7 +141,12 @@ test('embedded browser and compiled CLI share a custom local relay journey', asy
 		relay = spawn('nak', ['serve', '--hostname', '127.0.0.1', '--port', String(relayPort)], {
 			stdio: ['ignore', 'ignore', 'pipe'],
 		});
-		await waitForRelay(relayUrl);
+		const relayDiagnostics = captureChildDiagnostics(relay, 'nak relay');
+		try {
+			await waitForRelay(relayUrl);
+		} catch (error) {
+			throw new Error(`${String(error)}\n${relayDiagnostics()}`);
+		}
 
 		const port = await getFreePort();
 		const url = `http://127.0.0.1:${port}`;
@@ -130,10 +154,15 @@ test('embedded browser and compiled CLI share a custom local relay journey', asy
 			env: { ...process.env, BROWSER: 'none', REDSHIFT_CONFIG_DIR: configDir },
 			stdio: ['ignore', 'ignore', 'pipe'],
 		});
+		const serverDiagnostics = captureChildDiagnostics(server, 'embedded server');
 		await page.route('https://relay.redshiftapp.com/api/check-payment**', (route) =>
 			route.fulfill({ status: 200, contentType: 'application/json', body: '{"paid":false}' }),
 		);
-		await waitForHealth(url);
+		try {
+			await waitForHealth(url);
+		} catch (error) {
+			throw new Error(`${String(error)}\n${serverDiagnostics()}`);
+		}
 		const response = await page.request.get(`${url}/admin`);
 		const csp = response.headers()['content-security-policy'] ?? '';
 		expect(csp).toContain("script-src 'self' 'nonce-");
@@ -141,7 +170,9 @@ test('embedded browser and compiled CLI share a custom local relay journey', asy
 		expect(csp).not.toContain("script-src 'self' 'unsafe-inline'");
 
 		await assertHydratedDashboard(page, url);
-		const nsec = nip19.nsecEncode(generateSecretKey());
+		const secretKey = generateSecretKey();
+		const nsec = nip19.nsecEncode(secretKey);
+		const npub = nip19.npubEncode(getPublicKey(secretKey));
 		await page.getByRole('button', { name: /Private Key \(nsec\)/ }).click();
 		await page.getByPlaceholder('nsec1...').fill(nsec);
 		await page.getByRole('dialog').getByRole('button', { name: 'Connect', exact: true }).click();
@@ -186,6 +217,61 @@ test('embedded browser and compiled CLI share a custom local relay journey', asy
 		);
 		expect(cli.exitCode, cli.stderr).toBe(0);
 		expect(cli.stdout).toBe('browser-secret-value');
+
+		page.once('dialog', (dialog) => dialog.accept());
+		const secretRow = page.locator('[data-secret-key="E2E_SECRET"]');
+		await secretRow.getByRole('button').last().click();
+		await page.getByRole('menuitem', { name: 'Delete' }).click();
+		await expect(secretRow).toBeHidden();
+		const deleted = await runCli(
+			[
+				'--config-dir',
+				configDir,
+				'secrets',
+				'get',
+				'E2E_SECRET',
+				'--raw',
+				'--project',
+				'browser-project',
+				'--config',
+				'dev',
+			],
+			{ ...process.env, REDSHIFT_NSEC: nsec },
+			root,
+		);
+		expect(deleted.exitCode).toBe(1);
+		expect(deleted.stderr).toContain("Secret 'E2E_SECRET' not found");
+
+		expect(
+			await page.evaluate(() =>
+				Object.keys(sessionStorage).some((key) => key.startsWith('redshift_encrypted_')),
+			),
+		).toBe(true);
+		const profileLabel = `${npub.slice(0, 8)}...${npub.slice(-6)}`;
+		await page.locator('header button').filter({ hasText: profileLabel }).click();
+		await page.getByRole('button', { name: 'Disconnect' }).click();
+		await page.waitForURL(`${url}/`);
+		expect(
+			await page.evaluate(() =>
+				Object.keys(sessionStorage).some((key) => key.startsWith('redshift_encrypted_')),
+			),
+		).toBe(false);
+		const remainingKeys = await page.evaluate(
+			() =>
+				new Promise<number>((resolveCount, reject) => {
+					const request = indexedDB.open('redshift-secure', 1);
+					request.onerror = () => reject(request.error);
+					request.onsuccess = () => {
+						const db = request.result;
+						const transaction = db.transaction('keys', 'readonly');
+						const count = transaction.objectStore('keys').count();
+						count.onerror = () => reject(count.error);
+						count.onsuccess = () => resolveCount(count.result);
+						transaction.oncomplete = () => db.close();
+					};
+				}),
+		);
+		expect(remainingKeys).toBe(0);
 	} finally {
 		await Promise.all([stopChild(server), stopChild(relay)]);
 		rmSync(root, { recursive: true, force: true });

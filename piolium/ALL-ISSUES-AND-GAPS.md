@@ -6,7 +6,7 @@
 
 This file is the exhaustive implementation register for every confirmed security issue, functional defect, test/tooling gap, documentation mismatch, and explicitly deferred opportunity found during the audit. Speculative Cloud/Teams/history work is recorded but is not treated as a defect in the individual/free product.
 
-**Local verification checkpoint (2026-07-10):** frozen installs, scoped Biome, root/web/relay typechecks, 949 unit/integration tests (10 legacy optional-relay skips), 17 managed-relay tests, two Playwright release journeys, all four native CLI builds, web/embed/relay builds, deterministic generated outputs, Wrangler dry-run, strict OpenSpec validation, and `git diff --check` passed. Required compiled `nak` relay and bunker journeys ran rather than skipping. Deployment, release-attestation infrastructure, dependency-audit policy, and operational backup/SLA evidence remain external or open gates as noted below.
+**Local verification checkpoint (2026-07-10):** frozen installs, zero-advisory root/relay audits, scoped Biome, root/web/relay typechecks, 982 product unit/integration tests with no conditional relay skips, 17 managed-relay tests, two expanded Playwright release journeys, web/embed/relay/native CLI builds, deterministic generated outputs, strict OpenSpec validation, and `git diff --check` passed. Required compiled `nak` relay and bunker journeys ran rather than skipping. Real public release/attestation and clean-install certification plus operational backup/SLA evidence remain external gates as noted below.
 
 ## Security Issues
 
@@ -83,10 +83,10 @@ This file is the exhaustive implementation register for every confirmed security
   - Actions use mutable major tags, Bun uses `latest`, installs are not frozen, and release permissions are workflow-wide.
   - Required: pin reviewed SHAs/Bun version, frozen lockfiles, job-level least permissions.
 
-- [ ] **SEC-017 — Resolve reachable dependency advisories.**
-  - Upgrade `yaml@2.8.2` to `>=2.8.3` (hostile nested YAML stack overflow).
-  - Upgrade vulnerable SvelteKit/Svelte/Vite/Vitest/Rollup/PostCSS/Picomatch/Undici/ws/esbuild versions and verify runtime/build reachability.
-  - Add dependency audit to CI.
+- [x] **SEC-017 — Resolve reachable dependency advisories.**
+  - Baseline `bun audit` found 37 root/workspace advisories (1 critical, 14 high, 17 moderate, 5 low) and 15 relay advisories (5 high, 7 moderate, 3 low).
+  - Patched direct dependency ranges and locked transitive build/runtime dependencies for SvelteKit, Svelte, Vite, Vitest, Rollup, PostCSS, Picomatch, Undici, ws, esbuild, Wrangler, and related packages.
+  - Root and relay `bun audit --audit-level=low` now report zero advisories; `audit:dependencies` is release-blocking in CI and the release workflow.
 
 - [x] **SEC-018 — Sign/attest releases and generated artifacts.**
   - Add signed/immutable tags or release attestations, SBOM, provenance, and source-to-generated checks for `embedded-files.ts` and relay `worker.js`.
