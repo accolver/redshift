@@ -342,7 +342,7 @@ describe('NIP-59 Gift Wrap (Signer-based)', () => {
 			const result = await unwrapGiftWrapWithSigner(event, decryptFn);
 
 			expect(result.secrets.LARGE_KEY).toBe(largeValue);
-			expect(result.secrets.LARGE_KEY.length).toBe(10_000);
+			expect(result.secrets.LARGE_KEY?.length).toBe(10_000);
 		});
 
 		it('handles many secrets in a bundle', async () => {

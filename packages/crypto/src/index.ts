@@ -31,6 +31,21 @@
  * ```
  */
 
+// Encrypted backup format
+export {
+	BACKUP_LIMITS,
+	BACKUP_V1_HEADER_BYTES,
+	encodeBackupPayload,
+	decodeBackupPayload,
+	encryptBackup,
+	decryptBackup,
+	validateBackupPayload,
+	type BackupEntryV1,
+	type BackupPayloadV1,
+	type BackupEncryptionOptions,
+	type BackupDecryptionOptions,
+} from './backup.js';
+
 // Gift Wrap functions
 export {
 	wrapSecrets,

@@ -148,6 +148,52 @@ describe('CLI Framework', () => {
 		});
 	});
 
+	describe('parse() - backup command', () => {
+		it('parses create and restore with their explicit safety flags', () => {
+			const create = cli.parse([
+				'backup',
+				'create',
+				'snapshot.redshift',
+				'--force',
+				'--passphrase-stdin',
+			]);
+			expect(create.command).toBe('backup');
+			expect(create.subcommand).toBe('create');
+			expect(create.positionals).toEqual(['snapshot.redshift']);
+			expect(create.flags.force).toBe(true);
+			expect(create.flags['passphrase-stdin']).toBe(true);
+
+			const restore = cli.parse([
+				'backup',
+				'restore',
+				'snapshot.redshift',
+				'--overwrite',
+				'--allow-identity-change',
+			]);
+			expect(restore.subcommand).toBe('restore');
+			expect(restore.flags.overwrite).toBe(true);
+			expect(restore.flags['allow-identity-change']).toBe(true);
+		});
+
+		it('requires one path and rejects wrong-subcommand or passphrase flags', () => {
+			for (const subcommand of ['create', 'restore']) {
+				expect(() => cli.parse(['backup', subcommand])).toThrow(
+					'Missing required positional argument',
+				);
+				expect(() => cli.parse(['backup', subcommand, 'one', 'two'])).toThrow(
+					'Too many positional arguments',
+				);
+				expect(() => cli.parse(['backup', subcommand, 'file', '--passphrase', 'secret'])).toThrow(
+					'Unknown option',
+				);
+			}
+			expect(() => cli.parse(['backup', 'create', 'file', '--overwrite'])).toThrow(
+				'Unknown option',
+			);
+			expect(() => cli.parse(['backup', 'restore', 'file', '--force'])).toThrow('Unknown option');
+		});
+	});
+
 	describe('parse() - recovery command', () => {
 		it('parses list and exact-event operations', () => {
 			expect(cli.parse(['recovery', 'list']).subcommand).toBe('list');

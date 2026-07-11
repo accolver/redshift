@@ -66,6 +66,7 @@ jobs:
           tests/integration/installer-integrity.test.ts
           tests/integration/nak-bunker-e2e.test.ts
           tests/integration/relay-publication-recovery.test.ts
+          tests/integration/encrypted-backup-restore.test.ts
       - name: Run managed relay tests
         working-directory: relay/nosflare
         run: bun test

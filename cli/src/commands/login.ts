@@ -32,6 +32,7 @@ import {
 } from '../lib/config';
 import { decodeNsec, validateNsec } from '../lib/crypto';
 import { AuthError, ValidationError } from '../lib/errors';
+import { promptHidden } from '../lib/hidden-input';
 import {
 	deleteNsecFromKeychain,
 	getKeychainServiceName,
@@ -269,59 +270,6 @@ async function loginWithNostrConnect(): Promise<void> {
 		if (connection) await closeBunkerSigner(connection.signer).catch(() => undefined);
 		clientSecretKey.fill(0);
 	}
-}
-
-/**
- * Prompt for hidden input (for sensitive data like nsec).
- * Characters are not echoed to the terminal.
- */
-async function promptHidden(prompt: string): Promise<string> {
-	return new Promise((resolve) => {
-		process.stdout.write(prompt);
-
-		// Enable raw mode to capture input without echoing
-		if (process.stdin.isTTY) {
-			process.stdin.setRawMode(true);
-		}
-		process.stdin.resume();
-		process.stdin.setEncoding('utf8');
-
-		let input = '';
-		let settled = false;
-
-		const finish = () => {
-			if (settled) return;
-			settled = true;
-			if (process.stdin.isTTY) process.stdin.setRawMode(false);
-			process.stdin.pause();
-			process.stdin.removeListener('data', onData);
-			process.stdin.removeListener('end', finish);
-			process.stdout.write('\n');
-			resolve(input.trim());
-		};
-
-		const onData = (chunk: string) => {
-			// Pipes commonly deliver the whole line in one chunk; process it character by character.
-			for (const char of chunk) {
-				if (char === '\u0003') {
-					process.stdout.write('\n');
-					process.exit(0);
-				}
-				if (char === '\r' || char === '\n') {
-					finish();
-					return;
-				}
-				if (char === '\u007F' || char === '\b') {
-					if (input.length > 0) input = input.slice(0, -1);
-					continue;
-				}
-				input += char;
-			}
-		};
-
-		process.stdin.on('data', onData);
-		process.stdin.once('end', finish);
-	});
 }
 
 /**

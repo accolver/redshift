@@ -84,6 +84,7 @@ jobs:
           tests/integration/installer-integrity.test.ts
           tests/integration/nak-bunker-e2e.test.ts
           tests/integration/relay-publication-recovery.test.ts
+          tests/integration/encrypted-backup-restore.test.ts
       - name: Run browser release gates
         run: |
           cd web
@@ -238,6 +239,40 @@ jobs:
           "${{ needs.release-please.outputs.tag_name }}"
           "${{ matrix.platform }}"
 
+  verify-published-macos:
+    name: Verify Published Release (${{ matrix.platform }})
+    needs: [release-please, publish-release]
+    if: ${{ needs.release-please.outputs.release_created }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            platform: darwin/x64
+          - runner: macos-14
+            platform: darwin/arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: 1.26.5
+      - name: Install pinned local relay tool
+        run: |
+          go install github.com/fiatjaf/nak@v0.19.7
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Verify fresh macOS installation from the public release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          sh tests/release/container-entrypoint.sh
+          "${{ needs.release-please.outputs.tag_name }}"
+
   recover-failed-release:
     name: Withdraw Failed Release
     needs:
@@ -246,12 +281,14 @@ jobs:
       - build-binaries
       - publish-release
       - verify-published-release
+      - verify-published-macos
     if: >-
       ${{ always() && needs.release-please.outputs.release_created == 'true' &&
           (needs.verify-release.result == 'failure' ||
            needs.build-binaries.result == 'failure' ||
            needs.publish-release.result == 'failure' ||
-           needs.verify-published-release.result == 'failure') }}
+           needs.verify-published-release.result == 'failure' ||
+           needs.verify-published-macos.result == 'failure') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

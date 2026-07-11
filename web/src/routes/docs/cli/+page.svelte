@@ -139,6 +139,29 @@ redshift recovery remove <event-id>`} />
 
 	<hr />
 
+	<ProseHeading level={2} id="backup">redshift backup</ProseHeading>
+	<p>
+		Create a versioned, passphrase-encrypted local snapshot of current authenticated secret state
+		observed from responding configured relays. Restore always requires a separately authenticated
+		target signer.
+	</p>
+	<CodeBlock language="bash" code={`redshift backup create secrets.redshift
+redshift backup restore secrets.redshift
+redshift backup restore secrets.redshift --allow-identity-change
+redshift backup restore secrets.redshift --allow-identity-change --overwrite`} />
+	<p>
+		Passphrases use hidden prompts or explicit <InlineCode>--passphrase-stdin</InlineCode>; they are never
+		accepted through argv, config, or environment variables. Archives exclude signer credentials,
+		relay configuration, recovery records, tombstones, and history. Default restore publishes nothing
+		when destination values conflict, while identical values are no-ops.
+	</p>
+	<p>
+		This is user-initiated local portability, not automatic or managed retention, complete relay
+		history, key recovery, globally atomic restore, RPO/RTO, availability, or an SLA.
+	</p>
+
+	<hr />
+
 	<ProseHeading level={2} id="configure">redshift configure</ProseHeading>
 	<p>Inspect or atomically modify non-secret CLI configuration.</p>
 	<CodeBlock language="bash" code={`redshift configure

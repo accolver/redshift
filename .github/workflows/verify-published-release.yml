@@ -34,3 +34,28 @@ jobs:
           bash scripts/test-release-containers.sh
           "${{ inputs.tag }}"
           "${{ matrix.platform }}"
+
+  verify-macos:
+    name: Fresh install ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            platform: darwin/x64
+          - runner: macos-14
+            platform: darwin/arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: 1.26.5
+      - name: Install pinned local relay tool
+        run: |
+          go install github.com/fiatjaf/nak@v0.19.7
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Verify public installer, lifecycle, and forced upgrade
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: sh tests/release/container-entrypoint.sh "${{ inputs.tag }}"

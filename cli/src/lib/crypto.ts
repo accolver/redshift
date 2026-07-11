@@ -9,6 +9,13 @@
 
 // Re-export everything from shared crypto package
 export {
+	BACKUP_LIMITS,
+	BACKUP_V1_HEADER_BYTES,
+	encodeBackupPayload,
+	decodeBackupPayload,
+	encryptBackup,
+	decryptBackup,
+	validateBackupPayload,
 	wrapSecrets,
 	unwrapSecrets,
 	unwrapGiftWrap,
@@ -32,6 +39,10 @@ export {
 } from '@redshift/crypto';
 
 export type {
+	BackupEntryV1,
+	BackupPayloadV1,
+	BackupEncryptionOptions,
+	BackupDecryptionOptions,
 	NostrEvent,
 	UnsignedEvent,
 	SecretBundle,

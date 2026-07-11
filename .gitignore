@@ -13,9 +13,11 @@ web/build
 # Redshift config (contains project refs, not secrets)
 redshift.yaml
 
-# code coverage
+# code coverage and browser test artifacts
 coverage
 *.lcov
+web/test-results/
+web/playwright-report/
 
 # logs
 logs

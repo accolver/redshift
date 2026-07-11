@@ -1,8 +1,8 @@
 # Next Resilience Improvements
 
-These improvements follow the first attested individual release. Per-relay publication recovery is implemented in the current development branch but is **not a published-release guarantee** until its full gates pass and a new release is certified. Sections 2–5 remain unshipped work that requires separate Telos/OpenSpec approval.
+These improvements follow the first attested individual release. Per-relay publication recovery shipped with certified release v0.12.0. Encrypted local backup/restore is implemented only as a current development candidate and is **not a published-release guarantee** until its full gates pass and a new release is certified. Sections 3–5 remain unshipped work that requires separate Telos/OpenSpec approval.
 
-## 1. Per-relay health and publication recovery — implementation candidate
+## 1. Per-relay health and publication recovery — shipped in v0.12.0
 
 ### Implemented behavior
 
@@ -20,23 +20,23 @@ These improvements follow the first attested individual release. Per-relay publi
 
 This is local publication recovery, not automatic backup, retention, history, erasure, or an availability guarantee.
 
-## 2. Encrypted backup and recovery
+## 2. Encrypted local backup and restore — implementation candidate
 
-### Current limitation
+### Implemented candidate behavior
 
-Exports support portability, but Redshift does not claim automatic backups, durable retention, or recovery from loss of every relay and local key.
+- Fixed versioned binary format with memory-hard scrypt, AES-256-GCM, authenticated header bytes, canonical bounded encrypted payload, and no plaintext fallback.
+- Hidden or explicit stdin passphrase input; no passphrase argv, config, or environment-variable path.
+- Atomic owner-only encrypted files with no plaintext intermediate.
+- Snapshot of latest authenticated non-tombstoned state observed from responding configured relays, with project/environment identifiers and source version evidence.
+- Explicit exclusion of signer credentials, relay configuration, recovery records, tombstones, and history.
+- Same-identity restore by default; explicit target-identity migration and explicit conflict overwrite.
+- Restore publishes new target-authorized NIP-59 state through normal quorum and exact-event recovery.
 
-### Intended guarantee
+### Evidence required before a shipped claim
 
-- A versioned, passphrase-encrypted backup format with authenticated metadata.
-- Explicit distinction between secret data, project metadata, relay configuration, and signer credentials.
-- No plaintext backup intermediates or recoverable passphrases in logs/configuration.
-- Round-trip restore into a fresh identity/session with clear overwrite and conflict behavior.
-- Documented limits: loss of both signer access and recovery material remains unrecoverable.
+Known-answer crypto tests; corruption, wrong-passphrase, hostile-format, and resource-bound rejection; atomic filesystem failure coverage; compiled fresh-config/fresh-identity local-relay E2E; partial-publication recovery E2E; supported native public-artifact backup/restore certification; and complete release gates.
 
-### Required evidence
-
-Known-answer crypto tests, corruption/wrong-passphrase rejection, large-backup bounds, fresh-machine restore E2E, and periodic restore drills against retained production backups.
+This candidate is user-initiated local portability only. It is not automatic, scheduled, managed, offsite, or retained backup; complete relay history; key/passphrase/account recovery; globally atomic restore; RPO/RTO; availability; or an SLA. Periodic production restore drills remain part of future managed-retention evidence, not the local capability.
 
 ## 3. Trustworthy history, compare, and restore
 
