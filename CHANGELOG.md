@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/accolver/redshift/compare/v0.11.1...v0.12.0) (2026-07-11)
+
+
+### Features
+
+* **resilience:** add relay publication recovery ([#41](https://github.com/accolver/redshift/issues/41)) ([a1c0378](https://github.com/accolver/redshift/commit/a1c03789f3e72266fdd3ebb7dcae0d6705110ed2))
+
 ## [0.11.1](https://github.com/accolver/redshift/compare/v0.11.0...v0.11.1) (2026-07-11)
 
 
