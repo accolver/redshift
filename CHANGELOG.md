@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/accolver/redshift/compare/v0.13.0...v0.14.0) (2026-07-12)
+
+
+### Features
+
+* **history:** add authenticated compare and restore ([#46](https://github.com/accolver/redshift/issues/46)) ([144c043](https://github.com/accolver/redshift/commit/144c043ce863c3e47b502c666ce26b67198511b3))
+
 ## [0.13.0](https://github.com/accolver/redshift/compare/v0.12.0...v0.13.0) (2026-07-11)
 
 
