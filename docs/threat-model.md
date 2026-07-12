@@ -1,6 +1,6 @@
 # Redshift Threat Model
 
-> Draft threat model for funding-review purposes. This summarizes the current security posture and known limits; it is not a formal audit.
+> Non-normative funding-review summary. The canonical security contract and known limits live in [SECURITY.md](../SECURITY.md); release evidence lives under [`piolium/`](../piolium/).
 
 ## Security Goals
 
@@ -96,9 +96,9 @@ Mitigations:
 
 Residual risk:
 
-- Funding release should add binary checksums/signatures before broad promotion.
+- Current releases publish checksums, an SPDX SBOM, and GitHub artifact attestations before promotion; future releases must preserve those gates.
 
-## Out of Scope for Current MVP
+## Out of Scope for the Certified Individual Product
 
 - Formal third-party security audit.
 - SOC 2 controls.
@@ -108,14 +108,15 @@ Residual risk:
 
 ## Review Checklist
 
-- [ ] Confirm NIP-59 Gift Wrap usage for secret events.
-- [ ] Confirm no docs or demos expose real keys or tokens.
-- [ ] Confirm install flow can be verified from source.
-- [ ] Confirm paid-tier designs preserve client-side encryption.
-- [ ] Confirm release artifacts include checksums before a public tagged release.
+- [x] Confirm NIP-59 Gift Wrap usage for secret events.
+- [x] Confirm no funding docs or demos contain real keys or tokens.
+- [x] Confirm public installation and source-build verification paths.
+- [ ] Confirm every future paid-tier design preserves client-side encryption and introduces no key escrow.
+- [x] Confirm current release artifacts include checksums, SBOM, and attestations before publication.
 
 ## Related Docs
 
+- [Canonical security and threat model](../SECURITY.md)
 - [Funding showcase package](./funding-showcase.md)
 - [Release showcase checklist](./release-showcase-checklist.md)
 - [CLI README cryptography section](../cli/README.md#cryptography)

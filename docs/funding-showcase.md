@@ -1,6 +1,6 @@
 # Redshift Funding Showcase Package
 
-> Draft package for GitHub issue [#23](https://github.com/accolver/redshift/issues/23). This is not a tagged release.
+> Draft package for GitHub issue [#23](https://github.com/accolver/redshift/issues/23). This document is not itself a release; the current certified product release is [v0.14.0](https://github.com/accolver/redshift/releases/tag/v0.14.0).
 
 ## Reviewer Snapshot
 
@@ -11,7 +11,7 @@ Redshift is a decentralized, censorship-resistant secret manager for developers.
 1. Install Redshift: [README installation](../README.md#installation) or [CLI installation](../cli/README.md#installation)
 2. Run the quick start: [README quick start](../README.md#quick-start)
 3. Review the architecture summary below
-4. Review the threat model: [docs/threat-model.md](./threat-model.md)
+4. Review the canonical threat model: [SECURITY.md](../SECURITY.md)
 5. Review the roadmap and funding ask below
 
 ## Current Package Status
@@ -22,8 +22,10 @@ Redshift is a decentralized, censorship-resistant secret manager for developers.
 | Release checklist | Draft | [docs/release-showcase-checklist.md](./release-showcase-checklist.md) |
 | Demo script outline | Draft | [Demo script outline](#demo-script-outline) |
 | Architecture summary | Draft | [Architecture summary](#architecture-summary) |
-| Threat model | Draft | [docs/threat-model.md](./threat-model.md) |
-| Install docs | Existing | [README installation](../README.md#installation), [CLI installation](../cli/README.md#installation) |
+| Threat model | Canonical | [SECURITY.md](../SECURITY.md) |
+| Funding threat-model summary | Draft | [docs/threat-model.md](./threat-model.md) |
+| Install docs | Certified in v0.14.0 | [README installation](../README.md#installation), [CLI installation](../cli/README.md#installation) |
+| Release evidence | Published | [v0.14.0 history evidence](../piolium/authenticated-secret-history-evidence.md) |
 | Roadmap | Existing | [ROADMAP.md](../ROADMAP.md) |
 | Teams/Cloud/Enterprise design | Existing | [TEAMS_CLOUD_ENTERPRISE.md](../TEAMS_CLOUD_ENTERPRISE.md) |
 
@@ -53,7 +55,7 @@ Expected result: the child process prints `demo-value`; the secret was fetched a
 
 ### 3. Check the security model
 
-Read [docs/threat-model.md](./threat-model.md). The key claim is that Redshift relays store encrypted NIP-59 Gift Wrap events, not plaintext secret values.
+Read the canonical [security and threat model](../SECURITY.md). The key claim is narrow: Redshift relays store encrypted NIP-59 Gift Wrap events, not plaintext secret values. The funding-oriented [summary](./threat-model.md) is non-normative.
 
 ### 4. Check funding readiness
 
@@ -87,7 +89,7 @@ Relays
 - Private keys stay with the user, browser extension, local keychain, or remote signer.
 - Secret encryption and decryption happen on the client side.
 - Relays only see encrypted events and protocol metadata.
-- Paid tiers add reliability, collaboration, and compliance workflows; they must not add key escrow or plaintext access.
+- Future paid tiers may add reliability, collaboration, and compliance workflows, but they are not part of the certified individual product and must not add key escrow or plaintext access.
 
 ### Core repositories and docs
 
@@ -123,19 +125,19 @@ Target length: 3 minutes.
 
 Redshift is MVP-complete for individual developers and ready for a funding-focused showcase. Funding accelerates public polish and paid-tier development without compromising the free sovereign core.
 
-### Near-term release goals
+### Near-term showcase goals
 
-- Publish a tagged vNext release after checklist completion.
-- Record and publish the 3-minute demo video.
+- Keep certified release and installed-artifact evidence linked from the package.
+- Record and publish the 3-minute demo video using throwaway identities and secrets.
 - Make this showcase page available from public docs or release notes.
-- Tighten threat-model review and document known limits.
+- Keep the funding summary aligned with the canonical threat model and product-truth specs.
 
 ### Funded milestones
 
-1. **Release polish:** public release notes, binary verification, install path hardening, docs pass.
-2. **Redshift Cloud:** managed relay reliability and backups for users who want convenience.
-3. **Teams:** cryptographic sharing, member lifecycle, audit trails, and key rotation.
-4. **Enterprise:** SSO bridge, on-prem relay deployment guidance, compliance documentation.
+1. **Release continuity:** preserve provenance, installed-artifact certification, documentation accuracy, and security review on every release.
+2. **Redshift Cloud:** separately gate managed relay reliability, monitoring, encrypted backups, retention evidence, and measured availability.
+3. **Teams:** separately specify and prove cryptographic sharing, member lifecycle, audit semantics, and key rotation.
+4. **Enterprise:** separately evaluate SSO bridges, on-prem relay deployment guidance, and evidence-bounded compliance documentation.
 
 ### Funding ask
 
