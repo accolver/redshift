@@ -18,6 +18,40 @@ import { Shield, Server, Smartphone, Users, Building2, Zap, Globe, Terminal, Ale
 
 		<p>Think of it like a hardware wallet for your Nostr identity - the key never leaves the secure environment, and all signing requests go through it.</p>
 
+		<ProseHeading level={2} id="bunker-auth-flow">Bunker Auth Flow</ProseHeading>
+		<p>
+			Bunker auth lets Redshift use your Nostr identity without holding your private key. Redshift and the bunker exchange encrypted NIP-46 messages through shared relays.
+		</p>
+
+		<div class="not-prose my-6 rounded-lg border border-border bg-card p-4">
+			<div class="grid gap-3 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:items-center">
+				<div class="rounded-lg border border-tokyo-blue/30 bg-tokyo-blue/5 p-4 text-center">
+					<Terminal class="mx-auto size-6 text-tokyo-blue" />
+					<p class="mt-2 font-medium">Redshift CLI</p>
+					<p class="mt-1 text-xs text-muted-foreground">Creates a client key and asks for signatures</p>
+				</div>
+
+				<div class="hidden text-2xl text-muted-foreground md:block">↔</div>
+
+				<div class="rounded-lg border border-tokyo-cyan/30 bg-tokyo-cyan/5 p-4 text-center">
+					<Server class="mx-auto size-6 text-tokyo-cyan" />
+					<p class="mt-2 font-medium">Relays</p>
+					<p class="mt-1 text-xs text-muted-foreground">Pass encrypted messages only</p>
+				</div>
+
+				<div class="hidden text-2xl text-muted-foreground md:block">↔</div>
+
+				<div class="rounded-lg border border-tokyo-green/30 bg-tokyo-green/5 p-4 text-center">
+					<Shield class="mx-auto size-6 text-tokyo-green" />
+					<p class="mt-2 font-medium">nak bunker</p>
+					<p class="mt-1 text-xs text-muted-foreground">Keeps the private key and signs</p>
+				</div>
+			</div>
+			<p class="mt-4 text-center text-sm text-muted-foreground">
+				Relays help Redshift and the bunker find each other, but they cannot read the encrypted requests or access your private key.
+			</p>
+		</div>
+
 		<ProseHeading level={2} id="when-to-use-a-bunker">When to Use a Bunker</ProseHeading>
 		<div class="not-prose my-6 grid gap-4 sm:grid-cols-2">
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
@@ -174,8 +208,8 @@ redshift login
 # Select "Use bunker URL"
 # Paste your bunker URI
 
-# Direct
-redshift login --bunker "bunker://..."
+# One-time pairing URI (hidden input; never exposed through process argv)
+redshift login --bunker-stdin
 
 # NostrConnect flow (scan QR with bunker app)
 redshift login --connect
@@ -225,17 +259,29 @@ nak --version`} />
 
 		<ProseHeading level={4} id="nak-quickstart">Quick Start</ProseHeading>
 
-		<CodeBlock language="bash" code={`# Generate a new key (or use existing)
-nak key generate > ~/.redshift-bunker-key
+		<CodeBlock language="bash" code={`# Generate a new bunker key and save it locally.
+# Keep this file private; it is the signing key for the bunker.
+mkdir -p ~/.redshift
+chmod 700 ~/.redshift
+nak key generate > ~/.redshift/bunker.key
+chmod 600 ~/.redshift/bunker.key
 
-# Start bunker with your key
-nak bunker --sec $(cat ~/.redshift-bunker-key) relay.damus.io nos.lol
+# Start the bunker in the background without printing the key in your shell history.
+# Its output is saved so Redshift can read the generated bunker:// URL for you.
+nak bunker --sec "$(cat ~/.redshift/bunker.key)" relay.damus.io nos.lol \
+  > ~/.redshift/bunker.log 2>&1 &
+echo $! > ~/.redshift/bunker.pid
 
-# Output includes your bunker:// URL:
-# bunker://f59911b5...?relay=wss://relay.damus.io&secret=XuuiMbcL
+# Wait for nak to print the bunker URL, then export it.
+until grep -q 'bunker: bunker://' ~/.redshift/bunker.log; do sleep 0.2; done
+export REDSHIFT_BUNKER="$(awk '/bunker: bunker:\/\// { print $2 }' ~/.redshift/bunker.log | tail -n 1)"
 
-# Connect Redshift using that URL
-redshift login --bunker "bunker://f59911b5..."`} />
+# Connect Redshift without placing the one-time pairing secret in process argv.
+redshift login --bunker-stdin
+# Paste the REDSHIFT_BUNKER value at the hidden prompt.
+
+# Re-authenticate an existing Redshift CLI profile through the same protected input path.
+redshift login --force --bunker-stdin`} />
 
 		<ProseHeading level={4} id="nak-teams">Teams Setup (Persistent)</ProseHeading>
 		<p>
@@ -474,11 +520,12 @@ jobs:
 
 		<ProseHeading level={2} id="troubleshooting">Troubleshooting</ProseHeading>
 
-		<ProseHeading level={3} id="failed-to-connect-to-bunker">"Failed to connect to bunker"</ProseHeading>
+		<ProseHeading level={3} id="failed-to-connect-to-bunker">"Failed to connect to bunker" or "unauthorized"</ProseHeading>
 		<ul>
 			<li>Check that the bunker service is running</li>
 			<li>Verify the relay URL is correct and accessible</li>
 			<li>Ensure the connection secret matches</li>
+			<li>Quote the full <code>bunker://</code> URL. In most shells, an unquoted <code>&amp;secret=...</code> is treated as a background command separator, so Redshift receives the URL without the secret.</li>
 		</ul>
 
 		<ProseHeading level={3} id="connection-timed-out">"Connection timed out"</ProseHeading>

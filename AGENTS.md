@@ -235,6 +235,156 @@ cd cli && bun test        # CLI / Bun test
 
 ---
 
+## Full GitHub Release Procedure
+
+Use this procedure for every production CLI release. Redshift uses Release
+Please; do not create or move release tags manually and never upload unverified
+binaries.
+
+### 1. Preflight the release change
+
+1. Start from a clean branch based on `origin/main`.
+2. Read `.telos/TELOS.md`, run L9→L1→L9 validation, and verify convergence.
+3. Confirm the relevant OpenSpec change is approved and strictly valid.
+4. Run the complete local gate:
+
+   ```bash
+   bun install --frozen-lockfile
+   (cd relay/nosflare && bun install --frozen-lockfile)
+   bun run test:production
+   git diff --check
+   ```
+
+5. Confirm `git status --short` is empty and no relay, browser, or Redshift
+   process remains.
+6. Open a draft PR, complete normal review, and wait for all checks:
+
+   ```bash
+   gh pr checks <PR_NUMBER> --watch --interval 20
+   ```
+
+7. Merge only when the PR is mergeable, clean, and every required check passes.
+
+### 2. Create the release through Release Please
+
+Merging conventional commits to `main` causes `.github/workflows/release.yml` to
+open or update the Release Please PR. Do not tag the repository yourself.
+
+```bash
+gh run list --workflow release.yml --branch main --limit 5
+gh pr list --state open --search 'release: in:title' --json number,title,url
+```
+
+Review the Release Please PR carefully:
+
+- version in `package.json` and `.release-please-manifest.json`;
+- changelog accuracy and absence of unsupported production claims;
+- expected semantic-version increment;
+- all CI checks passing.
+
+Merge the Release Please PR. Release Please first creates a draft release. The
+release workflow checks out the immutable release commit (`github.sha`) because
+a draft release may not create its Git tag until publication. After verification,
+the workflow publishes the draft and GitHub creates the tag at that same commit.
+Record the tag, source commit, and workflow run ID.
+
+### 3. Monitor the release workflow
+
+```bash
+gh run list --workflow release.yml --branch main --limit 5
+gh run watch <RUN_ID> --interval 20 --exit-status
+```
+
+A release is incomplete unless all of these succeed:
+
+- Verify Release;
+- Linux x64 and arm64 builds;
+- macOS x64 and arm64 builds;
+- SPDX SBOM and checksum generation;
+- GitHub build-provenance attestations;
+- final release asset upload and draft publication;
+- Verify Published Release, including Linux x64/arm64 fresh installation,
+  attestation, secret lifecycle, forced updater replacement, and cleanup.
+
+If any job fails, stop, confirm the release is draft or marked non-latest, and
+follow the rollback procedure below. Do not describe the release as production-ready and do
+not replace individual files by hand.
+
+### 4. Verify the public release independently
+
+```bash
+TAG=vX.Y.Z
+REPO=accolver/redshift
+SOURCE_DIGEST=$(gh api "repos/$REPO/commits/$TAG" --jq .sha)
+gh release view "$TAG" --repo "$REPO" --json tagName,isDraft,isPrerelease,url,assets
+mkdir -p "/tmp/redshift-$TAG" && cd "/tmp/redshift-$TAG"
+gh release download "$TAG" --repo "$REPO"
+sha256sum --check checksums.txt
+gh attestation verify checksums.txt \
+  --repo "$REPO" \
+  --signer-workflow "$REPO/.github/workflows/release.yml" \
+  --source-digest "$SOURCE_DIGEST" \
+  --deny-self-hosted-runners
+for artifact in redshift-linux-x64 redshift-linux-arm64 redshift-darwin-x64 redshift-darwin-arm64 sbom.spdx.json; do
+  gh attestation verify "$artifact" \
+    --repo "$REPO" \
+    --signer-workflow "$REPO/.github/workflows/release.yml" \
+    --source-digest "$SOURCE_DIGEST" \
+    --deny-self-hosted-runners
+done
+```
+
+Run the fresh-install matrix after attestation verification:
+
+```bash
+GH_TOKEN="$(gh auth token)" bun run test:release:containers -- "$TAG"
+gh workflow run verify-published-release.yml -f tag="$TAG"
+curl -fsSL https://redshiftapp.com/install | sh
+redshift --version
+redshift --help
+```
+
+The container matrix pins `REDSHIFT_VERSION=$TAG`, so certification never
+silently tests a different latest release. Docker proves Linux x64/arm64
+behavior only, using native x64 and ARM GitHub runners; macOS must be exercised
+on native Darwin hosts/runners because a Linux container is not macOS validation.
+
+### 5. Record release evidence
+
+Record in the release PR or audit evidence:
+
+- release URL, tag, and source commit;
+- release workflow run URL and conclusions;
+- asset names and SHA-256 digests;
+- attestation verification result;
+- Linux container and native macOS smoke results;
+- installer and updater result;
+- known deferred limitations.
+
+### 6. Rollback and incident handling
+
+**Never replace published release assets** or use `gh release upload --clobber`
+to repair trusted bytes. If post-release verification fails:
+
+1. Preserve logs, digests, and the affected artifacts as evidence.
+2. Mark the release non-latest and clearly warn users:
+
+   ```bash
+   gh release edit <BAD_TAG> --latest=false --prerelease
+   ```
+
+3. If exposure is serious, remove the installer recommendation or temporarily
+   unpublish the release while retaining an incident record.
+4. Fix forward on a new patch version through Release Please.
+5. Re-run this entire procedure and publish a security/incident note when user
+   action is required.
+
+Never delete and recreate a tag to hide a failed release. Existing installers
+and updaters fail closed when provenance, checksum, identity, or smoke checks do
+not match.
+
+---
+
 ## Project Coding Standards
 
 ### UI Components
@@ -272,14 +422,29 @@ cd cli && bun test        # CLI / Bun test
    - Tests live in `web/tests/` and `cli/tests/`
    - Run tests with `bun test` in respective directories
 
+7. **End-to-End Tests Required** - New capabilities MUST include end-to-end coverage in addition to unit tests:
+   - Write E2E tests for every new user-facing workflow, protocol integration, and external-tool interaction.
+   - Prefer real local dependencies over mocks when safe and deterministic. Example: NIP-46 bunker work should include a `nak`-backed E2E test that generates a fresh key, starts a local relay, connects through bunker auth, and exercises supported signer capabilities.
+   - Put CLI E2E tests under `cli/tests/integration/` and keep them isolated with temporary ports/config directories.
+   - E2E tests must clean up subprocesses, relay connections, temp files, and secrets in `afterEach`/`finally` paths.
+   - Run CLI E2E tests with:
+     ```bash
+     cd cli && bun test ./tests/integration
+     ```
+   - Run a single CLI E2E test with:
+     ```bash
+     cd cli && bun test ./tests/integration/<name>.test.ts
+     ```
+   - If an E2E test depends on a local binary (for example `nak`), verify the binary is installed and document the command used by the test. The NIP-46 `nak` E2E test expects `nak` on `PATH`; CI installs it with `go install github.com/fiatjaf/nak@v0.19.7`.
+
 ### TypeScript Standards
 
-7. **No `any` Type** - Never use TypeScript's `any`. Always define proper types:
+8. **No `any` Type** - Never use TypeScript's `any`. Always define proper types:
    - Create interfaces/types in `web/src/lib/types/` or inline
    - Use `unknown` with type guards if truly uncertain
    - Leverage generics for flexible typing
 
-8. **Implicit Return Types** - Prefer implicit return types over explicit ones.
+9. **Implicit Return Types** - Prefer implicit return types over explicit ones.
    Let TypeScript infer return types unless:
    - The function is part of a public API
    - The inferred type is too complex or unclear
@@ -299,13 +464,13 @@ cd cli && bun test        # CLI / Bun test
 
 ### Shared Code & Monorepo
 
-9. **Use Shared Packages** - Code used by both CLI and Web MUST live in
+10. **Use Shared Packages** - Code used by both CLI and Web MUST live in
    `/packages/`:
    - `@redshift/crypto` - NIP-59 Gift Wrap, encryption, types
    - If duplicating code between `cli/` and `web/`, STOP and extract to a shared
      package
 
-10. **Prefer Existing Nostr Libraries** - Before implementing Nostr primitives:
+11. **Prefer Existing Nostr Libraries** - Before implementing Nostr primitives:
     - Check `nostr-tools` first (signing, encryption, relay protocol)
     - Use `applesauce-core` for Web EventStore patterns
     - Use `@redshift/crypto` for Gift Wrap operations
@@ -313,7 +478,7 @@ cd cli && bun test        # CLI / Bun test
 
 ### Error Handling
 
-11. **Use Typed Errors** - All relay and crypto operations use custom error
+12. **Use Typed Errors** - All relay and crypto operations use custom error
     types from `cli/src/lib/errors.ts`:
     - `RelayError` - connection/query/publish failures
     - `DecryptionError` - NIP-59 unwrap failures
@@ -321,7 +486,7 @@ cd cli && bun test        # CLI / Bun test
     - `ConfigError` - missing/invalid configuration
     - `NotConnectedError` - operation requires relay connection
 
-12. **Never Swallow Errors Silently** - Exceptions:
+13. **Never Swallow Errors Silently** - Exceptions:
     - Empty catch blocks OK when decrypting Gift Wraps in loops (events may
       belong to other users)
     - Use `isRetryableError()` for retry decisions
@@ -329,12 +494,12 @@ cd cli && bun test        # CLI / Bun test
 
 ### Nostr Protocol
 
-13. **Gift Wrap with Type Tag** - All secret events use NIP-59 with custom tag:
+14. **Gift Wrap with Type Tag** - All secret events use NIP-59 with custom tag:
     ```typescript
     ["t", "redshift-secrets"]; // Required on outer Gift Wrap
     ```
 
-14. **d-tag Format** - Secret bundles use: `{projectId}|{environment}`
+15. **d-tag Format** - Secret bundles use: `{projectId}|{environment}`
 
-15. **Rate Limiting Required** - All relay operations use rate limiting and
+16. **Rate Limiting Required** - All relay operations use rate limiting and
     exponential backoff by default (see `RateLimiter` class)

@@ -12,6 +12,7 @@ import type { Environment, Project, ProjectsState } from '$lib/types/nostr';
 import type { Subscription } from 'rxjs';
 import { getAuthState, signEvent } from './auth.svelte';
 import { REDSHIFT_KIND, eventStore, getProjectDTag, publishEvent } from './nostr.svelte';
+import { publishSecretTombstone } from './secrets.svelte';
 
 /**
  * Projects store using Svelte 5 Runes + Applesauce EventStore
@@ -137,7 +138,10 @@ export async function createProject(slug: string, displayName: string): Promise<
 	const signedEvent = await signEvent(unsignedEvent);
 
 	// Publish to relays (also adds to local EventStore)
-	await publishEvent(signedEvent);
+	await publishEvent(signedEvent, undefined, {
+		ownerPubkey: auth.pubkey,
+		project: normalizedSlug,
+	});
 
 	// Return the project object
 	const project: Project = {
@@ -151,10 +155,20 @@ export async function createProject(slug: string, displayName: string): Promise<
 	return project;
 }
 
+function nextProjectTimestamp(projectId: string, pubkey: string) {
+	const dTag = getProjectDTag(projectId);
+	const existing = eventStore.database.getByFilters([
+		{ kinds: [REDSHIFT_KIND], authors: [pubkey], '#d': [dTag] },
+	]);
+	const latest = existing.reduce((maximum, event) => Math.max(maximum, event.created_at), -1);
+	return Math.max(Math.floor(Date.now() / 1000), latest + 1);
+}
+
 /**
  * Delete a project
- * This publishes a NIP-09 deletion event and a tombstone (empty replaceable event)
- * to ensure the project is removed from relays and doesn't reappear on sync.
+ * Secret environments are logically tombstoned first. Project metadata is then
+ * replaced with an owner-authored tombstone and may use NIP-09 because the owner
+ * also authored that metadata event. Historical Gift Wrap ciphertext is not erased.
  */
 export async function deleteProject(id: string): Promise<void> {
 	const project = getProjectById(id);
@@ -168,14 +182,19 @@ export async function deleteProject(id: string): Promise<void> {
 		throw new Error('Must be connected to delete a project');
 	}
 
+	// Tombstone every environment before removing discoverable metadata.
+	for (const environment of project.environments) {
+		await publishSecretTombstone(project.slug, environment.slug);
+	}
+
 	const dTag = getProjectDTag(id);
 
-	// Step 1: Publish a tombstone - an empty replaceable event to the same d-tag.
+	// Publish an owner-authored metadata tombstone.
 	// This overwrites the existing project event on relays that support NIP-33
 	// (parameterized replaceable events), effectively clearing the project data.
 	const tombstoneEvent = {
 		kind: REDSHIFT_KIND,
-		created_at: Math.floor(Date.now() / 1000),
+		created_at: nextProjectTimestamp(id, auth.pubkey),
 		tags: [
 			['d', dTag],
 			['deleted', 'true'],
@@ -184,10 +203,12 @@ export async function deleteProject(id: string): Promise<void> {
 	};
 
 	const signedTombstone = await signEvent(tombstoneEvent);
-	await publishEvent(signedTombstone);
+	await publishEvent(signedTombstone, undefined, {
+		ownerPubkey: auth.pubkey,
+		project: project.slug,
+	});
 
-	// Step 2: Publish a NIP-09 deletion event (kind 5) referencing the project's
-	// address tag. This signals to relays that the event should be deleted.
+	// NIP-09 is valid only for this owner-authored project metadata address.
 	const deletionEvent = {
 		kind: NostrKinds.DELETION,
 		created_at: Math.floor(Date.now() / 1000),
@@ -199,9 +220,12 @@ export async function deleteProject(id: string): Promise<void> {
 	};
 
 	const signedDeletion = await signEvent(deletionEvent);
-	await publishEvent(signedDeletion);
+	await publishEvent(signedDeletion, undefined, {
+		ownerPubkey: auth.pubkey,
+		project: project.slug,
+	});
 
-	// Step 3: Remove from local state
+	// Remove local state only after every required publication reached quorum.
 	projectsState.projects = projectsState.projects.filter((p) => p.id !== id);
 }
 
@@ -236,14 +260,17 @@ export async function updateProject(
 	// Create the unsigned event with same d-tag (replaceable)
 	const unsignedEvent = {
 		kind: REDSHIFT_KIND,
-		created_at: Math.floor(Date.now() / 1000),
+		created_at: nextProjectTimestamp(id, auth.pubkey),
 		tags: [['d', getProjectDTag(id)]],
 		content: JSON.stringify(content),
 	};
 
 	// Sign and publish using the current auth method
 	const signedEvent = await signEvent(unsignedEvent);
-	await publishEvent(signedEvent);
+	await publishEvent(signedEvent, undefined, {
+		ownerPubkey: auth.pubkey,
+		project: project.slug,
+	});
 
 	// Return updated project
 	return {
@@ -305,14 +332,18 @@ export async function addEnvironment(
 	// Create the unsigned event with same d-tag (replaceable)
 	const unsignedEvent = {
 		kind: REDSHIFT_KIND,
-		created_at: Math.floor(Date.now() / 1000),
+		created_at: nextProjectTimestamp(projectId, auth.pubkey),
 		tags: [['d', getProjectDTag(projectId)]],
 		content: JSON.stringify(content),
 	};
 
 	// Sign and publish using the current auth method
 	const signedEvent = await signEvent(unsignedEvent);
-	await publishEvent(signedEvent);
+	await publishEvent(signedEvent, undefined, {
+		ownerPubkey: auth.pubkey,
+		project: project.slug,
+		environment: newEnv.slug,
+	});
 
 	return newEnv;
 }
@@ -332,6 +363,9 @@ export async function deleteEnvironment(projectId: string, slug: string): Promis
 		throw new Error('Must be connected to delete an environment');
 	}
 
+	// The secret-state tombstone must reach quorum before metadata hides the environment.
+	await publishSecretTombstone(project.slug, slug);
+
 	// Use the model function to get updated project (validates constraints)
 	const updatedProject = removeEnvironmentFromProject(project, slug);
 
@@ -347,14 +381,18 @@ export async function deleteEnvironment(projectId: string, slug: string): Promis
 	// Create the unsigned event with same d-tag (replaceable)
 	const unsignedEvent = {
 		kind: REDSHIFT_KIND,
-		created_at: Math.floor(Date.now() / 1000),
+		created_at: nextProjectTimestamp(projectId, auth.pubkey),
 		tags: [['d', getProjectDTag(projectId)]],
 		content: JSON.stringify(content),
 	};
 
 	// Sign and publish using the current auth method
 	const signedEvent = await signEvent(unsignedEvent);
-	await publishEvent(signedEvent);
+	await publishEvent(signedEvent, undefined, {
+		ownerPubkey: auth.pubkey,
+		project: project.slug,
+		environment: slug,
+	});
 }
 
 /**

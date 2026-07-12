@@ -5,26 +5,72 @@
  * L4: Integration-Contractor - NIP-59 protocol compliance
  */
 
-import { getPublicKey } from 'nostr-tools/pure';
+import type { EventTemplate, VerifiedEvent } from 'nostr-tools/core';
+import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import {
+	HISTORY_LIMITS,
+	MAX_RUMOR_FUTURE_SKEW_SECONDS,
+	compareSecretVersions,
 	createDTag,
-	createDeletionEvent,
-	createTombstone,
+	createSecretHistoryObservation,
 	parseDTag,
 	unwrapGiftWrap,
+	unwrapGiftWrapWithSigner,
 	unwrapSecrets as unwrapSecretsFromEvent,
 	wrapSecrets as wrapSecretsToEvent,
+	wrapSecretsWithSigner,
 } from './crypto';
-import type { UnwrapResult } from './crypto';
-import { NotConnectedError } from './errors';
-import type { RelayPool } from './relay';
-import { createRelayPool, filterGiftWraps } from './relay';
-import type { GiftWrapResult, NostrEvent, SecretBundle } from './types';
+import type {
+	AsyncGiftWrapResult,
+	GiftWrapResult,
+	SecretHistoryObservation,
+	UnwrapResult,
+	WrapOptions,
+} from './crypto';
+import { NotConnectedError, RecoveryError, ValidationError } from './errors';
+import {
+	createProvisionalRecoveryRecord,
+	removeRecoveryRecord,
+	saveRecoveryRecord,
+	updateRecoveryRecord,
+} from './publication-recovery';
+import type { RecoveryRecord } from './publication-recovery';
+import type { PublishReport, RelayPool } from './relay';
+import {
+	PublishQuorumError,
+	createRelayPool,
+	filterGiftWrapHistory,
+	filterGiftWraps,
+} from './relay';
+import type { NostrEvent, SecretBundle } from './types';
+
+/**
+ * Signer abstraction for auth methods that do not expose a raw private key
+ * (NIP-46 bunker now, NIP-07-style signers later).
+ */
+export interface SecretManagerSigner {
+	getPublicKey(): string;
+	signEvent(event: EventTemplate): Promise<VerifiedEvent | NostrEvent>;
+	nip44Encrypt(pubkey: string, plaintext: string): Promise<string>;
+	nip44Decrypt(pubkey: string, ciphertext: string): Promise<string>;
+	close?(): Promise<void>;
+}
+
+export interface SecretManagerOptions {
+	createPool?: typeof createRelayPool;
+	saveRecovery?: (record: RecoveryRecord, expectedRevision?: string) => Promise<void>;
+	removeRecovery?: (eventId: string) => Promise<void>;
+}
+
+export interface SecretPublication {
+	event: NostrEvent;
+	report: PublishReport;
+}
 
 /**
  * Cached secret entry with metadata
  */
-interface SecretEntry {
+export interface SecretStateSnapshot {
 	secrets: SecretBundle;
 	dTag: string;
 	createdAt: number;
@@ -35,14 +81,26 @@ interface SecretEntry {
  * Cached decryption result keyed by event ID
  */
 interface DecryptionCacheEntry {
-	dTag: string | null;
+	dTag: string;
 	secrets: SecretBundle;
 	createdAt: number;
+	eventId: string;
+	pubkey: string;
 }
 
 /**
  * Short-lived cache for fetchAllSecrets Promise deduplication
  */
+class SignerDecryptionError extends Error {
+	readonly originalError: unknown;
+
+	constructor(originalError: unknown) {
+		super('Remote signer decryption failed');
+		this.name = 'SignerDecryptionError';
+		this.originalError = originalError;
+	}
+}
+
 interface FetchAllCache {
 	promise: Promise<Map<string, SecretBundle>>;
 	expiresAt: number;
@@ -50,15 +108,19 @@ interface FetchAllCache {
 
 /** Cache TTL for fetchAllSecrets deduplication (5 seconds) */
 const FETCH_ALL_CACHE_TTL_MS = 5000;
+const HISTORY_TEXT_ENCODER = new TextEncoder();
 
 /**
  * SecretManager handles all secret-related operations including
  * encryption, relay communication, and state management.
  */
 export class SecretManager {
-	private privateKey: Uint8Array;
+	private privateKey: Uint8Array | null = null;
+	private signer: SecretManagerSigner | null = null;
 	private publicKey: string;
 	private pool: RelayPool | null = null;
+	private lastPublication: SecretPublication | null = null;
+	private readonly options: Required<SecretManagerOptions>;
 
 	/** Decryption cache keyed by event ID - avoids re-decrypting known events */
 	private decryptionCache = new Map<string, DecryptionCacheEntry | null>();
@@ -66,9 +128,19 @@ export class SecretManager {
 	/** Short-lived cache for fetchAllSecrets Promise deduplication */
 	private fetchAllCache: FetchAllCache | null = null;
 
-	constructor(privateKey: Uint8Array) {
-		this.privateKey = privateKey;
-		this.publicKey = getPublicKey(privateKey);
+	constructor(auth: Uint8Array | SecretManagerSigner, options: SecretManagerOptions = {}) {
+		this.options = {
+			createPool: options.createPool ?? createRelayPool,
+			saveRecovery: options.saveRecovery ?? saveRecoveryRecord,
+			removeRecovery: options.removeRecovery ?? removeRecoveryRecord,
+		};
+		if (auth instanceof Uint8Array) {
+			this.privateKey = auth.slice();
+			this.publicKey = getPublicKey(auth);
+		} else {
+			this.signer = auth;
+			this.publicKey = auth.getPublicKey();
+		}
 	}
 
 	/**
@@ -87,26 +159,47 @@ export class SecretManager {
 		return this.publicKey;
 	}
 
+	getLastPublication(): SecretPublication | null {
+		return this.lastPublication;
+	}
+
 	/**
 	 * Connect to relays
 	 */
 	connect(relayUrls: string[]): void {
-		if (this.pool) {
-			this.pool.close();
-		}
-		this.pool = createRelayPool(relayUrls);
+		if (this.pool) this.pool.close();
+		this.pool = this.options.createPool(relayUrls, {
+			authSigner: async (event) => {
+				if (this.privateKey) return finalizeEvent(event, this.privateKey);
+				if (!this.signer) throw new Error('No signer available for relay authentication');
+				return (await this.signer.signEvent(event)) as VerifiedEvent;
+			},
+		});
 	}
 
 	/**
-	 * Disconnect from relays and zero private key memory.
-	 * This instance is terminal after disconnect — the key cannot be restored.
+	 * Close relay/signer resources and zero private key memory.
+	 * This instance is terminal after close — the key cannot be restored.
 	 */
-	disconnect(): void {
+	async close(): Promise<void> {
 		if (this.pool) {
 			this.pool.close();
 			this.pool = null;
 		}
-		this.privateKey.fill(0);
+		if (this.privateKey) {
+			this.privateKey.fill(0);
+		}
+		if (this.signer?.close) {
+			await this.signer.close();
+		}
+	}
+
+	/**
+	 * Disconnect from relays and zero private key memory.
+	 * Prefer awaiting close() when command lifecycle permits it.
+	 */
+	disconnect(): void {
+		void this.close();
 	}
 
 	/**
@@ -119,22 +212,57 @@ export class SecretManager {
 	/**
 	 * Wrap secrets into a Gift Wrap event
 	 */
-	wrapSecrets(secrets: SecretBundle, dTag: string): GiftWrapResult {
-		return wrapSecretsToEvent(secrets, this.privateKey, dTag);
+	async wrapSecrets(
+		secrets: SecretBundle,
+		dTag: string,
+		options?: WrapOptions,
+	): Promise<GiftWrapResult | AsyncGiftWrapResult> {
+		validatePublishTimestamp(options?.createdAt);
+		if (this.privateKey) {
+			return wrapSecretsToEvent(secrets, this.privateKey, dTag, options);
+		}
+		if (!this.signer) {
+			throw new Error('No signing method available');
+		}
+		return wrapSecretsWithSigner(
+			secrets,
+			this.publicKey,
+			dTag,
+			(pubkey, plaintext) => this.signer!.nip44Encrypt(pubkey, plaintext),
+			async (event) => this.signer!.signEvent(event),
+			options,
+		);
 	}
 
 	/**
 	 * Unwrap a Gift Wrap event to retrieve secrets
 	 */
-	unwrapSecrets(event: NostrEvent): SecretBundle {
-		return unwrapSecretsFromEvent(event, this.privateKey);
+	async unwrapSecrets(event: NostrEvent): Promise<SecretBundle> {
+		if (this.privateKey) {
+			return unwrapSecretsFromEvent(event, this.privateKey);
+		}
+		return (await this.unwrapWithMetadata(event)).secrets;
 	}
 
 	/**
 	 * Unwrap a Gift Wrap event with full metadata
 	 */
-	unwrapWithMetadata(event: NostrEvent): UnwrapResult {
-		return unwrapGiftWrap(event, this.privateKey);
+	async unwrapWithMetadata(event: NostrEvent): Promise<UnwrapResult> {
+		if (this.privateKey) {
+			return unwrapGiftWrap(event, this.privateKey);
+		}
+		if (!this.signer) {
+			throw new Error('No decryption method available');
+		}
+		return unwrapGiftWrapWithSigner(event, this.publicKey, async (pubkey, ciphertext) => {
+			try {
+				return await this.signer!.nip44Decrypt(pubkey, ciphertext);
+			} catch (error) {
+				// Every remote exception is uncertain. Structural ciphertext errors are rejected
+				// inside unwrapGiftWrapWithSigner before this callback is invoked.
+				throw new SignerDecryptionError(error);
+			}
+		});
 	}
 
 	/**
@@ -183,10 +311,49 @@ export class SecretManager {
 		return promise;
 	}
 
+	/** Return latest authenticated state, including logical tombstones and version evidence. */
+	async fetchAllSecretStates(): Promise<Map<string, SecretStateSnapshot>> {
+		const states = await this._fetchAllSecretStatesInternal();
+		return new Map(
+			[...states].map(([dTag, state]) => [dTag, { ...state, secrets: { ...state.secrets } }]),
+		);
+	}
+
 	/**
-	 * Internal implementation of fetchAllSecrets with decryption caching.
+	 * Observe bounded authenticated history for one exact project/environment.
+	 * Relay retention is not complete history; a result at either cap is marked truncated.
 	 */
+	async fetchSecretHistory(
+		projectId: string,
+		environment: string,
+	): Promise<SecretHistoryObservation> {
+		if (!this.pool) throw new NotConnectedError();
+		const targetDTag = createDTag(projectId, environment);
+		const queriedGiftWraps = await this.pool.query(filterGiftWrapHistory(this.publicKey));
+		const bounded = boundHistoryGiftWraps(queriedGiftWraps);
+		const versions: UnwrapResult[] = [];
+		for (const giftWrap of bounded.events) {
+			const entry = await this.getDecryptionEntry(giftWrap);
+			if (entry?.dTag === targetDTag) {
+				versions.push({ ...entry, secrets: { ...entry.secrets } });
+			}
+		}
+		return createSecretHistoryObservation(versions, bounded.observedEvents, bounded.truncated);
+	}
+
 	private async _fetchAllSecretsInternal(): Promise<Map<string, SecretBundle>> {
+		const states = await this._fetchAllSecretStatesInternal();
+		const secretsMap = new Map<string, SecretBundle>();
+		for (const [dTag, entry] of states) {
+			if (Object.keys(entry.secrets).length > 0) secretsMap.set(dTag, { ...entry.secrets });
+		}
+		return secretsMap;
+	}
+
+	/**
+	 * Internal implementation of authenticated state selection with decryption caching.
+	 */
+	private async _fetchAllSecretStatesInternal(): Promise<Map<string, SecretStateSnapshot>> {
 		if (!this.pool) {
 			throw new NotConnectedError();
 		}
@@ -195,62 +362,48 @@ export class SecretManager {
 		const giftWraps = await this.pool.query(filter);
 
 		// Unwrap all events and track latest by d-tag
-		const latestByDTag = new Map<string, SecretEntry>();
+		const latestByDTag = new Map<string, SecretStateSnapshot>();
 
-		for (const gw of giftWraps) {
-			// Check decryption cache first
-			if (this.decryptionCache.has(gw.id)) {
-				const cached = this.decryptionCache.get(gw.id);
-				if (cached?.dTag) {
-					const existing = latestByDTag.get(cached.dTag);
-					if (!existing || cached.createdAt > existing.createdAt) {
-						latestByDTag.set(cached.dTag, {
-							secrets: cached.secrets,
-							dTag: cached.dTag,
-							createdAt: cached.createdAt,
-							eventId: gw.id,
-						});
-					}
-				}
-				continue; // Skip decryption (cached null means it failed before)
-			}
-
-			try {
-				const result = unwrapGiftWrap(gw, this.privateKey);
-
-				// Cache the successful decryption
-				this.decryptionCache.set(gw.id, {
-					dTag: result.dTag,
-					secrets: result.secrets,
-					createdAt: result.createdAt,
+		for (const giftWrap of giftWraps) {
+			const entry = await this.getDecryptionEntry(giftWrap);
+			if (!entry) continue;
+			const existing = latestByDTag.get(entry.dTag);
+			if (!existing || compareSecretVersions(entry, existing) > 0) {
+				latestByDTag.set(entry.dTag, {
+					dTag: entry.dTag,
+					secrets: entry.secrets,
+					createdAt: entry.createdAt,
+					eventId: entry.eventId,
 				});
-
-				if (!result.dTag) {
-					continue; // Skip events without d-tag
-				}
-
-				const existing = latestByDTag.get(result.dTag);
-				if (!existing || result.createdAt > existing.createdAt) {
-					latestByDTag.set(result.dTag, {
-						secrets: result.secrets,
-						dTag: result.dTag,
-						createdAt: result.createdAt,
-						eventId: gw.id,
-					});
-				}
-			} catch {
-				// Cache the failure so we don't re-attempt (event not for us)
-				this.decryptionCache.set(gw.id, null);
 			}
 		}
 
-		// Convert to Map<string, SecretBundle>
-		const secretsMap = new Map<string, SecretBundle>();
-		for (const [dTag, entry] of latestByDTag) {
-			secretsMap.set(dTag, entry.secrets);
-		}
+		return latestByDTag;
+	}
 
-		return secretsMap;
+	private async getDecryptionEntry(giftWrap: NostrEvent): Promise<DecryptionCacheEntry | null> {
+		if (this.decryptionCache.has(giftWrap.id)) {
+			return this.decryptionCache.get(giftWrap.id) ?? null;
+		}
+		try {
+			const result = await this.unwrapWithMetadata(giftWrap);
+			const entry: DecryptionCacheEntry = {
+				dTag: result.dTag,
+				secrets: { ...result.secrets },
+				createdAt: result.createdAt,
+				eventId: result.eventId,
+				pubkey: result.pubkey,
+			};
+			this.decryptionCache.set(giftWrap.id, entry);
+			return entry;
+		} catch (error) {
+			if (error instanceof SignerDecryptionError) {
+				throw new ValidationError('Remote signer could not decrypt the observed secret state');
+			}
+			// Cache cryptographically invalid or unrelated events, but never transient signer failures.
+			this.decryptionCache.set(giftWrap.id, null);
+			return null;
+		}
 	}
 
 	/**
@@ -306,19 +459,16 @@ export class SecretManager {
 		projectId: string,
 		environment: string,
 		secrets: SecretBundle,
+		options?: WrapOptions,
 	): Promise<NostrEvent> {
 		if (!this.pool) {
 			throw new NotConnectedError();
 		}
+		this.lastPublication = null;
 
 		const dTag = createDTag(projectId, environment);
-		const { event } = this.wrapSecrets(secrets, dTag);
-
-		await this.pool.publish(event);
-
-		// Invalidate caches so next fetch picks up the new event
-		this.clearCache();
-
+		const { event } = await this.wrapSecrets(secrets, dTag, options);
+		await this.publishWithRecovery(event, projectId, environment);
 		return event;
 	}
 
@@ -326,34 +476,72 @@ export class SecretManager {
 	 * Delete secrets by publishing a tombstone (empty bundle).
 	 * Clears the decryption cache to ensure subsequent fetches see fresh data.
 	 */
+	async retryPublication(event: NostrEvent, relays: string[]): Promise<PublishReport> {
+		if (!this.pool) throw new NotConnectedError();
+		return this.pool.publishTo(relays, event, Math.max(1, relays.length));
+	}
+
 	async deleteSecrets(projectId: string, environment: string): Promise<NostrEvent> {
 		if (!this.pool) {
 			throw new NotConnectedError();
 		}
+		this.lastPublication = null;
 
 		const dTag = createDTag(projectId, environment);
-		const { event } = createTombstone(this.privateKey, dTag);
-
-		await this.pool.publish(event);
-
-		// Invalidate caches so next fetch picks up the tombstone
-		this.clearCache();
-
+		const { event } = await this.wrapSecrets({}, dTag);
+		await this.publishWithRecovery(event, projectId, environment);
 		return event;
 	}
 
-	/**
-	 * Create a NIP-09 deletion request for specific events
-	 */
-	async requestDeletion(eventIds: string[], reason?: string): Promise<NostrEvent> {
-		if (!this.pool) {
-			throw new NotConnectedError();
+	private async publishWithRecovery(
+		event: NostrEvent,
+		projectId: string,
+		environment: string,
+	): Promise<PublishReport> {
+		if (!this.pool) throw new NotConnectedError();
+		const provisional = createProvisionalRecoveryRecord({
+			ownerPubkey: this.publicKey,
+			project: projectId,
+			environment,
+			event,
+			relays: this.pool.relays,
+		});
+		await this.options.saveRecovery(provisional);
+
+		let report: PublishReport;
+		try {
+			report = await this.pool.publish(event);
+		} catch (error) {
+			if (!(error instanceof PublishQuorumError)) throw error;
+			report = error.report;
+			this.lastPublication = { event, report };
+			if (report.accepted.length > 0) this.clearCache();
+			await this.persistFinalRecovery(provisional, report);
+			throw error;
 		}
 
-		const deletion = createDeletionEvent(eventIds, this.privateKey, reason);
-		await this.pool.publish(deletion);
+		this.lastPublication = { event, report };
+		this.clearCache();
+		await this.persistFinalRecovery(provisional, report);
+		return report;
+	}
 
-		return deletion;
+	private async persistFinalRecovery(
+		provisional: RecoveryRecord,
+		report: PublishReport,
+	): Promise<void> {
+		const finalRecord = updateRecoveryRecord(provisional, report);
+		try {
+			await this.options.saveRecovery(finalRecord, provisional.revision);
+			if (report.outcomes.every(({ state }) => state === 'accepted')) {
+				await this.options.removeRecovery(provisional.event.id);
+			}
+		} catch (error) {
+			throw new RecoveryError(
+				`Remote publication may have succeeded, but local recovery persistence failed for event ${provisional.event.id}. Do not create a replacement event automatically.`,
+				error,
+			);
+		}
 	}
 }
 
@@ -365,25 +553,112 @@ export class SecretManager {
  * @param secrets - The secrets to inject
  * @returns New environment object with secrets injected
  */
+const REDSHIFT_AUTH_VARIABLES = new Set(['REDSHIFT_NSEC', 'REDSHIFT_BUNKER']);
+const BLOCKED_CHILD_SECRET_NAMES = new Set([
+	...REDSHIFT_AUTH_VARIABLES,
+	'NODE_OPTIONS',
+	'NODE_PATH',
+	'PYTHONPATH',
+	'PYTHONHOME',
+	'PYTHONSTARTUP',
+	'RUBYOPT',
+	'RUBYLIB',
+	'BASH_ENV',
+	'ENV',
+	'LD_PRELOAD',
+	'LD_LIBRARY_PATH',
+	'DYLD_INSERT_LIBRARIES',
+	'DYLD_LIBRARY_PATH',
+	'DYLD_FRAMEWORK_PATH',
+	'PERL5OPT',
+	'PERL5LIB',
+]);
+
+export function validateInjectableSecretName(key: string): void {
+	const canonicalKey = key.toUpperCase();
+	if (BLOCKED_CHILD_SECRET_NAMES.has(canonicalKey)) {
+		throw new ValidationError(
+			`Secret "${key}" is not allowed because ${canonicalKey} can expose Redshift authentication or alter runtime startup`,
+		);
+	}
+}
+
 export function injectSecrets(
 	baseEnv: Record<string, string | undefined>,
 	secrets: SecretBundle,
 ): Record<string, string> {
 	const result: Record<string, string> = {};
 
-	// Copy base environment
 	for (const [key, value] of Object.entries(baseEnv)) {
-		if (value !== undefined) {
+		if (value !== undefined && !REDSHIFT_AUTH_VARIABLES.has(key.toUpperCase())) {
 			result[key] = value;
 		}
 	}
 
-	// Inject secrets — SecretBundle values are always strings
 	for (const [key, value] of Object.entries(secrets)) {
+		validateInjectableSecretName(key);
 		result[key] = value;
 	}
 
 	return result;
+}
+
+function validatePublishTimestamp(createdAt?: number) {
+	if (createdAt === undefined) return;
+	const now = Math.floor(Date.now() / 1000);
+	if (
+		!Number.isSafeInteger(createdAt) ||
+		createdAt < 0 ||
+		createdAt > now + MAX_RUMOR_FUTURE_SKEW_SECONDS
+	) {
+		throw new ValidationError('Secret publication timestamp is outside the allowed range');
+	}
+}
+
+export function getNextSecretTimestamp(
+	observedCreatedAt?: number,
+	now = Math.floor(Date.now() / 1000),
+) {
+	if (!Number.isSafeInteger(now) || now < 0) throw new ValidationError('Invalid current timestamp');
+	if (observedCreatedAt === undefined) return now;
+	if (!Number.isSafeInteger(observedCreatedAt) || observedCreatedAt < 0) {
+		throw new ValidationError('Invalid observed secret timestamp');
+	}
+	const next = Math.max(now, observedCreatedAt + 1);
+	if (next > now + MAX_RUMOR_FUTURE_SKEW_SECONDS) {
+		throw new ValidationError('Cannot create a strictly newer secret within the future-skew bound');
+	}
+	return next;
+}
+
+/**
+ * Apply one deterministic global bound after multi-relay query aggregation.
+ * Relay filter limits are per relay and therefore cannot enforce this alone.
+ */
+export function boundHistoryGiftWraps(events: NostrEvent[]) {
+	const unique = new Map<string, NostrEvent>();
+	for (const event of events) {
+		if (!unique.has(event.id)) unique.set(event.id, event);
+	}
+	const ordered = [...unique.values()].sort((left, right) => {
+		if (left.created_at !== right.created_at) return right.created_at - left.created_at;
+		return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+	});
+	const retained: NostrEvent[] = [];
+	let ciphertextBytes = 0;
+	for (const event of ordered) {
+		if (retained.length >= HISTORY_LIMITS.maxObservedEvents) break;
+		const eventBytes = HISTORY_TEXT_ENCODER.encode(event.content).length;
+		if (ciphertextBytes + eventBytes > HISTORY_LIMITS.maxCiphertextBytes) break;
+		retained.push(event);
+		ciphertextBytes += eventBytes;
+	}
+	return {
+		events: retained,
+		observedEvents: ordered.length,
+		truncated:
+			ordered.length >= HISTORY_LIMITS.maxObservedEvents || retained.length < ordered.length,
+	};
 }
 
 /**

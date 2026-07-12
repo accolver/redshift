@@ -38,18 +38,20 @@ cd "$REDSHIFT_REPO"
 bun run generate:nsec
 ```
 
-Log in with that key:
+Log in interactively so the private key is read through the hidden-input path rather than exposed in the process list or shell history:
 
 ```bash
 cd "$DEMO_ROOT/app"
-bun "$REDSHIFT_REPO/cli/src/main.ts" login --nsec nsec1...
+bun "$REDSHIFT_REPO/cli/src/main.ts" login
 ```
 
-For CI-style demos, you can skip persistent login and export the key instead:
+Select local nsec login and paste the disposable key at the hidden prompt. For an isolated non-interactive demo, you can skip persistent login and export the throwaway key for only the current shell:
 
 ```bash
 export REDSHIFT_NSEC='nsec1...'
 ```
+
+Never use a production identity for this walkthrough, and unset the variable during cleanup.
 
 ## 2. Configure a Project
 
@@ -76,7 +78,7 @@ bun "$REDSHIFT_REPO/cli/src/main.ts" secrets set API_KEY sk-demo-123
 bun "$REDSHIFT_REPO/cli/src/main.ts" secrets get API_KEY --raw
 ```
 
-Expected result: the `get` command prints `sk-demo-123`.
+Expected result: the `get` command prints `sk-demo-123` after an explicit warning that `--raw` reveals plaintext. Keep the walkthrough terminal and its logs disposable.
 
 ## 4. Inject the Secret into a Command
 
@@ -92,9 +94,9 @@ sk-demo-123
 
 ## 5. Demonstrate Relay Failure and Switching
 
-Relay availability is intentionally decoupled from Redshift. To show how a user
-recovers from a bad relay, put an invalid relay first while keeping healthy
-relays in the list:
+Relay availability is intentionally decoupled from Redshift. To show how a read
+can tolerate one unavailable relay, put an invalid relay first while retaining
+enough healthy relays to observe the previously published bundle:
 
 ```bash
 cat > redshift.yaml <<'YAML'
@@ -110,8 +112,9 @@ YAML
 bun "$REDSHIFT_REPO/cli/src/main.ts" run -- printenv API_KEY
 ```
 
-If the command still succeeds, explain that Redshift can continue when another
-configured relay has the encrypted bundle. Then switch to a known-good relay set:
+If the command still succeeds, explain that Redshift can continue when responding
+configured relays hold the encrypted bundle. This is not proof of complete relay
+retention or an availability SLA. Then switch to a known-good relay set:
 
 ```bash
 cat > redshift.yaml <<'YAML'
@@ -158,12 +161,11 @@ unset REDSHIFT_CONFIG_DIR REDSHIFT_NSEC REDSHIFT_REPO DEMO_ROOT
 
 ## Verified Commands
 
-Run these from the repo root before a release or PR when time allows:
+Run the aggregate production gate from the repository root before a release:
 
 ```bash
-bun run build:web
-bun run build:cli
-bun run test:crypto
-bun run test:cli
-bun run test:web
+bun run test:production
 ```
+
+For ordinary development, run the full package suite with `bun run test:all`.
+Release publication additionally requires the repository's native installed-artifact workflow.

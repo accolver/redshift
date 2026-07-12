@@ -1,22 +1,11 @@
 <script lang="ts">
-import { onMount } from 'svelte';
 import { Button } from '$lib/components/ui/button';
 import InlineCode from '$lib/components/InlineCode.svelte';
 import Navbar from '$lib/components/Navbar.svelte';
 import { inView, inViewStagger } from '$lib/components/animations';
 import { Shield, Terminal, Globe, Key, Zap, Lock, ArrowRight, Copy, Check } from '@lucide/svelte';
 
-let scrollY = $state(0);
 let copied = $state(false);
-let mounted = $state(false);
-
-onMount(() => {
-	mounted = true;
-});
-
-function handleScroll() {
-	scrollY = window.scrollY;
-}
 
 async function copyInstallCommand() {
 	await navigator.clipboard.writeText('curl -fsSL https://redshiftapp.com/install | sh');
@@ -24,13 +13,7 @@ async function copyInstallCommand() {
 	setTimeout(() => (copied = false), 2000);
 }
 
-// Parallax calculations - only for background elements, not the hero content
-const gridOffset = $derived(scrollY * 0.05);
-const orbOffset1 = $derived(scrollY * 0.1);
-const orbOffset2 = $derived(scrollY * 0.08);
 </script>
-
-<svelte:window onscroll={handleScroll} />
 
 <svelte:head>
 	<title>Redshift - Decentralized Secret Management</title>
@@ -38,50 +21,17 @@ const orbOffset2 = $derived(scrollY * 0.08);
 		name="description"
 		content="Sovereign, censorship-resistant secret management using Nostr protocol. Own your secrets."
 	/>
-	{@html `<script type="application/ld+json">
-	{
-		"@context": "https://schema.org",
-		"@type": "SoftwareApplication",
-		"name": "Redshift",
-		"applicationCategory": "DeveloperApplication",
-		"operatingSystem": "macOS, Linux, Windows",
-		"description": "Decentralized, censorship-resistant secret management built on Nostr. Client-side encryption, Doppler-compatible CLI.",
-		"url": "https://redshiftapp.com",
-		"downloadUrl": "https://redshiftapp.com/install",
-		"softwareVersion": "0.1.0",
-		"offers": {
-			"@type": "Offer",
-			"price": "0",
-			"priceCurrency": "USD"
-		},
-		"featureList": [
-			"Client-side encryption",
-			"Nostr-based decentralized storage",
-			"Doppler-compatible CLI",
-			"Censorship-resistant",
-			"No vendor lock-in"
-		]
-	}
-	</script>`}
+
 </svelte:head>
 
 <div class="relative min-h-screen overflow-hidden bg-background">
 	<!-- Animated background grid -->
-	<div
-		class="pointer-events-none fixed inset-0 bg-grid opacity-40"
-		style="transform: translateY({gridOffset}px)"
-	></div>
+	<div class="pointer-events-none fixed inset-0 bg-grid opacity-40"></div>
 
 	<!-- Gradient orbs - these stay visible throughout -->
 	<div class="pointer-events-none fixed inset-0 overflow-hidden" style="z-index: 1;">
-		<div
-			class="absolute -left-32 -top-32 size-96 rounded-full bg-tokyo-blue/20 blur-[128px]"
-			style="transform: translateY({orbOffset1}px)"
-		></div>
-		<div
-			class="absolute -right-32 top-1/3 size-96 rounded-full bg-tokyo-purple/20 blur-[128px]"
-			style="transform: translateY({orbOffset2}px)"
-		></div>
+		<div class="absolute -left-32 -top-32 size-96 rounded-full bg-tokyo-blue/20 blur-[128px]"></div>
+		<div class="absolute -right-32 top-1/3 size-96 rounded-full bg-tokyo-purple/20 blur-[128px]"></div>
 		<div
 			class="absolute -bottom-32 left-1/3 size-96 rounded-full bg-tokyo-cyan/10 blur-[128px]"
 		></div>
@@ -89,18 +39,12 @@ const orbOffset2 = $derived(scrollY * 0.08);
 
 	<Navbar />
 
+	<main id="main-content">
 	<!-- Hero Section -->
 	<section
 		class="relative z-10 flex min-h-screen flex-col items-center justify-center px-6 pt-32 pb-32"
 	>
-		<div
-			class="relative z-10 mx-auto max-w-4xl text-center"
-			class:opacity-0={!mounted}
-			class:translate-y-4={!mounted}
-			class:opacity-100={mounted}
-			class:translate-y-0={mounted}
-			style="transition: opacity 0.8s ease, transform 0.8s ease"
-		>
+		<div class="relative z-10 mx-auto max-w-4xl text-center">
 			<!-- Badge -->
 			<div class="mb-12 inline-flex items-center gap-2 rounded-full border border-border/50 bg-card/50 px-4 py-1.5 text-sm backdrop-blur-sm">
 				<span class="flex size-2 animate-pulse rounded-full bg-tokyo-green"></span>
@@ -141,14 +85,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 		</div>
 
 		<!-- Terminal Preview -->
-		<div
-			class="relative z-10 mx-auto mt-20 w-full max-w-3xl"
-			class:opacity-0={!mounted}
-			class:translate-y-8={!mounted}
-			class:opacity-100={mounted}
-			class:translate-y-0={mounted}
-			style="transition: opacity 1s ease 0.3s, transform 1s ease 0.3s"
-		>
+		<div class="relative z-10 mx-auto mt-20 w-full max-w-3xl">
 			<div class="rounded-xl border border-border/50 bg-card/80 shadow-2xl backdrop-blur-sm">
 				<!-- Terminal header -->
 				<div class="flex items-center gap-2 border-b border-border/50 px-4 py-3">
@@ -166,14 +103,12 @@ const orbOffset2 = $derived(scrollY * 0.08);
 							<span class="text-tokyo-green">$</span>
 							<span class="text-foreground/80"> redshift login</span>
 						</div>
-						<div class="text-foreground/60">
-							<span class="text-tokyo-cyan">?</span> Select authentication method
-						</div>
-						<div class="pl-4 text-tokyo-blue">
-							<span class="text-tokyo-green">></span> NIP-07 Browser Extension (recommended)
-						</div>
-						<div class="pl-4 text-foreground/50">Enter nsec manually</div>
-						<div class="pl-4 text-foreground/50">Use bunker URL</div>
+						<div class="text-foreground/75">Redshift Login</div>
+						<div class="text-foreground/75">Choose authentication method:</div>
+						<div class="pl-4 text-foreground/70">1. Enter nsec directly</div>
+						<div class="pl-4 text-tokyo-blue">2. Connect via bunker URL (bunker://...)</div>
+						<div class="pl-4 text-foreground/70">3. Generate NostrConnect QR code</div>
+						<div class="text-foreground/75">Select option [1-3]: 2</div>
 						<div class="mt-4">
 							<span class="text-tokyo-green">✓</span>
 							<span class="text-foreground"> Connected as npub1abc...xyz</span>
@@ -182,7 +117,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 							<span class="text-tokyo-green">$</span>
 							<span class="text-foreground/80"> redshift run -- npm start</span>
 						</div>
-						<div class="text-foreground/60">
+						<div class="text-foreground/75">
 							<span class="text-tokyo-cyan">info</span> Fetching secrets for
 							<span class="text-tokyo-purple">my-app/production</span>...
 						</div>
@@ -200,7 +135,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 
 		<!-- Scroll indicator -->
 		<div class="absolute bottom-8 left-1/2 -translate-x-1/2">
-			<div class="flex animate-bounce flex-col items-center gap-2 text-muted-foreground/50">
+			<div class="flex animate-bounce flex-col items-center gap-2 text-muted-foreground/70">
 				<span class="text-xs">Scroll to explore</span>
 				<svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
@@ -223,7 +158,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 					Built for developers who
 					<span class="gradient-text">value sovereignty</span>
 				</h2>
-				<p class="mx-auto max-w-2xl text-foreground/60">
+				<p class="mx-auto max-w-2xl text-foreground/75">
 					Redshift combines the ease of traditional secret managers with the security and freedom of
 					decentralized infrastructure.
 				</p>
@@ -240,7 +175,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						<Shield class="size-6" />
 					</div>
 					<h3 class="mb-2 text-lg font-semibold">Client-Side Encryption</h3>
-					<p class="text-sm text-foreground/60">
+					<p class="text-sm text-foreground/75">
 						Your secrets never leave your device unencrypted. We use NIP-59 Gift Wrap for
 						state-of-the-art encryption.
 					</p>
@@ -256,7 +191,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						<Terminal class="size-6" />
 					</div>
 					<h3 class="mb-2 text-lg font-semibold">Doppler Compatible CLI</h3>
-					<p class="text-sm text-foreground/60">
+					<p class="text-sm text-foreground/75">
 						Familiar commands like <InlineCode class="text-xs">redshift run</InlineCode>.
 						Drop-in replacement for your existing workflow.
 					</p>
@@ -272,7 +207,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						<Globe class="size-6" />
 					</div>
 					<h3 class="mb-2 text-lg font-semibold">Censorship Resistant</h3>
-					<p class="text-sm text-foreground/60">
+					<p class="text-sm text-foreground/75">
 						Built on Nostr protocol. Your secrets are distributed across relays - no single point of
 						failure.
 					</p>
@@ -288,7 +223,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						<Key class="size-6" />
 					</div>
 					<h3 class="mb-2 text-lg font-semibold">Your Keys, Your Data</h3>
-					<p class="text-sm text-foreground/60">
+					<p class="text-sm text-foreground/75">
 						Use your existing Nostr identity. Export anytime. No vendor lock-in, no account
 						required.
 					</p>
@@ -304,7 +239,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						<Zap class="size-6" />
 					</div>
 					<h3 class="mb-2 text-lg font-semibold">Lightning Fast</h3>
-					<p class="text-sm text-foreground/60">
+					<p class="text-sm text-foreground/75">
 						Single binary distribution. No runtime dependencies. Start managing secrets in under 30
 						seconds.
 					</p>
@@ -320,7 +255,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						<Lock class="size-6" />
 					</div>
 					<h3 class="mb-2 text-lg font-semibold">Free Forever</h3>
-					<p class="text-sm text-foreground/60">
+					<p class="text-sm text-foreground/75">
 						Core functionality is completely free for individuals. Unlimited projects, unlimited
 						secrets.
 					</p>
@@ -338,7 +273,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						Get started in
 						<span class="gradient-text">seconds</span>
 					</h2>
-					<p class="mb-8 text-foreground/60">
+					<p class="mb-8 text-foreground/75">
 						Install the CLI, authenticate with your Nostr identity, and start managing secrets
 						immediately. No sign-up required.
 					</p>
@@ -352,7 +287,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 							</div>
 							<div>
 								<p class="font-medium">Install the CLI</p>
-								<p class="text-sm text-foreground/60">One command, all platforms supported.</p>
+								<p class="text-sm text-foreground/75">One command, all platforms supported.</p>
 							</div>
 						</div>
 						<div class="flex items-start gap-4">
@@ -363,7 +298,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 							</div>
 							<div>
 								<p class="font-medium">Authenticate</p>
-								<p class="text-sm text-foreground/60">
+								<p class="text-sm text-foreground/75">
 									Use NIP-07 extension or enter your nsec directly.
 								</p>
 							</div>
@@ -376,7 +311,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 							</div>
 							<div>
 								<p class="font-medium">Manage secrets</p>
-								<p class="text-sm text-foreground/60">
+								<p class="text-sm text-foreground/75">
 									Set, get, and inject secrets into your apps.
 								</p>
 							</div>
@@ -410,7 +345,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 						</div>
 					</div>
 
-					<div class="mt-6 flex items-center justify-center gap-8 text-sm text-foreground/50">
+					<div class="mt-6 flex items-center justify-center gap-8 text-sm text-foreground/70">
 						<span>macOS</span>
 						<span>Linux</span>
 						<span>Windows (WSL)</span>
@@ -426,7 +361,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 			<h2 class="mb-4 text-3xl font-bold sm:text-4xl lg:text-5xl">
 				Ready to own your secrets?
 			</h2>
-			<p class="mx-auto mb-10 max-w-2xl text-lg text-foreground/60">
+			<p class="mx-auto mb-10 max-w-2xl text-lg text-foreground/75">
 				Join developers who trust Redshift for sovereign secret management. Free forever for
 				individuals.
 			</p>
@@ -451,14 +386,16 @@ const orbOffset2 = $derived(scrollY * 0.08);
 		</div>
 	</section>
 
+	</main>
+
 	<!-- Footer -->
 	<footer class="border-t border-border/50 px-6 py-12">
 		<div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 md:flex-row">
 			<div class="flex items-center gap-2">
-				<img src="/favicon.svg" alt="Redshift" class="size-8" />
+				<img src="/favicon.svg" alt="" width="32" height="32" class="size-8" />
 				<span class="font-semibold">Redshift</span>
 			</div>
-			<div class="flex gap-8 text-sm text-foreground/60">
+			<div class="flex gap-8 text-sm text-foreground/75">
 				<a href="/docs" class="transition-colors hover:text-foreground">Documentation</a>
 				<a href="/pricing" class="transition-colors hover:text-foreground">Pricing</a>
 				<a href="/blog" class="transition-colors hover:text-foreground">Blog</a>
@@ -468,7 +405,7 @@ const orbOffset2 = $derived(scrollY * 0.08);
 					class="transition-colors hover:text-foreground">GitHub</a
 				>
 			</div>
-			<p class="text-sm text-foreground/50">
+			<p class="text-sm text-foreground/70">
 				Built with Nostr. Open source.
 			</p>
 		</div>

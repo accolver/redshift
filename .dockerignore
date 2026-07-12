@@ -1,0 +1,5 @@
+*
+!tests/
+!tests/release/
+!tests/release/Dockerfile
+!tests/release/container-entrypoint.sh

@@ -10,6 +10,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 import type { RunOptions } from '../../src/commands/run';
+import { applyPreserveEnvironment, resolveChildCommand } from '../../src/commands/run';
 
 // Mock modules before importing run
 const mockSpawn = mock(() => ({
@@ -96,35 +97,22 @@ describe('run command', () => {
 			expect(options.environment).toBe('production');
 		});
 
-		it('should accept preserveColor flag', () => {
+		it('should accept explicit shell and preserve-env modes', () => {
 			const options: RunOptions = {
-				command: ['npm', 'test'],
-				preserveColor: true,
+				command: [],
+				shellCommand: 'printf "%s" "hello world"',
+				preserveEnv: ['PATH', 'HOME'],
 			};
 
-			expect(options.preserveColor).toBe(true);
+			expect(options.shellCommand).toContain('hello world');
+			expect(options.preserveEnv).toEqual(['PATH', 'HOME']);
 		});
 	});
 
 	describe('validation', () => {
-		it('should exit with error when no command specified', async () => {
-			// Import fresh module
+		it('throws when neither positional nor shell command is specified', async () => {
 			const { runCommand } = await import('../../src/commands/run');
-
-			// Capture console.error output
-			const errors: string[] = [];
-			const originalError = console.error;
-			console.error = (...args) => errors.push(args.join(' '));
-
-			try {
-				await runCommand({ command: [] });
-			} catch (e) {
-				expect((e as Error).message).toBe('process.exit(1)');
-			}
-
-			console.error = originalError;
-
-			expect(errors.some((e) => e.includes('No command specified'))).toBe(true);
+			await expect(runCommand({ command: [] })).rejects.toThrow('No command specified');
 		});
 
 		it('should exit with error when no project configured', async () => {
@@ -144,16 +132,12 @@ describe('run command', () => {
 			const originalError = console.error;
 			console.error = (...args) => errors.push(args.join(' '));
 
-			try {
-				await runCommand({ command: ['echo', 'test'] });
-			} catch (e) {
-				expect((e as Error).message).toBe('process.exit(1)');
-			}
+			await expect(runCommand({ command: ['echo', 'test'] })).rejects.toThrow(
+				'No project configured',
+			);
 
 			console.error = originalError;
 			cwdSpy.mockRestore();
-
-			expect(errors.some((e) => e.includes('No project configured'))).toBe(true);
 		});
 	});
 
@@ -179,17 +163,43 @@ describe('run command', () => {
 			const originalError = console.error;
 			console.error = (...args) => errors.push(args.join(' '));
 
-			try {
-				await runDryCommand({ command: ['echo', 'test'] });
-			} catch (e) {
-				expect((e as Error).message).toBe('process.exit(1)');
-			}
+			await expect(runDryCommand({ command: ['echo', 'test'] })).rejects.toThrow(
+				'No project configured',
+			);
 
 			console.error = originalError;
 			cwdSpy.mockRestore();
-
-			expect(errors.some((e) => e.includes('No project configured'))).toBe(true);
 		});
+	});
+});
+
+describe('run command execution contract', () => {
+	it('preserves every positional argument exactly', () => {
+		const argv = ['printf', '%s', '', 'a b', "'quoted'", '\\path', '*'];
+		const resolved = resolveChildCommand({ command: argv }, 'linux');
+
+		expect(resolved.executable).toBe('printf');
+		expect(resolved.args).toEqual(argv.slice(1));
+	});
+
+	it('uses exactly one POSIX shell boundary for --command', () => {
+		const shellCommand = 'printf "%s" "hello world"; exit 7';
+		const resolved = resolveChildCommand({ command: [], shellCommand }, 'linux');
+
+		expect(resolved).toEqual({
+			executable: '/bin/sh',
+			args: ['-c', shellCommand],
+		});
+	});
+
+	it('restores only named base variables after secret injection', () => {
+		const result = applyPreserveEnvironment(
+			{ PATH: '/base/bin', API_KEY: 'base', MISSING: undefined },
+			{ PATH: '/secret/bin', API_KEY: 'secret', OTHER: 'value' },
+			['PATH', 'MISSING'],
+		);
+
+		expect(result).toEqual({ PATH: '/base/bin', API_KEY: 'secret', OTHER: 'value' });
 	});
 });
 

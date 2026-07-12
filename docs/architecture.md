@@ -11,7 +11,7 @@ flowchart LR
   subgraph Developer Device
     CLI[Redshift CLI]
     Web[Web Dashboard]
-    Keychain[OS keychain or REDSHIFT_NSEC]
+    Signer[NIP-07, NIP-46, or local nsec]
     Config[redshift.yaml and ~/.redshift/config.json]
   end
 
@@ -27,9 +27,9 @@ flowchart LR
 
   App[User command\nredshift run -- ...]
 
-  Keychain --> CLI
+  Signer --> CLI
+  Signer --> Web
   Config --> CLI
-  Keychain --> Web
   CLI --> Crypto
   Web --> Crypto
   CLI --> RateLimiter
@@ -54,30 +54,46 @@ flowchart LR
    - Secret bundle identifiers use `{project}|{environment}`.
 
 3. **Secret writes**
-   - `redshift secrets set KEY VALUE` loads the latest bundle for the selected
-     project/environment.
-   - The client updates the bundle locally, encrypts it with NIP-59 Gift Wrap,
-     tags the outer event with `t=redshift-secrets`, and publishes to relays.
+   - `redshift secrets set KEY VALUE` loads the latest authenticated bundle for
+     the selected project/environment.
+   - The client updates the complete bundle locally, encrypts it with NIP-59
+     Gift Wrap, tags the outer event with `t=redshift-secrets`, and publishes the
+     same signed event to the configured relays.
+   - Success requires publication quorum. Per-relay outcomes remain visible, and
+     below-quorum publication can be retried by exact event ID without creating a
+     conflicting replacement.
 
 4. **Secret reads and injection**
    - `redshift run -- <command>` fetches matching Gift Wrap events from the
      configured relays.
-   - The client decrypts only events addressed to the logged-in identity.
-   - The latest valid bundle is injected as environment variables into the child
+   - The client accepts only owner-consistent recipient, seal, and inner-rumor
+     identities with the exact project/environment d-tag.
+   - Logical state is selected by inner rumor time and deterministic outer event
+     ID tie-breaking, never by randomized Gift Wrap timestamps.
+   - The selected bundle is injected as environment variables into the child
      process.
 
-5. **Relay resilience**
+5. **Recovery, backup, and observed history**
+   - Publication recovery preserves exact signed events and retries only relays
+     that did not accept them.
+   - Passphrase-encrypted local backup exports current observed state and restores
+     it as new owner-authorized events under the target identity.
+   - Authenticated history is bounded relay-observed state. Compare reveals key
+     names and change categories only; restore publishes a new complete bundle or
+     tombstone after explicit consent and a second observation.
+
+6. **Relay resilience**
    - Relays are configurable globally (`redshift configure set relays='[...]'`)
      or per project (`redshift.yaml`).
-   - Multiple relays reduce availability risk. If one relay is unhealthy, remove
-     it or reorder relays and rerun the command.
+   - Multiple relays reduce availability risk, but they do not establish complete
+     retention, compare-and-swap, cryptographic erasure, RPO/RTO, or an SLA.
 
 ## Main Components
 
 | Path | Responsibility |
 | --- | --- |
 | `cli/src/main.ts` | CLI entrypoint and command dispatch |
-| `cli/src/commands/` | Login, setup, secrets, run, serve, and upgrade commands |
+| `cli/src/commands/` | Login, setup, secrets, run, history, recovery, backup, serve, and upgrade commands |
 | `cli/src/lib/secret-manager.ts` | Secret bundle fetch, decrypt, merge, encrypt, publish lifecycle |
 | `cli/src/lib/relay.ts` | Relay pool wrapper with rate limiting and retry behavior |
 | `web/src/` | SvelteKit dashboard and browser secret workflows |
@@ -89,10 +105,14 @@ flowchart LR
 
 - Secrets are encrypted before relay publish and decrypted only by the client.
 - Relays can deny service or lose data, but should not learn secret values.
-- The CLI stores credentials in the OS keychain when available and falls back to
-  `~/.redshift/config.json` with owner-only file permissions.
-- Demo and CI flows can isolate credentials with `REDSHIFT_CONFIG_DIR` and
-  `REDSHIFT_NSEC`.
+- The CLI prefers OS keychain custody. Explicit local or environment-key flows
+  expose signing authority to the local process and require stronger operational
+  controls.
+- Browser-decrypted history is ephemeral and is cleared when its project,
+  environment, authentication, or subscription lifecycle ends.
+- Demo and CI flows can isolate credentials with `REDSHIFT_CONFIG_DIR` and a
+  disposable `REDSHIFT_NSEC`; long-lived private keys do not belong in CI logs or
+  centrally stored workflow secrets.
 
 ## Local Development Map
 

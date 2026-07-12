@@ -49,14 +49,19 @@ export interface GiftWrapResult {
 /**
  * Result of unwrapping a Gift Wrap event
  */
-export interface UnwrapResult {
-	/** The decrypted secret bundle */
-	secrets: SecretBundle;
-	/** The d-tag from the inner rumor */
-	dTag: string | null;
-	/** The rumor's created_at timestamp */
+export interface SecretVersion {
+	/** The authenticated rumor's created_at timestamp. */
 	createdAt: number;
-	/** The rumor's pubkey (real author) */
+	/** The verified outer Gift Wrap event ID used for deterministic ties. */
+	eventId: string;
+}
+
+export interface UnwrapResult extends SecretVersion {
+	/** The decrypted secret bundle. */
+	secrets: SecretBundle;
+	/** The validated project|environment d-tag from the inner rumor. */
+	dTag: string;
+	/** The authenticated rumor author. */
 	pubkey: string;
 }
 
