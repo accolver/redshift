@@ -49,4 +49,4 @@
 - [x] 8.1 Run strict OpenSpec validation, zero-advisory audits, typechecks, scoped Biome, generated-source checks, all package/CLI/web/relay tests, compiled lifecycle tests, and Chromium journeys.
 - [x] 8.2 Run independent security/correctness/UX/product-truth reviews and resolve every blocker/high/medium finding.
 - [x] 8.3 Run the aggregate production gate, diff/leak/process cleanup checks, and pre-commit build/test requirements.
-- [ ] 8.4 Merge through passing PR checks, publish/certify the immutable release artifacts on all supported architectures, record evidence, and archive the OpenSpec change in a separate PR.
+- [x] 8.4 Merge through passing PR checks, publish/certify the immutable release artifacts on all supported architectures, record evidence, and archive the OpenSpec change in a separate PR.
