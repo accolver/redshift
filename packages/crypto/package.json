@@ -14,6 +14,7 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@noble/hashes": "2.0.1",
 		"nostr-tools": "^2.23.2"
 	},
 	"devDependencies": {

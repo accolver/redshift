@@ -1,6 +1,6 @@
-import { schnorr } from '@noble/curves/secp256k1';
 import * as config from './config';
 import { RelayWebSocket } from './durable-object';
+import { verifyEventSignature } from './event-verifier';
 import type {
 	Env,
 	Nip05Response,
@@ -16,8 +16,6 @@ const {
 	relayInfo,
 	PAY_TO_RELAY_ENABLED,
 	RELAY_ACCESS_PRICE_SATS,
-	relayNpub,
-	relayLnAddress,
 	nip05Users,
 	enableAntiSpam,
 	enableGlobalDuplicateCheck,
@@ -37,6 +35,20 @@ const GLOBAL_MAX_EVENTS = 500;
 const MAX_QUERY_COMPLEXITY = 1000;
 const CHUNK_SIZE = 500;
 
+type SqlParameter = string | number;
+type DatabaseRow = Record<string, unknown>;
+
+function getErrorMessage(error: unknown) {
+	return error instanceof Error ? error.message : String(error);
+}
+
+interface CloudflareLocation {
+	continent?: string;
+	country?: string;
+	region?: string;
+	colo?: string;
+}
+
 // Database initialization
 async function initializeDatabase(db: D1Database): Promise<void> {
 	try {
@@ -50,7 +62,7 @@ async function initializeDatabase(db: D1Database): Promise<void> {
 			console.log('Database already initialized');
 			return;
 		}
-	} catch (error) {
+	} catch {
 		console.log('Database not initialized, creating schema...');
 	}
 
@@ -340,37 +352,6 @@ async function initializeDatabase(db: D1Database): Promise<void> {
 	}
 }
 
-// Event verification
-async function verifyEventSignature(event: NostrEvent): Promise<boolean> {
-	try {
-		const signatureBytes = hexToBytes(event.sig);
-		const serializedEventData = serializeEventForSigning(event);
-		const messageHashBuffer = await crypto.subtle.digest(
-			'SHA-256',
-			new TextEncoder().encode(serializedEventData),
-		);
-		const messageHash = new Uint8Array(messageHashBuffer);
-		const publicKeyBytes = hexToBytes(event.pubkey);
-		return schnorr.verify(signatureBytes, messageHash, publicKeyBytes);
-	} catch (error) {
-		console.error('Error verifying event signature:', error);
-		return false;
-	}
-}
-
-function serializeEventForSigning(event: NostrEvent): string {
-	return JSON.stringify([0, event.pubkey, event.created_at, event.kind, event.tags, event.content]);
-}
-
-function hexToBytes(hexString: string): Uint8Array {
-	if (hexString.length % 2 !== 0) throw new Error('Invalid hex string');
-	const bytes = new Uint8Array(hexString.length / 2);
-	for (let i = 0; i < bytes.length; i++) {
-		bytes[i] = Number.parseInt(hexString.substr(i * 2, 2), 16);
-	}
-	return bytes;
-}
-
 function bytesToHex(bytes: Uint8Array): string {
 	return Array.from(bytes)
 		.map((byte) => byte.toString(16).padStart(2, '0'))
@@ -637,7 +618,6 @@ function calculateQueryComplexity(filter: NostrFilter): number {
 // Event processing
 async function processEvent(
 	event: NostrEvent,
-	sessionId: string,
 	env: Env,
 ): Promise<{ success: boolean; message: string; bookmark?: string }> {
 	try {
@@ -673,8 +653,8 @@ async function processEvent(
 
 		// Save event directly to database
 		return await saveEventToDatabase(event, env);
-	} catch (error: any) {
-		console.error(`Error processing event: ${error.message}`);
+	} catch (error: unknown) {
+		console.error(`Error processing event: ${getErrorMessage(error)}`);
 		return { success: false, message: 'error: internal event processing failed' };
 	}
 }
@@ -893,8 +873,8 @@ async function saveEventToDatabase(
 			message: 'Event saved successfully',
 			bookmark: session.getBookmark() ?? undefined,
 		};
-	} catch (error: any) {
-		console.error(`Error saving event to database: ${error.message}`);
+	} catch (error: unknown) {
+		console.error(`Error saving event to database: ${getErrorMessage(error)}`);
 		console.error(
 			`Event details: ID=${event.id}, Kind=${event.kind}, Tags count=${event.tags.length}`,
 		);
@@ -1004,8 +984,8 @@ function chunkArray<T>(array: T[], chunkSize: number): T[][] {
 }
 
 // Build COUNT query for precheck
-function buildCountQuery(filter: NostrFilter): { sql: string; params: any[] } {
-	const params: any[] = [];
+function buildCountQuery(filter: NostrFilter): { sql: string; params: SqlParameter[] } {
+	const params: SqlParameter[] = [];
 	const conditions: string[] = [];
 
 	// Count and categorize tag filters
@@ -1186,8 +1166,8 @@ function buildCountQuery(filter: NostrFilter): { sql: string; params: any[] } {
 }
 
 // Query builder
-function buildQuery(filter: NostrFilter): { sql: string; params: any[] } {
-	const params: any[] = [];
+function buildQuery(filter: NostrFilter): { sql: string; params: SqlParameter[] } {
+	const params: SqlParameter[] = [];
 	const conditions: string[] = [];
 
 	// Count and categorize tag filters
@@ -1490,7 +1470,7 @@ async function queryDatabaseChunked(
 	env: Env,
 ): Promise<{ events: NostrEvent[] }> {
 	const session = env.RELAY_DATABASE.withSession(bookmark);
-	const allRows = new Map<string, any>(); // Collect rows first, dedupe by ID
+	const allRows = new Map<string, DatabaseRow>(); // Collect rows first, dedupe by ID
 
 	// Create a base filter with everything except the large arrays
 	const baseFilter: NostrFilter = { ...filter };
@@ -1558,7 +1538,7 @@ async function queryDatabaseChunked(
 	};
 
 	// Helper function to process number array chunks
-	const processNumberChunks = async (filterType: 'kinds', values: number[]) => {
+	const processNumberChunks = async (values: number[]) => {
 		const chunks = chunkArray(values, CHUNK_SIZE);
 
 		for (const chunk of chunks) {
@@ -1592,7 +1572,7 @@ async function queryDatabaseChunked(
 	}
 
 	if (needsChunking.kinds && filter.kinds) {
-		await processNumberChunks('kinds', filter.kinds);
+		await processNumberChunks(filter.kinds);
 	}
 
 	// Process tag filters
@@ -1738,7 +1718,7 @@ async function queryEvents(
 					const results = await session.batch(queries);
 
 					// Collect all rows first
-					const allRows: any[] = [];
+					const allRows: DatabaseRow[] = [];
 
 					// Process all batch results
 					for (let i = 0; i < results.length; i++) {
@@ -1754,9 +1734,9 @@ async function queryEvents(
 						}
 
 						if (result.success && result.results) {
-							for (const row of result.results as any[]) {
+							for (const row of result.results) {
 								if (totalEventsRead >= GLOBAL_MAX_EVENTS) break;
-								allRows.push(row);
+								allRows.push(row as DatabaseRow);
 								totalEventsRead++;
 							}
 						} else if (!result.success) {
@@ -1777,8 +1757,8 @@ async function queryEvents(
 						};
 						eventSet.set(event.id, event);
 					}
-				} catch (error: any) {
-					console.error(`Batch query execution error: ${error.message}`);
+				} catch (error: unknown) {
+					console.error(`Batch query execution error: ${getErrorMessage(error)}`);
 					throw error;
 				}
 			}
@@ -1794,8 +1774,8 @@ async function queryEvents(
 		const newBookmark = session.getBookmark();
 		console.log(`Found ${events.length} events. New bookmark: ${newBookmark}`);
 		return { events, bookmark: newBookmark };
-	} catch (error: any) {
-		console.error(`Error querying events: ${error.message}`);
+	} catch (error: unknown) {
+		console.error(`Error querying events: ${getErrorMessage(error)}`);
 		return { events: [], bookmark: null };
 	}
 }
@@ -1822,32 +1802,23 @@ function handleRelayInfoRequest(request: Request): Response {
 	});
 }
 
-function serveLandingPage(): Response {
-	// Pay section - shown until user pays (uses nostr-zap for Lightning payments)
+export function serveLandingPage(): Response {
+	const nonce = crypto.randomUUID().replace(/-/g, '');
 	const paySection = PAY_TO_RELAY_ENABLED
 		? `
     <div id="paySection" class="subscribe-section">
-      <p style="margin-bottom: 1rem; color: var(--text-secondary);">One-time payment for lifetime relay access</p>
-      <button id="payButton"
-        class="subscribe-button"
-        data-npub="${relayNpub}"
-        data-lnaddress="${relayLnAddress}"
-        data-relays="wss://relay.damus.io,wss://relay.primal.net,wss://nos.lol,wss://relay.nostr.band,wss://purplepag.es"
-        data-sats-amount="${RELAY_ACCESS_PRICE_SATS}">
-        Pay ${RELAY_ACCESS_PRICE_SATS.toLocaleString()} sats ⚡
-      </button>
-      <p class="price-info">Pay with Lightning via Nostr Wallet Connect or extension</p>
+      <p class="price-info">Managed relay access costs ${RELAY_ACCESS_PRICE_SATS.toLocaleString()} sats.</p>
+      <a class="subscribe-button" href="https://redshiftapp.com/admin">Manage Cloud access</a>
     </div>
   `
 		: '';
 
-	// Access section - hidden until payment, then reveals relay URL
 	const accessSection = `
-    <div id="accessSection" class="info-box" style="${PAY_TO_RELAY_ENABLED ? 'display: none;' : ''}">
-      <p style="margin-bottom: 1rem;">Connect your Nostr client to:</p>
-      <div class="url-display" onclick="copyToClipboard()" id="relay-url">
+    <div id="accessSection" class="info-box">
+      <p>Connect your Nostr client to:</p>
+      <button type="button" class="url-display" id="relay-url">
         <!-- URL will be inserted by JavaScript -->
-      </div>
+      </button>
       <p class="copy-hint">Click to copy</p>
     </div>
   `;
@@ -1860,7 +1831,7 @@ function serveLandingPage(): Response {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="${relayInfo.description}" />
     <title>${relayInfo.name}</title>
-    <style>
+    <style nonce="${nonce}">
         /* Tokyo Night Storm Theme */
         :root {
             --bg-dark: #1a1b26;
@@ -2114,14 +2085,14 @@ function serveLandingPage(): Response {
         </div>
         
         <div class="links">
-            <a href="${relayInfo.privacy_policy || '#'}" class="link" target="_blank">Privacy Policy</a>
-            <a href="${relayInfo.terms_of_service || '#'}" class="link" target="_blank">Terms of Service</a>
+            <a href="${relayInfo.privacy_policy || '#'}" class="link" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+            <a href="${relayInfo.terms_of_service || '#'}" class="link" target="_blank" rel="noopener noreferrer">Terms of Service</a>
         </div>
     </div>
     
     <div class="toast" id="toast">Copied to clipboard!</div>
     
-    <script>
+    <script nonce="${nonce}">
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const relayUrl = protocol + '//' + window.location.host;
         const relayUrlElement = document.getElementById('relay-url');
@@ -2139,6 +2110,7 @@ function serveLandingPage(): Response {
                 }, 2000);
             });
         }
+        if (relayUrlElement) relayUrlElement.addEventListener('click', copyToClipboard);
         
         ${
 					PAY_TO_RELAY_ENABLED
@@ -2205,40 +2177,8 @@ function serveLandingPage(): Response {
         });
 
         async function initPayment() {
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/gh/Spl0itable/nosflare@main/nostr-zap.js';
-            script.onload = () => {
-                if (window.nostrZap) {
-                    window.nostrZap.initTargets('#payButton');
-                    
-                    document.getElementById('payButton').addEventListener('click', () => {
-                        if (!paymentCheckInterval) {
-                            paymentCheckInterval = setInterval(async () => {
-                                await checkPaymentStatus();
-                            }, 3000);
-                        }
-                    });
-                }
-            };
-            document.head.appendChild(script);
-            
-            // Initial check
             await checkPaymentStatus();
-
-            // Retry after nostr-login has time to initialize (for returning users)
-            setTimeout(async () => {
-                await checkPaymentStatus();
-            }, 1000);
         }
-
-        // Listen for nostr-login authentication events
-        document.addEventListener('nlAuth', async (e) => {
-            console.log('nostr-login auth event:', e.detail);
-            if (e.detail.type === 'login' || e.detail.type === 'signup') {
-                // User just logged in, check their payment status
-                await checkPaymentStatus();
-            }
-        });
 
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initPayment);
@@ -2249,7 +2189,6 @@ function serveLandingPage(): Response {
 						: ''
 				}
     </script>
-    ${PAY_TO_RELAY_ENABLED ? '<script src="https://unpkg.com/nostr-login@latest/dist/unpkg.js" data-perms="sign_event:1" data-methods="connect,extension,local" data-dark-mode="true"></script>' : ''}
 </body>
 </html>
   `;
@@ -2259,6 +2198,9 @@ function serveLandingPage(): Response {
 		headers: {
 			'Content-Type': 'text/html;charset=UTF-8',
 			'Cache-Control': 'public, max-age=3600',
+			'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src https://redshiftapp.com data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'`,
+			'Referrer-Policy': 'no-referrer',
+			'X-Content-Type-Options': 'nosniff',
 		},
 	});
 }
@@ -2478,9 +2420,8 @@ async function handlePaymentNotification(request: Request, env: Env): Promise<Re
 
 // Multi-region DO selection logic with location hints
 async function getOptimalDO(
-	cf: any,
+	cf: CloudflareLocation | undefined,
 	env: Env,
-	url: URL,
 ): Promise<{ stub: DurableObjectStub; doName: string }> {
 	const continent = cf?.continent || 'NA';
 	const country = cf?.country || 'US';
@@ -2903,7 +2844,7 @@ async function pruneOldEvents(
 			break;
 		}
 
-		const eventIds = oldestEvents.results.map((row: any) => row.id as string);
+		const eventIds = oldestEvents.results.map((row) => row.id as string);
 		const placeholders = eventIds.map(() => '?').join(',');
 
 		// Delete from events table (CASCADE will handle tags and content_hashes)
@@ -2992,10 +2933,10 @@ export default {
 			if (url.pathname === '/') {
 				if (request.headers.get('Upgrade') === 'websocket') {
 					// Get Cloudflare location info
-					const cf = (request as any).cf;
+					const cf = (request as Request & { cf?: CloudflareLocation }).cf;
 
 					// Get optimal DO based on user location
-					const { stub, doName } = await getOptimalDO(cf, env, url);
+					const { stub, doName } = await getOptimalDO(cf, env);
 
 					// Add location info to the request
 					const newUrl = new URL(request.url);
@@ -3029,7 +2970,7 @@ export default {
 	},
 
 	// Scheduled handler for 24hr database maintenance (runs daily at 00:00 UTC)
-	async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+	async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
 		console.log('Running scheduled 24hr database maintenance...');
 
 		try {

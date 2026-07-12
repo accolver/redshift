@@ -4,56 +4,51 @@
  * These tests communicate with actual Nostr relays.
  * They are slower and may fail due to network issues.
  *
- * To run with local relay:
- *   Terminal 1: nak serve --port 10547
- *   Terminal 2: bun test cli/tests/integration/relay-integration.test.ts
- *
- * To run with public relays (may be rate-limited):
- *   TEST_RELAYS=public bun test cli/tests/integration/relay-integration.test.ts
- *
- * SKIPPED IN CI: These tests require a local relay which isn't available in CI.
- * Set CI=true to skip these tests.
+ * The suite starts an isolated local `nak serve` process by default.
+ * Set TEST_RELAYS=public to opt into public relays for manual interoperability checks.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { createServer } from 'node:net';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { SecretManager } from '../../src/lib/secret-manager';
 
-// Skip in CI environment (no local relay available)
-const IS_CI = process.env.CI === 'true';
-
-// Use local relay by default, public relays for CI
 const USE_PUBLIC_RELAYS = process.env.TEST_RELAYS === 'public';
-const TEST_RELAYS = USE_PUBLIC_RELAYS
-	? ['wss://relay.damus.io', 'wss://nos.lol']
-	: ['ws://localhost:10547'];
+let testRelays = USE_PUBLIC_RELAYS ? ['wss://relay.damus.io', 'wss://nos.lol'] : [];
+let relayProcess: Bun.Subprocess | null = null;
 
-// Probe whether the local relay is reachable (avoids failing when relay isn't running)
-async function isRelayReachable(): Promise<boolean> {
-	if (USE_PUBLIC_RELAYS) return true;
-	try {
-		const ws = new WebSocket(TEST_RELAYS[0] as string);
-		return await new Promise<boolean>((resolve) => {
-			const timer = setTimeout(() => {
-				ws.close();
-				resolve(false);
-			}, 1000);
-			ws.onopen = () => {
-				clearTimeout(timer);
-				ws.close();
-				resolve(true);
-			};
-			ws.onerror = () => {
-				clearTimeout(timer);
-				resolve(false);
-			};
+async function getFreePort() {
+	return new Promise<number>((resolve, reject) => {
+		const server = createServer();
+		server.once('error', reject);
+		server.listen(0, '127.0.0.1', () => {
+			const address = server.address();
+			if (!address || typeof address === 'string') return reject(new Error('No TCP port'));
+			server.close(() => resolve(address.port));
 		});
-	} catch {
-		return false;
-	}
+	});
 }
 
-const RELAY_AVAILABLE = await isRelayReachable();
+async function waitForRelay(url: string) {
+	for (let attempt = 0; attempt < 50; attempt++) {
+		const connected = await new Promise<boolean>((resolve) => {
+			const socket = new WebSocket(url);
+			const timer = setTimeout(() => resolve(false), 200);
+			socket.addEventListener('open', () => {
+				clearTimeout(timer);
+				socket.close();
+				resolve(true);
+			});
+			socket.addEventListener('error', () => {
+				clearTimeout(timer);
+				resolve(false);
+			});
+		});
+		if (connected) return;
+		await Bun.sleep(100);
+	}
+	throw new Error('Local nak relay did not start');
+}
 
 // Generate ephemeral test keys
 const testPrivateKey = generateSecretKey();
@@ -62,24 +57,38 @@ const testPublicKey = getPublicKey(testPrivateKey);
 // Helper to add delays between relay operations
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Skip when CI or local relay is not available
-describe.skipIf(IS_CI || !RELAY_AVAILABLE)('Relay Integration Tests', () => {
+describe('Relay Integration Tests', () => {
 	let manager: SecretManager;
 	const testProjectId = `test-${Date.now()}`;
 	const testEnvironment = 'integration';
 
 	beforeAll(async () => {
+		if (!USE_PUBLIC_RELAYS) {
+			const port = await getFreePort();
+			const relay = `ws://127.0.0.1:${port}`;
+			relayProcess = Bun.spawn(
+				['nak', 'serve', '--hostname', '127.0.0.1', '--port', String(port)],
+				{ stdin: 'ignore', stdout: 'ignore', stderr: 'pipe' },
+			);
+			testRelays = [relay];
+			await waitForRelay(relay);
+		}
 		manager = new SecretManager(testPrivateKey);
-		manager.connect(TEST_RELAYS);
+		manager.connect(testRelays);
 		console.log(`Testing with pubkey: ${testPublicKey.substring(0, 16)}...`);
-		console.log(`Using relays: ${TEST_RELAYS.join(', ')}`);
+		console.log(`Using relays: ${testRelays.join(', ')}`);
 
 		// Give relays time to connect
 		await delay(500);
 	});
 
-	afterAll(() => {
-		manager.disconnect();
+	afterAll(async () => {
+		await manager.close();
+		if (relayProcess) {
+			relayProcess.kill();
+			await Promise.race([relayProcess.exited, Bun.sleep(1000)]);
+			relayProcess = null;
+		}
 	});
 
 	it('connects to relays', () => {
@@ -176,9 +185,9 @@ describe.skipIf(IS_CI || !RELAY_AVAILABLE)('Relay Integration Tests', () => {
 		await manager.deleteSecrets(deleteProject, 'prod');
 		await delay(USE_PUBLIC_RELAYS ? 2000 : 500);
 
-		// Fetch should return empty object
+		// Logical tombstones remove the current bundle from selection.
 		fetched = await manager.fetchSecrets(deleteProject, 'prod');
-		expect(fetched).toEqual({});
+		expect(fetched).toBeNull();
 	}, 30000);
 
 	it('handles complex nested objects as JSON strings', async () => {
@@ -239,27 +248,16 @@ describe.skipIf(IS_CI || !RELAY_AVAILABLE)('Relay Integration Tests', () => {
 		expect(environments).toContain('staging');
 		expect(environments).toContain('prod');
 	}, 30000);
-});
 
-describe('Error Handling', () => {
 	it('throws when not connected', async () => {
 		const disconnectedManager = new SecretManager(testPrivateKey);
-
 		await expect(disconnectedManager.fetchSecrets('proj', 'env')).rejects.toThrow(
 			'Not connected to relays',
 		);
 	});
 
 	it('returns null for non-existent project', async () => {
-		const manager = new SecretManager(testPrivateKey);
-		manager.connect(TEST_RELAYS);
-
-		try {
-			await delay(500);
-			const fetched = await manager.fetchSecrets(`nonexistent-${Date.now()}`, 'env');
-			expect(fetched).toBeNull();
-		} finally {
-			manager.disconnect();
-		}
+		const fetched = await manager.fetchSecrets(`nonexistent-${Date.now()}`, 'env');
+		expect(fetched).toBeNull();
 	}, 15000);
 });

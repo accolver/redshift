@@ -94,6 +94,32 @@ export class ValidationError extends RedshiftError {
 	}
 }
 
+export type BackupOperation = 'read' | 'write' | 'encrypt' | 'decrypt' | 'create' | 'restore';
+
+/** User-controlled encrypted backup and restore failures. */
+export class BackupError extends RedshiftError {
+	readonly operation: BackupOperation;
+	readonly originalError: unknown;
+
+	constructor(message: string, operation: BackupOperation, originalError?: unknown) {
+		super(message, 'BACKUP_ERROR');
+		this.name = 'BackupError';
+		this.operation = operation;
+		this.originalError = originalError;
+	}
+}
+
+/** Local exact-event publication recovery failures. */
+export class RecoveryError extends RedshiftError {
+	readonly originalError: unknown;
+
+	constructor(message: string, originalError?: unknown) {
+		super(message, 'RECOVERY_ERROR');
+		this.name = 'RecoveryError';
+		this.originalError = originalError;
+	}
+}
+
 /**
  * Connection state error (operation requires connection)
  */

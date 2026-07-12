@@ -8,6 +8,7 @@
  * L5: Journey-Validator - Secure authentication flow
  */
 
+import { ResilientSimplePool } from '@redshift/rate-limiter';
 import type { EventTemplate, VerifiedEvent } from 'nostr-tools/core';
 import {
 	type BunkerPointer,
@@ -17,6 +18,29 @@ import {
 } from 'nostr-tools/nip46';
 import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { getRelays } from './config';
+import { AuthError } from './errors';
+import type { BunkerAuth } from './types';
+
+const DEFAULT_BUNKER_CONNECT_TIMEOUT_MS = 15000;
+
+/** Run a bunker operation with a bounded wait and always clear the timeout handle. */
+export async function withBunkerTimeout<T>(
+	operation: Promise<T>,
+	timeoutMs = DEFAULT_BUNKER_CONNECT_TIMEOUT_MS,
+	message = 'Timed out connecting to bunker',
+): Promise<T> {
+	let timeout: ReturnType<typeof setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			operation,
+			new Promise<T>((_, reject) => {
+				timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+			}),
+		]);
+	} finally {
+		if (timeout) clearTimeout(timeout);
+	}
+}
 
 /**
  * Result of bunker connection
@@ -40,6 +64,31 @@ export interface BunkerConnectOptions {
 	onAuth?: (url: string) => void;
 	/** Timeout for connection in ms */
 	timeout?: number;
+	/** Use a one-shot pairing secret from env auth. Never set for persisted auth. */
+	usePairingSecret?: boolean;
+}
+
+const bunkerSignerPools = new WeakMap<BunkerSigner, ResilientSimplePool>();
+
+function createBunkerSigner(
+	clientSecretKey: Uint8Array,
+	bp: BunkerPointer,
+	params: BunkerSignerParams,
+) {
+	const pool = new ResilientSimplePool();
+	const signer = BunkerSigner.fromBunker(clientSecretKey, bp, { ...params, pool });
+	bunkerSignerPools.set(signer, pool);
+	return signer;
+}
+
+/** Close both the NIP-46 subscription and its owned relay pool. */
+export async function closeBunkerSigner(signer: BunkerSigner) {
+	try {
+		await signer.close();
+	} finally {
+		bunkerSignerPools.get(signer)?.destroy();
+		bunkerSignerPools.delete(signer);
+	}
 }
 
 /**
@@ -70,7 +119,7 @@ export async function connectToBunker(
 	// Parse bunker input
 	const bp = await parseBunkerInput(bunkerUrl);
 	if (!bp) {
-		throw new Error(`Invalid bunker URL or NIP-05: ${bunkerUrl}`);
+		throw new Error('Invalid bunker URL or NIP-05 input');
 	}
 
 	// Generate client keypair
@@ -82,15 +131,24 @@ export async function connectToBunker(
 		params.onauth = options.onAuth;
 	}
 
-	// Create signer from bunker pointer
-	const signer = BunkerSigner.fromBunker(clientSecretKey, bp, params);
+	// Create signer from bunker pointer with an explicitly owned relay pool.
+	const signer = createBunkerSigner(clientSecretKey, bp, params);
 
 	try {
 		// Connect to the bunker
-		await signer.connect();
+		await withBunkerTimeout(signer.connect(), options.timeout, 'Timed out connecting to bunker');
 
 		// Get the user's public key
-		const userPubkey = await signer.getPublicKey();
+		const userPubkey = await withBunkerTimeout(
+			signer.getPublicKey(),
+			options.timeout,
+			'Timed out fetching bunker public key',
+		);
+		await withBunkerTimeout(
+			signer.switchRelays(),
+			options.timeout,
+			'Timed out switching bunker relays',
+		);
 
 		return {
 			signer,
@@ -99,8 +157,8 @@ export async function connectToBunker(
 			clientSecretKey,
 		};
 	} catch (error) {
-		// Clean up on error
-		await signer.close();
+		// Clean up without masking the original connection failure.
+		await closeBunkerSigner(signer).catch(() => undefined);
 		throw error;
 	}
 }
@@ -123,11 +181,20 @@ export async function reconnectToBunker(
 		params.onauth = options.onAuth;
 	}
 
-	const signer = BunkerSigner.fromBunker(clientSecretKey, bp, params);
+	const signer = createBunkerSigner(clientSecretKey, bp, params);
 
 	try {
-		await signer.connect();
-		const userPubkey = await signer.getPublicKey();
+		await withBunkerTimeout(signer.connect(), options.timeout, 'Timed out connecting to bunker');
+		const userPubkey = await withBunkerTimeout(
+			signer.getPublicKey(),
+			options.timeout,
+			'Timed out fetching bunker public key',
+		);
+		await withBunkerTimeout(
+			signer.switchRelays(),
+			options.timeout,
+			'Timed out switching bunker relays',
+		);
 
 		return {
 			signer,
@@ -136,9 +203,54 @@ export async function reconnectToBunker(
 			clientSecretKey,
 		};
 	} catch (error) {
-		await signer.close();
+		await closeBunkerSigner(signer).catch(() => undefined);
 		throw error;
 	}
+}
+
+/**
+ * Convert stored bunker auth metadata into a nostr-tools BunkerPointer.
+ */
+export function bunkerAuthToPointer(auth: BunkerAuth, includeSecret = false): BunkerPointer {
+	return {
+		pubkey: auth.bunkerPubkey,
+		relays: auth.relays,
+		secret: includeSecret ? (auth.secret ?? null) : null,
+	};
+}
+
+/**
+ * Decode a hex-encoded 32-byte client secret key from config/keychain storage.
+ */
+export function decodeClientSecretKey(hexKey: string): Uint8Array {
+	if (!/^[0-9a-fA-F]{64}$/.test(hexKey)) {
+		throw new Error('Invalid bunker client secret key: expected 64 hex characters');
+	}
+	const key = new Uint8Array(32);
+	for (let i = 0; i < key.length; i++) {
+		key[i] = Number.parseInt(hexKey.slice(i * 2, i * 2 + 2), 16);
+	}
+	return key;
+}
+
+/**
+ * Reconnect from stored bunker auth metadata.
+ */
+export async function reconnectFromBunkerAuth(
+	auth: BunkerAuth,
+	options: BunkerConnectOptions = {},
+): Promise<BunkerConnection> {
+	if (!auth.clientSecretKey) {
+		throw new AuthError(
+			'Bunker client key is unavailable; re-authentication is required.',
+			'bunker',
+		);
+	}
+	return reconnectToBunker(
+		bunkerAuthToPointer(auth, options.usePairingSecret === true),
+		decodeClientSecretKey(auth.clientSecretKey),
+		options,
+	);
 }
 
 /**
@@ -176,7 +288,7 @@ export async function createNostrConnectUri(
 	}
 	params.set('secret', secret);
 	params.set('name', name);
-	params.set('perms', 'sign_event:1059,sign_event:30078,sign_event:5,nip44_encrypt,nip44_decrypt');
+	params.set('perms', 'get_public_key,switch_relays,sign_event:13,nip44_encrypt,nip44_decrypt');
 
 	const uri = `nostrconnect://${clientPubkey}?${params.toString()}`;
 
@@ -184,9 +296,22 @@ export async function createNostrConnectUri(
 		uri,
 		clientSecretKey,
 		waitForConnection: async (timeout = 120000) => {
-			const signer = await BunkerSigner.fromURI(clientSecretKey, uri, {}, timeout);
+			const pool = new ResilientSimplePool();
+			let signer: BunkerSigner;
+			try {
+				signer = await BunkerSigner.fromURI(clientSecretKey, uri, { pool }, timeout);
+			} catch (error) {
+				pool.destroy();
+				throw error;
+			}
+			bunkerSignerPools.set(signer, pool);
 
-			const userPubkey = await signer.getPublicKey();
+			const userPubkey = await withBunkerTimeout(
+				signer.getPublicKey(),
+				timeout,
+				'Timed out fetching bunker public key',
+			);
+			await withBunkerTimeout(signer.switchRelays(), timeout, 'Timed out switching bunker relays');
 
 			// Extract bunker pointer from signer
 			const bp = signer.bp;
@@ -209,11 +334,17 @@ export class BunkerSecretManager {
 	private signer: BunkerSigner;
 	private userPubkey: string;
 	private relays: string[];
+	private timeoutMs: number;
 
-	constructor(connection: BunkerConnection, relays: string[]) {
+	constructor(
+		connection: BunkerConnection,
+		relays: string[],
+		timeoutMs = DEFAULT_BUNKER_CONNECT_TIMEOUT_MS,
+	) {
 		this.signer = connection.signer;
 		this.userPubkey = connection.userPubkey;
 		this.relays = relays;
+		this.timeoutMs = timeoutMs;
 	}
 
 	/**
@@ -234,28 +365,50 @@ export class BunkerSecretManager {
 	 * Sign an event using the bunker
 	 */
 	async signEvent(event: EventTemplate): Promise<VerifiedEvent> {
-		return this.signer.signEvent(event);
+		return withBunkerTimeout(
+			this.signer.signEvent(event),
+			this.timeoutMs,
+			'Timed out waiting for bunker to sign event',
+		);
 	}
 
 	/**
-	 * Encrypt content using NIP-44 via bunker
+	 * Encrypt content using NIP-44 via bunker.
 	 */
+	async nip44Encrypt(pubkey: string, plaintext: string): Promise<string> {
+		return withBunkerTimeout(
+			this.signer.nip44Encrypt(pubkey, plaintext),
+			this.timeoutMs,
+			'Timed out waiting for bunker to encrypt',
+		);
+	}
+
+	/**
+	 * Decrypt content using NIP-44 via bunker.
+	 */
+	async nip44Decrypt(pubkey: string, ciphertext: string): Promise<string> {
+		return withBunkerTimeout(
+			this.signer.nip44Decrypt(pubkey, ciphertext),
+			this.timeoutMs,
+			'Timed out waiting for bunker to decrypt',
+		);
+	}
+
+	/** Backwards-compatible alias for older callers. */
 	async encrypt(pubkey: string, plaintext: string): Promise<string> {
-		return this.signer.nip44Encrypt(pubkey, plaintext);
+		return this.nip44Encrypt(pubkey, plaintext);
 	}
 
-	/**
-	 * Decrypt content using NIP-44 via bunker
-	 */
+	/** Backwards-compatible alias for older callers. */
 	async decrypt(pubkey: string, ciphertext: string): Promise<string> {
-		return this.signer.nip44Decrypt(pubkey, ciphertext);
+		return this.nip44Decrypt(pubkey, ciphertext);
 	}
 
 	/**
 	 * Close the bunker connection
 	 */
 	async close(): Promise<void> {
-		await this.signer.close();
+		await closeBunkerSigner(this.signer);
 	}
 }
 

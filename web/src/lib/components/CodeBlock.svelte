@@ -1,6 +1,5 @@
 <script lang="ts">
 import Prism from 'prismjs';
-import { onMount } from 'svelte';
 import { Check, Copy } from '@lucide/svelte';
 // Import additional languages
 import 'prismjs/components/prism-bash';
@@ -19,23 +18,19 @@ interface Props {
 const { code, language = 'bash', copyable = true, filename }: Props = $props();
 
 let copied = $state(false);
-let highlightedCode = $state('');
 
 // Map shell to bash for Prism
-const prismLanguage = language === 'shell' ? 'bash' : language === 'text' ? 'plaintext' : language;
+const prismLanguage = $derived(
+	language === 'shell' ? 'bash' : language === 'text' ? 'plaintext' : language,
+);
 
-onMount(() => {
-	// Highlight the code
+const highlightedCode = $derived.by(() => {
 	if (prismLanguage === 'plaintext') {
-		highlightedCode = escapeHtml(code);
-	} else {
-		const grammar = Prism.languages[prismLanguage];
-		if (grammar) {
-			highlightedCode = Prism.highlight(code, grammar, prismLanguage);
-		} else {
-			highlightedCode = escapeHtml(code);
-		}
+		return escapeHtml(code);
 	}
+
+	const grammar = Prism.languages[prismLanguage];
+	return grammar ? Prism.highlight(code, grammar, prismLanguage) : escapeHtml(code);
 });
 
 function escapeHtml(text: string): string {

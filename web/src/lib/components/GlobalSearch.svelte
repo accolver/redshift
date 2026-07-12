@@ -67,8 +67,8 @@ async function loadAllSecrets() {
 	let decryptor: Decryptor | null = null;
 	if (privateKey) {
 		decryptor = { type: 'privateKey', key: privateKey };
-	} else if (decryptFn) {
-		decryptor = { type: 'decryptFn', fn: decryptFn };
+	} else if (decryptFn && auth.pubkey) {
+		decryptor = { type: 'decryptFn', expectedAuthor: auth.pubkey, fn: decryptFn };
 	}
 
 	if (!decryptor) {

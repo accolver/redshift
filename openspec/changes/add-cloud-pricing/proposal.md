@@ -1,5 +1,9 @@
 # Change: Add Cloud Tier Pricing ($5/month)
 
+## Status
+
+**Proposed and deferred.** The canonical planning hypothesis is a $5 USD monthly invoice, with BTCPay converting the invoice amount to BTC/sats at creation. No paid Cloud offer, SLA, backup guarantee, audit-log retention, or launch date is approved or currently available. Implementation requires separate operational evidence and acceptance.
+
 ## Why
 
 Redshift currently has no monetization path. The Cloud tier provides sustainable
@@ -12,7 +16,7 @@ their own secrets.
 - Target: Individual developers who want reliability without self-hosting
 - Price: $5/month (covers infrastructure costs)
 - Value: 99.5% SLA, automatic backups, 7-day audit logs
-- Launch: Q2 2025
+- Launch: deferred until deployment, recovery, and SLA evidence exists
 
 ## What Changes
 

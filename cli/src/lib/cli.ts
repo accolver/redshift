@@ -79,7 +79,7 @@ export interface SubcommandDef {
  */
 export interface ParsedArgs {
 	command: string;
-	subcommand?: string;
+	subcommand?: string | undefined;
 	positionals: string[];
 	flags: Record<string, string | boolean | undefined>;
 	globalFlags: GlobalFlags;
@@ -96,7 +96,7 @@ export interface GlobalFlags {
 	json: boolean;
 	silent: boolean;
 	debug: boolean;
-	configDir?: string;
+	configDir?: string | undefined;
 }
 
 /**
@@ -117,18 +117,6 @@ export const GLOBAL_FLAGS: Record<string, FlagDef> = {
 		type: 'boolean',
 		short: 'v',
 		description: 'Get the version of the Redshift CLI',
-	},
-	json: {
-		type: 'boolean',
-		description: 'output json',
-	},
-	silent: {
-		type: 'boolean',
-		description: 'disable output of info messages',
-	},
-	debug: {
-		type: 'boolean',
-		description: 'output additional information',
 	},
 	'config-dir': {
 		type: 'string',
@@ -179,6 +167,16 @@ export class CLI {
 	 * Parse command line arguments
 	 */
 	parse(argv: string[]): ParsedArgs {
+		if (argv[0] === '--config-dir') {
+			const configDir = argv[1];
+			if (!configDir || configDir.startsWith('-')) {
+				throw new Error('Option --config-dir requires a value');
+			}
+			const parsed = this.parse(argv.slice(2));
+			parsed.globalFlags.configDir = configDir;
+			return parsed;
+		}
+
 		// Handle empty args or global help/version
 		if (argv.length === 0) {
 			return {
@@ -194,9 +192,18 @@ export class CLI {
 		if (argv[0] === '-h' || argv[0] === '--help' || argv[0] === 'help') {
 			// Check if this is `help <command>`
 			if (argv[0] === 'help' && argv[1]) {
+				const helpTarget = argv[1];
+				const helpCommand = this.getCommand(helpTarget);
+				if (!helpCommand) {
+					throw new Error(`Unknown command: ${helpTarget}`);
+				}
+				const helpSubcommand = argv[2];
+				if (helpSubcommand && !helpCommand.subcommands?.[helpSubcommand]) {
+					throw new Error(`Unknown subcommand "${helpSubcommand}" for ${helpCommand.name}`);
+				}
 				return {
-					command: argv[1],
-					subcommand: argv[2],
+					command: helpCommand.name,
+					subcommand: helpSubcommand,
 					positionals: [],
 					flags: {},
 					globalFlags: { help: true, version: false, json: false, silent: false, debug: false },
@@ -223,7 +230,7 @@ export class CLI {
 		}
 
 		// Get command name (resolve aliases)
-		const inputCommand = argv[0];
+		const inputCommand = argv[0]!;
 		const resolvedName = this.aliases.get(inputCommand) || inputCommand;
 		const cmd = this.commands.get(resolvedName);
 
@@ -247,14 +254,17 @@ export class CLI {
 
 		if (cmd.subcommands && restArgs[0] && !restArgs[0].startsWith('-')) {
 			const subCmd = cmd.subcommands[restArgs[0]];
-			if (subCmd) {
-				subcommand = subCmd;
-				argsToProcess = restArgs.slice(1);
+			if (!subCmd) {
+				throw new Error(`Unknown subcommand "${restArgs[0]}" for ${commandName}`);
 			}
+			subcommand = subCmd;
+			argsToProcess = restArgs.slice(1);
 		}
 
-		// Check for help flag in args
-		if (argsToProcess.includes('-h') || argsToProcess.includes('--help')) {
+		// A child --help after `run --` belongs to the child, not Redshift.
+		const childBoundary = commandName === 'run' ? argsToProcess.indexOf('--') : -1;
+		const helpArgs = childBoundary >= 0 ? argsToProcess.slice(0, childBoundary) : argsToProcess;
+		if (helpArgs.includes('-h') || helpArgs.includes('--help')) {
 			return {
 				command: commandName,
 				subcommand: subcommand?.name,
@@ -310,7 +320,7 @@ export class CLI {
 					args: flagArgs,
 					options,
 					allowPositionals: true,
-					strict: false,
+					strict: true,
 				});
 
 				const globalFlags = extractGlobalFlags(values);
@@ -327,38 +337,26 @@ export class CLI {
 			}
 		}
 
-		// Parse args
-		try {
-			const { values, positionals } = parseArgs({
-				args: argsToProcess,
-				options,
-				allowPositionals: true,
-				strict: false,
-			});
+		const { values, positionals } = parseArgs({
+			args: argsToProcess,
+			options,
+			allowPositionals: true,
+			strict: true,
+		});
+		validatePositionals(commandName, subcommand?.positionals ?? cmd.positionals, positionals);
 
-			const globalFlags = extractGlobalFlags(values);
-			const rawFlags = extractCommandFlags(values, GLOBAL_FLAGS);
-			const flags = resolveFlagAliases(rawFlags, allFlagDefs);
+		const globalFlags = extractGlobalFlags(values);
+		const rawFlags = extractCommandFlags(values, GLOBAL_FLAGS);
+		const flags = resolveFlagAliases(rawFlags, allFlagDefs);
 
-			return {
-				command: commandName,
-				subcommand: subcommand?.name,
-				positionals,
-				flags,
-				globalFlags,
-				helpRequested: globalFlags.help,
-			};
-		} catch {
-			// On parse error, just return what we can
-			return {
-				command: commandName,
-				subcommand: subcommand?.name,
-				positionals: argsToProcess.filter((a) => !a.startsWith('-')),
-				flags: {},
-				globalFlags: { help: false, version: false, json: false, silent: false, debug: false },
-				helpRequested: false,
-			};
-		}
+		return {
+			command: commandName,
+			subcommand: subcommand?.name,
+			positionals,
+			flags,
+			globalFlags,
+			helpRequested: globalFlags.help,
+		};
 	}
 
 	/**
@@ -524,6 +522,30 @@ export class CLI {
 /**
  * Extract global flags from parsed values
  */
+function validatePositionals(
+	commandName: string,
+	definitions: CommandDef['positionals'],
+	positionals: string[],
+): void {
+	if (!definitions || definitions.length === 0) {
+		if (positionals.length > 0) {
+			throw new Error(`Unexpected positional argument "${positionals[0]}" for ${commandName}`);
+		}
+		return;
+	}
+
+	const required = definitions.filter((definition) => definition.required).length;
+	if (positionals.length < required) {
+		throw new Error(`Missing required positional argument for ${commandName}`);
+	}
+	if (
+		!definitions.some((definition) => definition.variadic) &&
+		positionals.length > definitions.length
+	) {
+		throw new Error(`Too many positional arguments for ${commandName}`);
+	}
+}
+
 function extractGlobalFlags(values: Record<string, string | boolean | undefined>): GlobalFlags {
 	return {
 		help: values.help === true,
@@ -632,7 +654,11 @@ export function createCLI(version: string): CLI {
 	cli.registerCommand(createSetupCommand());
 	cli.registerCommand(createRunCommand());
 	cli.registerCommand(createSecretsCommand());
+	cli.registerCommand(createBackupCommand());
+	cli.registerCommand(createHistoryCommand());
+	cli.registerCommand(createRecoveryCommand());
 	cli.registerCommand(createServeCommand());
+	cli.registerCommand(createBunkerCommand());
 	cli.registerCommand(createConfigureCommand());
 	cli.registerCommand(createMeCommand());
 	cli.registerCommand(createUpgradeCommand());
@@ -663,8 +689,12 @@ function createLoginCommand(): CommandDef {
 			bunker: {
 				type: 'string',
 				short: 'b',
-				description: 'NIP-46 bunker URL',
+				description: 'secret-free NIP-46 bunker pointer (pairing secrets are rejected)',
 				placeholder: 'url',
+			},
+			'bunker-stdin': {
+				type: 'boolean',
+				description: 'read a NIP-46 bunker URL from hidden stdin',
 			},
 			connect: {
 				type: 'boolean',
@@ -675,16 +705,65 @@ function createLoginCommand(): CommandDef {
 				type: 'boolean',
 				description: 'overwrite existing token if one exists',
 			},
+			force: {
+				type: 'boolean',
+				description: 'alias for --overwrite',
+				aliasOf: 'overwrite',
+			},
 		},
 		subcommands: {
 			revoke: {
 				name: 'revoke',
-				description: 'Revoke your auth token',
+				description: 'Revoke stored authentication immediately',
+			},
+		},
+	};
+}
+
+function createBunkerCommand(): CommandDef {
+	return {
+		name: 'bunker',
+		description: 'Run a local NIP-46 bunker prototype',
+		examples: [
+			'redshift bunker start --insecure-plaintext-keys',
+			'redshift bunker start --insecure-plaintext-keys --relay wss://relay.damus.io,wss://nos.lol',
+			'redshift bunker status',
+		],
+		flags: {
+			relay: {
+				type: 'string',
+				description: 'Comma-separated relay URLs for NIP-46 communication',
+				placeholder: 'urls',
+			},
+			'insecure-plaintext-keys': {
+				type: 'boolean',
+				description: 'Acknowledge prototype local keys will be stored in a 0600 plaintext file',
+			},
+		},
+		subcommands: {
+			start: {
+				name: 'start',
+				description: 'Start the local bunker prototype',
 				flags: {
-					yes: {
+					relay: {
+						type: 'string',
+						description: 'Comma-separated relay URLs for NIP-46 communication',
+						placeholder: 'urls',
+					},
+					'insecure-plaintext-keys': {
 						type: 'boolean',
-						short: 'y',
-						description: 'proceed without confirmation',
+						description: 'Acknowledge prototype local keys will be stored in a 0600 plaintext file',
+					},
+				},
+			},
+			status: {
+				name: 'status',
+				description: 'Show local bunker prototype status and connection URI',
+				flags: {
+					relay: {
+						type: 'string',
+						description: 'Override comma-separated relay URLs in displayed connection URI',
+						placeholder: 'urls',
 					},
 				},
 			},
@@ -695,15 +774,8 @@ function createLoginCommand(): CommandDef {
 function createLogoutCommand(): CommandDef {
 	return {
 		name: 'logout',
-		description: 'Log out of the CLI',
+		description: 'Remove stored authentication immediately',
 		examples: ['redshift logout'],
-		flags: {
-			yes: {
-				type: 'boolean',
-				short: 'y',
-				description: 'proceed without confirmation',
-			},
-		},
 	};
 }
 
@@ -733,10 +805,14 @@ function createSetupCommand(): CommandDef {
 				aliasOf: 'config',
 				hidden: true,
 			},
+			force: {
+				type: 'boolean',
+				short: 'f',
+				description: 'overwrite an existing redshift.yaml',
+			},
 			'no-interactive': {
 				type: 'boolean',
-				description:
-					'do not prompt for information. if the project or config is not specified, an error will be thrown.',
+				description: 'do not prompt; fail if project or environment cannot be resolved',
 			},
 		},
 	};
@@ -749,7 +825,7 @@ function createRunCommand(): CommandDef {
 		examples: [
 			'redshift run -- YOUR_COMMAND --YOUR-FLAG',
 			'redshift run --command "YOUR_COMMAND && YOUR_OTHER_COMMAND"',
-			'redshift run --mount secrets.json -- cat secrets.json',
+			'redshift run --preserve-env PATH,HOME -- npm start',
 		],
 		flags: {
 			command: {
@@ -777,50 +853,11 @@ function createRunCommand(): CommandDef {
 				aliasOf: 'config',
 				hidden: true,
 			},
-			mount: {
-				type: 'string',
-				description: 'write secrets to an ephemeral file, accessible at REDSHIFT_CLI_SECRETS_PATH',
-				placeholder: 'path',
-			},
-			'mount-format': {
-				type: 'string',
-				description: 'file format to use. one of [env json]',
-				default: 'json',
-				placeholder: 'format',
-			},
-			fallback: {
-				type: 'string',
-				description: 'path to the fallback file for offline mode',
-				placeholder: 'path',
-			},
-			'fallback-only': {
-				type: 'boolean',
-				description: 'read all secrets directly from the fallback file',
-			},
-			'fallback-readonly': {
-				type: 'boolean',
-				description: 'disable modifying the fallback file',
-			},
-			'no-fallback': {
-				type: 'boolean',
-				description: 'disable reading and writing the fallback file',
-			},
-			'forward-signals': {
-				type: 'boolean',
-				description: 'forward signals to the child process',
-				default: true,
-			},
 			'preserve-env': {
 				type: 'string',
 				description:
 					'comma separated list of secrets for which the existing env value takes precedence',
 				placeholder: 'list',
-			},
-		},
-		subcommands: {
-			clean: {
-				name: 'clean',
-				description: 'Delete old fallback files',
 			},
 		},
 		positionals: [
@@ -833,6 +870,186 @@ function createRunCommand(): CommandDef {
 	};
 }
 
+function createBackupCommand(): CommandDef {
+	const filePosition = [
+		{
+			name: 'file',
+			description: 'encrypted Redshift backup archive path',
+			required: true,
+		},
+	];
+	const passphraseStdin = {
+		type: 'boolean' as const,
+		description: 'read exact passphrase line(s) from stdin instead of prompting',
+	};
+	return {
+		name: 'backup',
+		description: 'Create or restore a passphrase-encrypted local snapshot',
+		examples: [
+			'redshift backup create secrets.redshift',
+			'redshift backup restore secrets.redshift',
+			'redshift backup restore secrets.redshift --allow-identity-change',
+		],
+		subcommands: {
+			create: {
+				name: 'create',
+				description: 'Create an encrypted snapshot of current observed secret state',
+				positionals: filePosition,
+				flags: {
+					force: {
+						type: 'boolean',
+						description: 'atomically replace an existing regular archive',
+					},
+					'passphrase-stdin': passphraseStdin,
+				},
+			},
+			restore: {
+				name: 'restore',
+				description: 'Restore encrypted state under the authenticated signer',
+				positionals: filePosition,
+				flags: {
+					overwrite: {
+						type: 'boolean',
+						description: 'replace conflicting destination bundles without merging',
+					},
+					'allow-identity-change': {
+						type: 'boolean',
+						description: 'authorize migration to a different authenticated signer',
+					},
+					'passphrase-stdin': passphraseStdin,
+				},
+			},
+		},
+	};
+}
+
+function createHistoryCommand(): CommandDef {
+	const commonFlags: Record<string, FlagDef> = {
+		project: {
+			type: 'string',
+			short: 'p',
+			description: 'project (e.g. backend)',
+			placeholder: 'name',
+		},
+		config: {
+			type: 'string',
+			short: 'c',
+			description: 'config/environment (e.g. dev)',
+			placeholder: 'name',
+		},
+		environment: {
+			type: 'string',
+			short: 'e',
+			description: 'alias for --config',
+			placeholder: 'name',
+			aliasOf: 'config',
+			hidden: true,
+		},
+		json: {
+			type: 'boolean',
+			description: 'output machine-readable metadata without secret values',
+		},
+	};
+	const eventIdPosition = {
+		name: 'event-id',
+		description: '64-character authenticated outer event ID',
+		required: true,
+	};
+	return {
+		name: 'history',
+		description: 'Inspect, compare, and restore bounded authenticated secret history',
+		examples: [
+			'redshift history list --project backend --config prod',
+			'redshift history compare <from-event-id> <to-event-id>',
+			'redshift history restore <event-id> --yes',
+		],
+		flags: commonFlags,
+		subcommands: {
+			list: {
+				name: 'list',
+				description: 'List metadata for bounded owner-authenticated observed versions',
+				flags: {
+					limit: {
+						type: 'string',
+						description: 'versions per page (1-100)',
+						placeholder: 'count',
+					},
+					cursor: {
+						type: 'string',
+						description: 'exact opaque cursor from a previous page',
+						placeholder: 'cursor',
+					},
+				},
+				positionals: [],
+			},
+			compare: {
+				name: 'compare',
+				description: 'Compare key metadata for two authenticated versions',
+				positionals: [
+					{ ...eventIdPosition, name: 'from-event-id' },
+					{ ...eventIdPosition, name: 'to-event-id' },
+				],
+			},
+			restore: {
+				name: 'restore',
+				description: 'Publish a selected historical bundle as a new authorized version',
+				positionals: [eventIdPosition],
+				flags: {
+					yes: {
+						type: 'boolean',
+						description: 'confirm complete-bundle replacement or logical deletion',
+					},
+					'overwrite-current': {
+						type: 'boolean',
+						description: 'proceed if current changed during immediate restore preflight',
+					},
+				},
+			},
+		},
+	};
+}
+
+function createRecoveryCommand(): CommandDef {
+	const eventIdPosition = [
+		{
+			name: 'event-id',
+			description: '64-character pending publication event ID',
+			required: true,
+		},
+	];
+	return {
+		name: 'recovery',
+		description: 'Inspect and retry incomplete relay publications',
+		examples: [
+			'redshift recovery list',
+			'redshift recovery show <event-id>',
+			'redshift recovery retry <event-id>',
+			'redshift recovery remove <event-id>',
+		],
+		subcommands: {
+			list: {
+				name: 'list',
+				description: 'List incomplete relay publications',
+			},
+			show: {
+				name: 'show',
+				description: 'Show classified per-relay publication outcomes',
+				positionals: eventIdPosition,
+			},
+			retry: {
+				name: 'retry',
+				description: 'Retry the exact signed event only to unavailable relays',
+				positionals: eventIdPosition,
+			},
+			remove: {
+				name: 'remove',
+				description: 'Remove only the local recovery record',
+				positionals: eventIdPosition,
+			},
+		},
+	};
+}
+
 function createSecretsCommand(): CommandDef {
 	return {
 		name: 'secrets',
@@ -840,10 +1057,14 @@ function createSecretsCommand(): CommandDef {
 		examples: [
 			'redshift secrets',
 			'redshift secrets --raw',
-			'redshift secrets get API_KEY',
+			'redshift secrets get API_KEY --raw',
 			'redshift secrets set API_KEY sk_live_xxx',
 		],
 		flags: {
+			json: {
+				type: 'boolean',
+				description: 'output machine-readable JSON',
+			},
 			project: {
 				type: 'string',
 				short: 'p',
@@ -864,89 +1085,56 @@ function createSecretsCommand(): CommandDef {
 				aliasOf: 'config',
 				hidden: true,
 			},
-			'only-names': {
-				type: 'boolean',
-				description: 'only print the secret names; omit all values',
-			},
 			raw: {
 				type: 'boolean',
-				description: 'print the raw secret value without processing variables',
+				description: 'reveal exact plaintext values (unsafe for logs)',
 			},
 		},
 		subcommands: {
 			get: {
 				name: 'get',
-				description: 'Get the value of one or more secrets',
-				examples: ['redshift secrets get API_KEY', 'redshift secrets get API_KEY CRYPTO_KEY'],
+				description: 'Get the value of one secret',
+				examples: ['redshift secrets get API_KEY', 'redshift secrets get API_KEY --raw'],
 				positionals: [
 					{
-						name: 'secrets',
-						description: 'Secret names to retrieve',
-						variadic: true,
+						name: 'secret',
+						description: 'Secret name to retrieve',
 					},
 				],
-				flags: {
-					plain: {
-						type: 'boolean',
-						description: 'print values without formatting',
-					},
-					copy: {
-						type: 'boolean',
-						description: 'copy the value(s) to your clipboard',
-					},
-					'no-exit-on-missing-secret': {
-						type: 'boolean',
-						description: 'do not exit if unable to find a requested secret',
-					},
-				},
 			},
 			set: {
 				name: 'set',
-				description: 'Set the value of one or more secrets',
-				examples: [
-					"redshift secrets set API_KEY '123'",
-					"redshift secrets set API_KEY='123' DATABASE_URL='postgres://...'",
-				],
+				description: 'Set the value of one secret',
+				examples: ["redshift secrets set API_KEY '123'", "redshift secrets set API_KEY='123'"],
 				positionals: [
 					{
-						name: 'secrets',
-						description: 'Secrets to set (KEY=value or KEY value)',
-						variadic: true,
+						name: 'secret',
+						description: 'Secret name or KEY=value assignment',
+					},
+					{
+						name: 'value',
+						description: 'Secret value when the first argument is a key',
+						required: false,
 					},
 				],
-				flags: {
-					'no-interactive': {
-						type: 'boolean',
-						description: 'do not allow entering secret value via interactive mode',
-					},
-				},
 			},
 			delete: {
 				name: 'delete',
-				description: 'Delete the value of one or more secrets',
-				examples: ['redshift secrets delete API_KEY', 'redshift secrets delete API_KEY CRYPTO_KEY'],
+				description: 'Delete one secret immediately',
+				examples: ['redshift secrets delete API_KEY'],
 				positionals: [
 					{
-						name: 'secrets',
-						description: 'Secret names to delete',
-						variadic: true,
+						name: 'secret',
+						description: 'Secret name to delete',
 					},
 				],
-				flags: {
-					yes: {
-						type: 'boolean',
-						short: 'y',
-						description: 'proceed without confirmation',
-					},
-				},
 			},
 			download: {
 				name: 'download',
 				description: "Download a config's secrets for later use",
 				examples: [
-					'redshift secrets download /root/secrets.json',
-					'redshift secrets download --format=env /root/secrets.env',
-					'redshift secrets download --format=env --no-file',
+					'redshift secrets download --raw /root/secrets.env',
+					'redshift secrets download --raw',
 				],
 				positionals: [
 					{
@@ -955,23 +1143,6 @@ function createSecretsCommand(): CommandDef {
 						required: false,
 					},
 				],
-				flags: {
-					format: {
-						type: 'string',
-						description: 'output format. one of json, env, yaml, docker, env-no-quotes',
-						default: 'json',
-						placeholder: 'format',
-					},
-					'no-file': {
-						type: 'boolean',
-						description: 'print the response to stdout',
-					},
-					passphrase: {
-						type: 'string',
-						description: 'passphrase to use for encrypting the secrets file',
-						placeholder: 'pass',
-					},
-				},
 			},
 			upload: {
 				name: 'upload',
@@ -1025,7 +1196,12 @@ function createConfigureCommand(): CommandDef {
 	return {
 		name: 'configure',
 		description: 'View the config file',
-		examples: ['redshift configure', 'redshift configure --all'],
+		examples: [
+			'redshift configure',
+			'redshift configure --all',
+			'redshift configure relays',
+			'redshift configure set relays=\'["wss://relay.example"]\'',
+		],
 		flags: {
 			all: {
 				type: 'boolean',
@@ -1033,6 +1209,10 @@ function createConfigureCommand(): CommandDef {
 			},
 		},
 		subcommands: {
+			relays: {
+				name: 'relays',
+				description: 'Show active relay URLs and how to modify them',
+			},
 			get: {
 				name: 'get',
 				description: 'Get the value of one or more options in the config file',
@@ -1086,7 +1266,13 @@ function createMeCommand(): CommandDef {
 		name: 'me',
 		description: 'Get info about the currently authenticated entity',
 		aliases: ['whoami'],
-		examples: ['redshift me', 'redshift whoami'],
+		examples: ['redshift me', 'redshift me --json', 'redshift whoami'],
+		flags: {
+			json: {
+				type: 'boolean',
+				description: 'output machine-readable JSON',
+			},
+		},
 	};
 }
 

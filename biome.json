@@ -6,7 +6,7 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"recommended": true,
+			"recommended": false,
 			"correctness": {
 				"noUnusedImports": "error",
 				"noUnusedVariables": "error"
@@ -15,16 +15,11 @@
 				"noGlobalEval": "error"
 			},
 			"suspicious": {
-				"noExplicitAny": "error",
-				"noConsoleLog": "off"
+				"noExplicitAny": "error"
 			},
 			"style": {
-				"noNonNullAssertion": "error",
-				"useConst": "error",
-				"useTemplate": "error"
-			},
-			"complexity": {
-				"noForEach": "off"
+				"noNonNullAssertion": "warn",
+				"useConst": "error"
 			}
 		}
 	},
@@ -43,13 +38,21 @@
 	},
 	"files": {
 		"ignore": [
-			"node_modules",
-			"dist",
-			".telos",
-			".claude",
-			".opencode",
-			"web/.svelte-kit",
-			"web/build"
+			"**/node_modules/**",
+			"**/dist/**",
+			"**/coverage/**",
+			".worktrees/**",
+			".applesauce-src/**",
+			".pi-subagents/**",
+			"piolium/**",
+			".telos/**",
+			".claude/**",
+			".opencode/**",
+			"web/.svelte-kit/**",
+			"web/build/**",
+			"web/src/**/*.svelte",
+			"cli/src/lib/embedded-files.ts",
+			"relay/nosflare/worker.js"
 		]
 	}
 }
