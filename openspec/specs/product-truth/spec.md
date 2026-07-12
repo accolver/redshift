@@ -36,7 +36,7 @@ Cloud pricing and Teams custody statements SHALL not conflict across roadmap/spe
 - **THEN** the documentation gate fails until one canonical deferred baseline is recorded
 
 ### Requirement: Prioritized Resilience Follow-up
-The roadmap SHALL identify classified per-relay recovery and user-initiated encrypted local backup/restore as shipped only after their named release evidence passes, while history/restore semantics, production monitoring, incident response, managed backup/retention, and recovery drills remain the next resilience tranche without shipped guarantees.
+The roadmap SHALL identify classified per-relay recovery, user-initiated encrypted local backup/restore, and authenticated bounded history/compare/restore as shipped only after each capability's named release evidence passes. Production monitoring, incident response, managed backup/retention, sustained release canaries, and recovery drills SHALL remain future work without shipped guarantees.
 
 #### Scenario: Future resilience documentation
 - **WHEN** a user reviews the next roadmap phase
@@ -45,6 +45,10 @@ The roadmap SHALL identify classified per-relay recovery and user-initiated encr
 #### Scenario: Resilience capability documentation
 - **WHEN** a user reviews the resilience roadmap
 - **THEN** released local capabilities link to named evidence and remaining improvements state their current absence, intended guarantee, and required evidence
+
+#### Scenario: History claim boundary
+- **WHEN** authenticated history is documented or released
+- **THEN** it is described as bounded owner-authenticated state observed from responding relays, not complete retention, an audit log, offline recovery, cryptographic erasure, compare-and-swap, RPO/RTO, or an SLA
 
 ### Requirement: Publication Redundancy Truth
 Product surfaces SHALL distinguish logical quorum success from full configured-relay redundancy and SHALL describe recovery as republishing existing encrypted ciphertext, not backup, history, cryptographic erasure, or an availability guarantee.
