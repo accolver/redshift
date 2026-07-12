@@ -133,6 +133,11 @@ for authorization, deletion, privacy, quorum, and availability tradeoffs.
 Visit [redshiftapp.com/admin](https://redshiftapp.com/admin) to manage secrets
 visually.
 
+## Architecture and demo
+
+- [Architecture overview](docs/architecture.md)
+- [Disposable end-to-end demo walkthrough](docs/demo-walkthrough.md)
+
 ## Security
 
 Read Redshift's [security and threat model](SECURITY.md) for details on what
