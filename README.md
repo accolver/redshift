@@ -198,6 +198,13 @@ redshift/
 └── .github/          # CI/CD workflows
 ```
 
+## Funding Showcase
+
+Review the draft funding package in
+[docs/funding-showcase.md](docs/funding-showcase.md), including release
+checklist, demo outline, architecture summary, threat model, install links,
+roadmap, and funding ask.
+
 ## Release
 
 Releases are automated using
