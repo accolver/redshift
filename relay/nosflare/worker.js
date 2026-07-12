@@ -5,33 +5,6 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// src/types.ts
-var _RateLimiter = class _RateLimiter {
-  constructor(rate, capacity) {
-    this.tokens = capacity;
-    this.lastRefillTime = Date.now();
-    this.capacity = capacity;
-    this.fillRate = rate;
-  }
-  removeToken() {
-    this.refill();
-    if (this.tokens < 1) {
-      return false;
-    }
-    this.tokens -= 1;
-    return true;
-  }
-  refill() {
-    const now = Date.now();
-    const elapsedTime = now - this.lastRefillTime;
-    const tokensToAdd = Math.floor(elapsedTime * this.fillRate);
-    this.tokens = Math.min(this.capacity, this.tokens + tokensToAdd);
-    this.lastRefillTime = now;
-  }
-};
-__name(_RateLimiter, "RateLimiter");
-var RateLimiter = _RateLimiter;
-
 // src/config.ts
 var config_exports = {};
 __export(config_exports, {
@@ -41,6 +14,7 @@ __export(config_exports, {
   DB_PRUNE_TARGET_GB: () => DB_PRUNE_TARGET_GB,
   DB_PRUNING_ENABLED: () => DB_PRUNING_ENABLED,
   DB_SIZE_THRESHOLD_GB: () => DB_SIZE_THRESHOLD_GB,
+  MAX_PRINCIPAL_SUBSCRIPTIONS: () => MAX_PRINCIPAL_SUBSCRIPTIONS,
   PAY_TO_RELAY_ENABLED: () => PAY_TO_RELAY_ENABLED,
   PUBKEY_RATE_LIMIT: () => PUBKEY_RATE_LIMIT,
   RELAY_ACCESS_PRICE_SATS: () => RELAY_ACCESS_PRICE_SATS,
@@ -75,12 +49,13 @@ var PAY_TO_RELAY_ENABLED = true;
 var RELAY_ACCESS_PRICE_SATS = 12121;
 var AUTH_REQUIRED = true;
 var AUTH_TIMEOUT_MS = 6e5;
+var MAX_PRINCIPAL_SUBSCRIPTIONS = 100;
 var relayInfo = {
-  name: "Redshift Cloud Relay",
+  name: "Redshift Managed Relay",
   description: "Managed relay for Redshift Cloud subscribers. Encrypted secrets storage only.",
   pubkey: "aff03d8890c3d3031135d634fdeddeec652d76d828b2efbd3c5de430fc17e6b9",
   contact: "support@redshiftapp.com",
-  supported_nips: [1, 9, 11, 33, 40, 42, 59, 78],
+  supported_nips: [1, 11, 40, 42, 59],
   software: "https://github.com/Spl0itable/nosflare",
   version: "8.0.0",
   icon: "https://redshiftapp.com/logo-dark.png",
@@ -88,27 +63,25 @@ var relayInfo = {
   terms_of_service: "https://redshiftapp.com/relay/terms-of-service",
   limitation: {
     max_message_length: 524288,
-    max_subscriptions: 100,
+    max_subscriptions: MAX_PRINCIPAL_SUBSCRIPTIONS,
     max_limit: 1e3,
     max_event_tags: 100,
     max_content_length: 7e4,
     auth_required: AUTH_REQUIRED,
-    payment_required: false,
+    payment_required: PAY_TO_RELAY_ENABLED,
     restricted_writes: true
   }
 };
 var nip05Users = {};
 var enableAntiSpam = true;
 var enableGlobalDuplicateCheck = false;
-var antiSpamKinds = /* @__PURE__ */ new Set([1059, 30078]);
+var antiSpamKinds = /* @__PURE__ */ new Set([1059]);
 var blockedPubkeys = /* @__PURE__ */ new Set([]);
 var allowedPubkeys = /* @__PURE__ */ new Set([]);
 var blockedEventKinds = /* @__PURE__ */ new Set([]);
 var allowedEventKinds = /* @__PURE__ */ new Set([
-  1059,
+  1059
   // NIP-59 Gift Wrap
-  30078
-  // NIP-78 App Data
 ]);
 var blockedContent = /* @__PURE__ */ new Set([]);
 var checkValidNip05 = false;
@@ -123,16 +96,14 @@ var DB_PRUNING_ENABLED = true;
 var DB_SIZE_THRESHOLD_GB = 9;
 var DB_PRUNE_BATCH_SIZE = 1e3;
 var DB_PRUNE_TARGET_GB = 8;
-var pruneProtectedKinds = /* @__PURE__ */ new Set([0, 3, 10002, 30078]);
+var pruneProtectedKinds = /* @__PURE__ */ new Set([1059]);
 function isPubkeyAllowed(pubkey) {
-  if (allowedPubkeys.size > 0 && !allowedPubkeys.has(pubkey))
-    return false;
+  if (allowedPubkeys.size > 0 && !allowedPubkeys.has(pubkey)) return false;
   return !blockedPubkeys.has(pubkey);
 }
 __name(isPubkeyAllowed, "isPubkeyAllowed");
 function isEventKindAllowed(kind) {
-  if (allowedEventKinds.size > 0 && !allowedEventKinds.has(kind))
-    return false;
+  if (allowedEventKinds.size > 0 && !allowedEventKinds.has(kind)) return false;
   return !blockedEventKinds.has(kind);
 }
 __name(isEventKindAllowed, "isEventKindAllowed");
@@ -149,8 +120,7 @@ function containsBlockedContent(event) {
 }
 __name(containsBlockedContent, "containsBlockedContent");
 function isTagAllowed(tag) {
-  if (allowedTags.size > 0 && !allowedTags.has(tag))
-    return false;
+  if (allowedTags.size > 0 && !allowedTags.has(tag)) return false;
   return !blockedTags.has(tag);
 }
 __name(isTagAllowed, "isTagAllowed");
@@ -1099,37 +1069,37 @@ function Field(ORDER, bitLenOrOpts, isLE = false, opts = {}) {
     ZERO: _0n2,
     ONE: _1n2,
     allowedLengths,
-    create: (num2) => mod(num2, ORDER),
-    isValid: (num2) => {
+    create: /* @__PURE__ */ __name((num2) => mod(num2, ORDER), "create"),
+    isValid: /* @__PURE__ */ __name((num2) => {
       if (typeof num2 !== "bigint")
         throw new Error("invalid field element: expected bigint, got " + typeof num2);
       return _0n2 <= num2 && num2 < ORDER;
-    },
-    is0: (num2) => num2 === _0n2,
+    }, "isValid"),
+    is0: /* @__PURE__ */ __name((num2) => num2 === _0n2, "is0"),
     // is valid and invertible
-    isValidNot0: (num2) => !f.is0(num2) && f.isValid(num2),
-    isOdd: (num2) => (num2 & _1n2) === _1n2,
-    neg: (num2) => mod(-num2, ORDER),
-    eql: (lhs, rhs) => lhs === rhs,
-    sqr: (num2) => mod(num2 * num2, ORDER),
-    add: (lhs, rhs) => mod(lhs + rhs, ORDER),
-    sub: (lhs, rhs) => mod(lhs - rhs, ORDER),
-    mul: (lhs, rhs) => mod(lhs * rhs, ORDER),
-    pow: (num2, power) => FpPow(f, num2, power),
-    div: (lhs, rhs) => mod(lhs * invert(rhs, ORDER), ORDER),
+    isValidNot0: /* @__PURE__ */ __name((num2) => !f.is0(num2) && f.isValid(num2), "isValidNot0"),
+    isOdd: /* @__PURE__ */ __name((num2) => (num2 & _1n2) === _1n2, "isOdd"),
+    neg: /* @__PURE__ */ __name((num2) => mod(-num2, ORDER), "neg"),
+    eql: /* @__PURE__ */ __name((lhs, rhs) => lhs === rhs, "eql"),
+    sqr: /* @__PURE__ */ __name((num2) => mod(num2 * num2, ORDER), "sqr"),
+    add: /* @__PURE__ */ __name((lhs, rhs) => mod(lhs + rhs, ORDER), "add"),
+    sub: /* @__PURE__ */ __name((lhs, rhs) => mod(lhs - rhs, ORDER), "sub"),
+    mul: /* @__PURE__ */ __name((lhs, rhs) => mod(lhs * rhs, ORDER), "mul"),
+    pow: /* @__PURE__ */ __name((num2, power) => FpPow(f, num2, power), "pow"),
+    div: /* @__PURE__ */ __name((lhs, rhs) => mod(lhs * invert(rhs, ORDER), ORDER), "div"),
     // Same as above, but doesn't normalize
-    sqrN: (num2) => num2 * num2,
-    addN: (lhs, rhs) => lhs + rhs,
-    subN: (lhs, rhs) => lhs - rhs,
-    mulN: (lhs, rhs) => lhs * rhs,
-    inv: (num2) => invert(num2, ORDER),
+    sqrN: /* @__PURE__ */ __name((num2) => num2 * num2, "sqrN"),
+    addN: /* @__PURE__ */ __name((lhs, rhs) => lhs + rhs, "addN"),
+    subN: /* @__PURE__ */ __name((lhs, rhs) => lhs - rhs, "subN"),
+    mulN: /* @__PURE__ */ __name((lhs, rhs) => lhs * rhs, "mulN"),
+    inv: /* @__PURE__ */ __name((num2) => invert(num2, ORDER), "inv"),
     sqrt: _sqrt || ((n) => {
       if (!sqrtP)
         sqrtP = FpSqrt(ORDER);
       return sqrtP(f, n);
     }),
-    toBytes: (num2) => isLE ? numberToBytesLE(num2, BYTES) : numberToBytesBE(num2, BYTES),
-    fromBytes: (bytes, skipValidation = true) => {
+    toBytes: /* @__PURE__ */ __name((num2) => isLE ? numberToBytesLE(num2, BYTES) : numberToBytesBE(num2, BYTES), "toBytes"),
+    fromBytes: /* @__PURE__ */ __name((bytes, skipValidation = true) => {
       if (allowedLengths) {
         if (!allowedLengths.includes(bytes.length) || bytes.length > BYTES) {
           throw new Error("Field.fromBytes: expected " + allowedLengths + " bytes, got " + bytes.length);
@@ -1148,12 +1118,12 @@ function Field(ORDER, bitLenOrOpts, isLE = false, opts = {}) {
           throw new Error("invalid field element: outside of range 0..ORDER");
       }
       return scalar;
-    },
+    }, "fromBytes"),
     // TODO: we don't need it here, move out to separate fn
-    invertBatch: (lst) => FpInvertBatch(f, lst),
+    invertBatch: /* @__PURE__ */ __name((lst) => FpInvertBatch(f, lst), "invertBatch"),
     // We can't move this out because Fp6, Fp12 implement it
     // and it's unclear what to return in there.
-    cmov: (a, b, c) => c ? b : a
+    cmov: /* @__PURE__ */ __name((a, b, c) => c ? b : a, "cmov")
   });
   return Object.freeze(f);
 }
@@ -1526,7 +1496,7 @@ var DER = {
   Err: DERErr,
   // Basic building block is TLV (Tag-Length-Value)
   _tlv: {
-    encode: (tag, data) => {
+    encode: /* @__PURE__ */ __name((tag, data) => {
       const { Err: E } = DER;
       if (tag < 0 || tag > 256)
         throw new E("tlv.encode: wrong tag");
@@ -1539,7 +1509,7 @@ var DER = {
       const lenLen = dataLen > 127 ? numberToHexUnpadded(len.length / 2 | 128) : "";
       const t = numberToHexUnpadded(tag);
       return t + lenLen + len + data;
-    },
+    }, "encode"),
     // v - value, l - left bytes (unparsed)
     decode(tag, data) {
       const { Err: E } = DER;
@@ -2184,7 +2154,7 @@ function ecdh(Point, ecdhOpts = {}) {
     // TODO: remove
     isValidPrivateKey: isValidSecretKey,
     randomPrivateKey: randomSecretKey,
-    normPrivateKeyToScalar: (key) => _normFnElement(Fn, key),
+    normPrivateKeyToScalar: /* @__PURE__ */ __name((key) => _normFnElement(Fn, key), "normPrivateKeyToScalar"),
     precompute(windowSize = 8, point = Point.BASE) {
       return point.precompute(windowSize, false);
     }
@@ -2712,13 +2682,214 @@ var schnorr = /* @__PURE__ */ (() => {
   };
 })();
 
+// src/event-verifier.ts
+var EVENT_ID = /^[0-9a-f]{64}$/;
+var PUBKEY = /^[0-9a-f]{64}$/;
+var SIGNATURE = /^[0-9a-f]{128}$/;
+function hexToBytes2(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let index = 0; index < bytes.length; index++) {
+    bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16);
+  }
+  return bytes;
+}
+__name(hexToBytes2, "hexToBytes");
+function bytesToHex2(bytes) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+__name(bytesToHex2, "bytesToHex");
+function isNostrEvent(event) {
+  if (!event || typeof event !== "object") return false;
+  const candidate = event;
+  return typeof candidate.id === "string" && EVENT_ID.test(candidate.id) && typeof candidate.pubkey === "string" && PUBKEY.test(candidate.pubkey) && typeof candidate.sig === "string" && SIGNATURE.test(candidate.sig) && Number.isSafeInteger(candidate.created_at) && (candidate.created_at ?? -1) >= 0 && Number.isSafeInteger(candidate.kind) && (candidate.kind ?? -1) >= 0 && typeof candidate.content === "string" && Array.isArray(candidate.tags) && candidate.tags.every(
+    (tag) => Array.isArray(tag) && tag.every((part) => typeof part === "string")
+  );
+}
+__name(isNostrEvent, "isNostrEvent");
+function serializeEventForSigning(event) {
+  return JSON.stringify([0, event.pubkey, event.created_at, event.kind, event.tags, event.content]);
+}
+__name(serializeEventForSigning, "serializeEventForSigning");
+async function verifyEventSignature(event) {
+  if (!isNostrEvent(event)) return false;
+  try {
+    const digest = new Uint8Array(
+      await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(serializeEventForSigning(event))
+      )
+    );
+    if (bytesToHex2(digest) !== event.id) return false;
+    return schnorr.verify(hexToBytes2(event.sig), digest, hexToBytes2(event.pubkey));
+  } catch {
+    return false;
+  }
+}
+__name(verifyEventSignature, "verifyEventSignature");
+
+// src/types.ts
+function getTagFilter(filter, tagName) {
+  const key = `#${tagName}`;
+  return filter[key];
+}
+__name(getTagFilter, "getTagFilter");
+function setTagFilter(filter, tagName, values) {
+  const key = `#${tagName}`;
+  filter[key] = values;
+}
+__name(setTagFilter, "setTagFilter");
+function deleteTagFilter(filter, tagName) {
+  const key = `#${tagName}`;
+  delete filter[key];
+}
+__name(deleteTagFilter, "deleteTagFilter");
+function getTagFilterEntries(filter) {
+  const entries = [];
+  for (const [key, values] of Object.entries(filter)) {
+    if (key.startsWith("#") && Array.isArray(values) && values.length > 0) {
+      entries.push([key, values]);
+    }
+  }
+  return entries;
+}
+__name(getTagFilterEntries, "getTagFilterEntries");
+var _RateLimiter = class _RateLimiter {
+  constructor(rate, capacity) {
+    this.tokens = capacity;
+    this.lastRefillTime = Date.now();
+    this.capacity = capacity;
+    this.fillRate = rate;
+  }
+  removeToken() {
+    this.refill();
+    if (this.tokens < 1) {
+      return false;
+    }
+    this.tokens -= 1;
+    return true;
+  }
+  refill() {
+    const now = Date.now();
+    const elapsedTime = now - this.lastRefillTime;
+    const tokensToAdd = Math.floor(elapsedTime * this.fillRate);
+    this.tokens = Math.min(this.capacity, this.tokens + tokensToAdd);
+    this.lastRefillTime = now;
+  }
+};
+__name(_RateLimiter, "RateLimiter");
+var RateLimiter = _RateLimiter;
+
+// src/principal-quota.ts
+var _PrincipalQuotaRegistry = class _PrincipalQuotaRegistry {
+  constructor(publishConfig, requestConfig, maxSubscriptions) {
+    this.publishConfig = publishConfig;
+    this.requestConfig = requestConfig;
+    this.maxSubscriptions = maxSubscriptions;
+    this.publishLimiters = /* @__PURE__ */ new Map();
+    this.requestLimiters = /* @__PURE__ */ new Map();
+    this.subscriptions = /* @__PURE__ */ new Map();
+  }
+  consumePublish(principal) {
+    return this.getLimiter(this.publishLimiters, principal, this.publishConfig).removeToken();
+  }
+  consumeRequest(principal) {
+    return this.getLimiter(this.requestLimiters, principal, this.requestConfig).removeToken();
+  }
+  reserveSubscription(principal, sessionId, subscriptionId) {
+    const key = `${sessionId}\0${subscriptionId}`;
+    const active = this.subscriptions.get(principal) ?? /* @__PURE__ */ new Set();
+    if (active.has(key)) return true;
+    if (active.size >= this.maxSubscriptions) return false;
+    active.add(key);
+    this.subscriptions.set(principal, active);
+    return true;
+  }
+  releaseSubscription(principal, sessionId, subscriptionId) {
+    const active = this.subscriptions.get(principal);
+    if (!active) return;
+    active.delete(`${sessionId}\0${subscriptionId}`);
+    if (active.size === 0) this.subscriptions.delete(principal);
+  }
+  releaseSession(sessionId) {
+    const prefix = `${sessionId}\0`;
+    for (const [principal, active] of this.subscriptions) {
+      for (const key of active) {
+        if (key.startsWith(prefix)) active.delete(key);
+      }
+      if (active.size === 0) this.subscriptions.delete(principal);
+    }
+  }
+  getLimiter(limiters, principal, config) {
+    let limiter = limiters.get(principal);
+    if (!limiter) {
+      limiter = new RateLimiter(config.rate, config.capacity);
+      limiters.set(principal, limiter);
+    }
+    return limiter;
+  }
+};
+__name(_PrincipalQuotaRegistry, "PrincipalQuotaRegistry");
+var PrincipalQuotaRegistry = _PrincipalQuotaRegistry;
+
+// src/relay-policy.ts
+var REDSHIFT_GIFT_WRAP_KIND = 1059;
+var REDSHIFT_SECRET_KIND = 30078;
+var REDSHIFT_TYPE_TAG = "redshift-secrets";
+var PUBKEY2 = /^[0-9a-f]{64}$/;
+function getRedshiftRecipient(event) {
+  if (event.kind !== REDSHIFT_GIFT_WRAP_KIND) return null;
+  const recipientTags = event.tags.filter((tag) => tag[0] === "p");
+  const typeTags = event.tags.filter((tag) => tag[0] === "t" && tag[1] === REDSHIFT_TYPE_TAG);
+  const recipient = recipientTags[0]?.[1];
+  if (recipientTags.length !== 1 || !recipient || !PUBKEY2.test(recipient)) return null;
+  if (typeTags.length !== 1) return null;
+  return recipient;
+}
+__name(getRedshiftRecipient, "getRedshiftRecipient");
+function authorizeEventWrite(event, authenticatedPrincipal) {
+  if (!authenticatedPrincipal) return { allowed: false, reason: "authentication required" };
+  if (event.kind === REDSHIFT_SECRET_KIND) {
+    return { allowed: false, reason: "plaintext secret events are not allowed" };
+  }
+  if (event.kind === REDSHIFT_GIFT_WRAP_KIND) {
+    const recipient = getRedshiftRecipient(event);
+    if (!recipient) return { allowed: false, reason: "invalid Redshift recipient/type tags" };
+    return recipient === authenticatedPrincipal ? { allowed: true, principal: recipient } : { allowed: false, reason: "Gift Wrap recipient does not match authenticated principal" };
+  }
+  return event.pubkey === authenticatedPrincipal ? { allowed: true, principal: event.pubkey } : { allowed: false, reason: "event author does not match authenticated principal" };
+}
+__name(authorizeEventWrite, "authorizeEventWrite");
+function authorizeReadFilters(filters, authenticatedPrincipal) {
+  if (!authenticatedPrincipal) return { allowed: false, reason: "authentication required" };
+  if (filters.length === 0) return { allowed: false, reason: "at least one filter is required" };
+  for (const filter of filters) {
+    if (filter.kinds?.length !== 1 || filter.kinds[0] !== REDSHIFT_GIFT_WRAP_KIND || filter["#p"]?.length !== 1 || filter["#p"][0] !== authenticatedPrincipal || filter["#t"]?.length !== 1 || filter["#t"][0] !== REDSHIFT_TYPE_TAG) {
+      return {
+        allowed: false,
+        reason: "filters must target kind 1059, the authenticated #p, and #t redshift-secrets"
+      };
+    }
+  }
+  return { allowed: true, principal: authenticatedPrincipal };
+}
+__name(authorizeReadFilters, "authorizeReadFilters");
+function normalizeAuthRelayUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "wss:" && url.protocol !== "ws:") return null;
+    if (url.username || url.password || url.hash || url.search) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+__name(normalizeAuthRelayUrl, "normalizeAuthRelayUrl");
+
 // src/relay-worker.ts
 var {
   relayInfo: relayInfo2,
   PAY_TO_RELAY_ENABLED: PAY_TO_RELAY_ENABLED2,
   RELAY_ACCESS_PRICE_SATS: RELAY_ACCESS_PRICE_SATS2,
-  relayNpub: relayNpub2,
-  relayLnAddress: relayLnAddress2,
   nip05Users: nip05Users2,
   enableAntiSpam: enableAntiSpam2,
   enableGlobalDuplicateCheck: enableGlobalDuplicateCheck2,
@@ -2735,17 +2906,19 @@ var {
 var GLOBAL_MAX_EVENTS = 500;
 var MAX_QUERY_COMPLEXITY = 1e3;
 var CHUNK_SIZE = 500;
+function getErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+__name(getErrorMessage, "getErrorMessage");
 async function initializeDatabase(db) {
   try {
     const session2 = db.withSession("first-unconstrained");
-    const initCheck = await session2.prepare(
-      "SELECT value FROM system_config WHERE key = 'db_initialized' LIMIT 1"
-    ).first().catch(() => null);
+    const initCheck = await session2.prepare("SELECT value FROM system_config WHERE key = 'db_initialized' LIMIT 1").first().catch(() => null);
     if (initCheck && initCheck.value === "1") {
       console.log("Database already initialized");
       return;
     }
-  } catch (error) {
+  } catch {
     console.log("Database not initialized, creating schema...");
   }
   const session = db.withSession("first-primary");
@@ -2895,13 +3068,9 @@ async function initializeDatabase(db) {
       await session.prepare(statement).run();
     }
     await session.prepare("PRAGMA foreign_keys = ON").run();
-    await session.prepare(
-      "INSERT OR REPLACE INTO system_config (key, value) VALUES ('db_initialized', '1')"
-    ).run();
-    const versionResult = await session.prepare(
-      "SELECT value FROM system_config WHERE key = 'schema_version'"
-    ).first();
-    const currentVersion = versionResult ? parseInt(versionResult.value) : 0;
+    await session.prepare("INSERT OR REPLACE INTO system_config (key, value) VALUES ('db_initialized', '1')").run();
+    const versionResult = await session.prepare("SELECT value FROM system_config WHERE key = 'schema_version'").first();
+    const currentVersion = versionResult ? Number.parseInt(versionResult.value) : 0;
     if (currentVersion < 5) {
       console.log("Migrating to schema version 5: populating tag columns in events table...");
       await session.prepare(`
@@ -2949,9 +3118,7 @@ async function initializeDatabase(db) {
       `).run();
       console.log("Schema v6 migration completed");
     }
-    await session.prepare(
-      "INSERT OR REPLACE INTO system_config (key, value) VALUES ('schema_version', '6')"
-    ).run();
+    await session.prepare("INSERT OR REPLACE INTO system_config (key, value) VALUES ('schema_version', '6')").run();
     await session.prepare(`
       INSERT OR IGNORE INTO event_tags_cache (event_id, pubkey, kind, created_at, tag_p, tag_e, tag_a)
       SELECT
@@ -2993,53 +3160,20 @@ async function initializeDatabase(db) {
   }
 }
 __name(initializeDatabase, "initializeDatabase");
-async function verifyEventSignature(event) {
-  try {
-    const signatureBytes = hexToBytes2(event.sig);
-    const serializedEventData = serializeEventForSigning(event);
-    const messageHashBuffer = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(serializedEventData)
-    );
-    const messageHash = new Uint8Array(messageHashBuffer);
-    const publicKeyBytes = hexToBytes2(event.pubkey);
-    return schnorr.verify(signatureBytes, messageHash, publicKeyBytes);
-  } catch (error) {
-    console.error("Error verifying event signature:", error);
-    return false;
-  }
-}
-__name(verifyEventSignature, "verifyEventSignature");
-function serializeEventForSigning(event) {
-  return JSON.stringify([
-    0,
-    event.pubkey,
-    event.created_at,
-    event.kind,
-    event.tags,
-    event.content
-  ]);
-}
-__name(serializeEventForSigning, "serializeEventForSigning");
-function hexToBytes2(hexString) {
-  if (hexString.length % 2 !== 0)
-    throw new Error("Invalid hex string");
-  const bytes = new Uint8Array(hexString.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hexString.substr(i * 2, 2), 16);
-  }
-  return bytes;
-}
-__name(hexToBytes2, "hexToBytes");
-function bytesToHex2(bytes) {
+function bytesToHex3(bytes) {
   return Array.from(bytes).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
-__name(bytesToHex2, "bytesToHex");
+__name(bytesToHex3, "bytesToHex");
 async function hashContent(event) {
-  const contentToHash = enableGlobalDuplicateCheck2 ? JSON.stringify({ kind: event.kind, tags: event.tags, content: event.content }) : JSON.stringify({ pubkey: event.pubkey, kind: event.kind, tags: event.tags, content: event.content });
+  const contentToHash = enableGlobalDuplicateCheck2 ? JSON.stringify({ kind: event.kind, tags: event.tags, content: event.content }) : JSON.stringify({
+    pubkey: event.pubkey,
+    kind: event.kind,
+    tags: event.tags,
+    content: event.content
+  });
   const buffer = new TextEncoder().encode(contentToHash);
   const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
-  return bytesToHex2(new Uint8Array(hashBuffer));
+  return bytesToHex3(new Uint8Array(hashBuffer));
 }
 __name(hashContent, "hashContent");
 function shouldCheckForDuplicates(kind) {
@@ -3047,13 +3181,10 @@ function shouldCheckForDuplicates(kind) {
 }
 __name(shouldCheckForDuplicates, "shouldCheckForDuplicates");
 async function hasPaidForRelay(pubkey, env) {
-  if (!PAY_TO_RELAY_ENABLED2)
-    return true;
+  if (!PAY_TO_RELAY_ENABLED2) return true;
   try {
     const session = env.RELAY_DATABASE.withSession("first-unconstrained");
-    const result = await session.prepare(
-      "SELECT pubkey FROM paid_pubkeys WHERE pubkey = ? LIMIT 1"
-    ).bind(pubkey).first();
+    const result = await session.prepare("SELECT pubkey FROM paid_pubkeys WHERE pubkey = ? LIMIT 1").bind(pubkey).first();
     return result !== null;
   } catch (error) {
     console.error(`Error checking paid status for ${pubkey}:`, error);
@@ -3221,10 +3352,8 @@ function calculateQueryComplexity(filter) {
   complexity += (filter.ids?.length || 0) * 1;
   complexity += (filter.authors?.length || 0) * 2;
   complexity += (filter.kinds?.length || 0) * 5;
-  for (const [key, values] of Object.entries(filter)) {
-    if (key.startsWith("#") && Array.isArray(values)) {
-      complexity += values.length * 10;
-    }
+  for (const [, values] of getTagFilterEntries(filter)) {
+    complexity += values.length * 10;
   }
   if (!filter.since && !filter.until) {
     complexity *= 2;
@@ -3235,13 +3364,17 @@ function calculateQueryComplexity(filter) {
   return complexity;
 }
 __name(calculateQueryComplexity, "calculateQueryComplexity");
-async function processEvent(event, sessionId, env) {
+async function processEvent(event, env) {
   try {
     const session = env.RELAY_DATABASE.withSession("first-primary");
     const existingEvent = await session.prepare("SELECT id FROM events WHERE id = ? LIMIT 1").bind(event.id).first();
     if (existingEvent) {
       console.log(`Duplicate event detected: ${event.id}`);
-      return { success: false, message: "duplicate: already have this event", bookmark: session.getBookmark() ?? void 0 };
+      return {
+        success: false,
+        message: "duplicate: already have this event",
+        bookmark: session.getBookmark() ?? void 0
+      };
     }
     if (event.kind !== 1059 && checkValidNip052 && event.kind !== 0) {
       const isValidNIP05 = await validateNIP05FromKind0(event.pubkey, env);
@@ -3255,8 +3388,8 @@ async function processEvent(event, sessionId, env) {
     }
     return await saveEventToDatabase(event, env);
   } catch (error) {
-    console.error(`Error processing event: ${error.message}`);
-    return { success: false, message: `error: ${error.message}` };
+    console.error(`Error processing event: ${getErrorMessage(error)}`);
+    return { success: false, message: "error: internal event processing failed" };
   }
 }
 __name(processEvent, "processEvent");
@@ -3271,14 +3404,22 @@ async function saveEventToDatabase(event, env) {
     const session = env.RELAY_DATABASE.withSession("first-primary");
     const existingEvent = await session.prepare("SELECT id FROM events WHERE id = ? LIMIT 1").bind(event.id).first();
     if (existingEvent) {
-      return { success: false, message: "duplicate: event already exists", bookmark: session.getBookmark() ?? void 0 };
+      return {
+        success: false,
+        message: "duplicate: event already exists",
+        bookmark: session.getBookmark() ?? void 0
+      };
     }
     let contentHash = null;
     if (shouldCheckForDuplicates(event.kind)) {
       contentHash = await hashContent(event);
       const duplicateContent = enableGlobalDuplicateCheck2 ? await session.prepare("SELECT event_id FROM content_hashes WHERE hash = ? LIMIT 1").bind(contentHash).first() : await session.prepare("SELECT event_id FROM content_hashes WHERE hash = ? AND pubkey = ? LIMIT 1").bind(contentHash, event.pubkey).first();
       if (duplicateContent) {
-        return { success: false, message: "duplicate: content already exists", bookmark: session.getBookmark() ?? void 0 };
+        return {
+          success: false,
+          message: "duplicate: content already exists",
+          bookmark: session.getBookmark() ?? void 0
+        };
       }
     }
     const tagInserts = [];
@@ -3297,24 +3438,15 @@ async function saveEventToDatabase(event, env) {
           name: tag[0],
           value: tag[1] || ""
         });
-        if (tag[0] === "p" && !tagP)
-          tagP = tag[1];
-        if (tag[0] === "e" && !tagE)
-          tagE = tag[1];
-        if (tag[0] === "a" && !tagA)
-          tagA = tag[1];
-        if (tag[0] === "t" && !tagT)
-          tagT = tag[1];
-        if (tag[0] === "d" && !tagD)
-          tagD = tag[1];
-        if (tag[0] === "r" && !tagR)
-          tagR = tag[1];
-        if (tag[0] === "L" && !tagL)
-          tagL = tag[1];
-        if (tag[0] === "s" && !tagS)
-          tagS = tag[1];
-        if (tag[0] === "u" && !tagU)
-          tagU = tag[1];
+        if (tag[0] === "p" && !tagP) tagP = tag[1];
+        if (tag[0] === "e" && !tagE) tagE = tag[1];
+        if (tag[0] === "a" && !tagA) tagA = tag[1];
+        if (tag[0] === "t" && !tagT) tagT = tag[1];
+        if (tag[0] === "d" && !tagD) tagD = tag[1];
+        if (tag[0] === "r" && !tagR) tagR = tag[1];
+        if (tag[0] === "L" && !tagL) tagL = tag[1];
+        if (tag[0] === "s" && !tagS) tagS = tag[1];
+        if (tag[0] === "u" && !tagU) tagU = tag[1];
       }
     }
     const eTags = tagInserts.filter((t) => t.name === "e").map((t) => t.value);
@@ -3348,7 +3480,11 @@ async function saveEventToDatabase(event, env) {
     ).run();
     if (insertResult.meta.changes === 0) {
       console.log(`Event ${event.id} already exists in database (race condition duplicate)`);
-      return { success: false, message: "duplicate: event already exists", bookmark: session.getBookmark() ?? void 0 };
+      return {
+        success: false,
+        message: "duplicate: event already exists",
+        bookmark: session.getBookmark() ?? void 0
+      };
     }
     if (tagInserts.length > 0) {
       for (let j = 0; j < tagInserts.length; j += 50) {
@@ -3372,17 +3508,11 @@ async function saveEventToDatabase(event, env) {
           tag_p = excluded.tag_p,
           tag_e = excluded.tag_e,
           tag_a = excluded.tag_a
-      `).bind(
-        event.id,
-        event.pubkey,
-        event.kind,
-        event.created_at,
-        tagP,
-        tagE,
-        tagA
-      ).run();
+      `).bind(event.id, event.pubkey, event.kind, event.created_at, tagP, tagE, tagA).run();
     }
-    const cacheableTags = tagInserts.filter((t) => ["p", "e", "a", "t", "d", "r", "L", "s", "u"].includes(t.name));
+    const cacheableTags = tagInserts.filter(
+      (t) => ["p", "e", "a", "t", "d", "r", "L", "s", "u"].includes(t.name)
+    );
     if (cacheableTags.length > 0) {
       for (let j = 0; j < cacheableTags.length; j += 50) {
         const cacheChunk = cacheableTags.slice(j, j + 50);
@@ -3402,17 +3532,26 @@ async function saveEventToDatabase(event, env) {
         ON CONFLICT(hash) DO NOTHING
       `).bind(contentHash, event.id, event.pubkey, event.created_at).run();
     }
-    await cache.put(cacheKey, new Response("cached", {
-      headers: {
-        "Cache-Control": "max-age=3600"
-      }
-    }));
+    await cache.put(
+      cacheKey,
+      new Response("cached", {
+        headers: {
+          "Cache-Control": "max-age=3600"
+        }
+      })
+    );
     console.log(`Event ${event.id} saved directly to database`);
-    return { success: true, message: "Event saved successfully", bookmark: session.getBookmark() ?? void 0 };
+    return {
+      success: true,
+      message: "Event saved successfully",
+      bookmark: session.getBookmark() ?? void 0
+    };
   } catch (error) {
-    console.error(`Error saving event to database: ${error.message}`);
-    console.error(`Event details: ID=${event.id}, Kind=${event.kind}, Tags count=${event.tags.length}`);
-    return { success: false, message: `error: ${error.message}` };
+    console.error(`Error saving event to database: ${getErrorMessage(error)}`);
+    console.error(
+      `Event details: ID=${event.id}, Kind=${event.kind}, Tags count=${event.tags.length}`
+    );
+    return { success: false, message: "error: internal event processing failed" };
   }
 }
 __name(saveEventToDatabase, "saveEventToDatabase");
@@ -3421,39 +3560,33 @@ async function processDeletionEvent(event, env) {
   const deletedEventIds = event.tags.filter((tag) => tag[0] === "e").map((tag) => tag[1]);
   const session = env.RELAY_DATABASE.withSession("first-primary");
   if (deletedEventIds.length === 0) {
-    return { success: true, message: "No events to delete", bookmark: session.getBookmark() ?? void 0 };
+    return {
+      success: true,
+      message: "No events to delete",
+      bookmark: session.getBookmark() ?? void 0
+    };
   }
   let deletedCount = 0;
   const errors = [];
   for (const eventId of deletedEventIds) {
     try {
-      const existing = await session.prepare(
-        "SELECT pubkey FROM events WHERE id = ? LIMIT 1"
-      ).bind(eventId).first();
+      const existing = await session.prepare("SELECT pubkey FROM events WHERE id = ? LIMIT 1").bind(eventId).first();
       if (!existing) {
         console.warn(`Event ${eventId} not found in D1. Nothing to delete (may be in queue).`);
         continue;
       }
       if (existing.pubkey !== event.pubkey) {
-        console.warn(`Event ${eventId} does not belong to pubkey ${event.pubkey}. Skipping deletion.`);
+        console.warn(
+          `Event ${eventId} does not belong to pubkey ${event.pubkey}. Skipping deletion.`
+        );
         errors.push(`unauthorized: cannot delete event ${eventId} - wrong pubkey`);
         continue;
       }
-      await session.prepare(
-        "DELETE FROM tags WHERE event_id = ?"
-      ).bind(eventId).run();
-      await session.prepare(
-        "DELETE FROM content_hashes WHERE event_id = ?"
-      ).bind(eventId).run();
-      await session.prepare(
-        "DELETE FROM event_tags_cache WHERE event_id = ?"
-      ).bind(eventId).run();
-      await session.prepare(
-        "DELETE FROM event_tags_cache_multi WHERE event_id = ?"
-      ).bind(eventId).run();
-      const result = await session.prepare(
-        "DELETE FROM events WHERE id = ?"
-      ).bind(eventId).run();
+      await session.prepare("DELETE FROM tags WHERE event_id = ?").bind(eventId).run();
+      await session.prepare("DELETE FROM content_hashes WHERE event_id = ?").bind(eventId).run();
+      await session.prepare("DELETE FROM event_tags_cache WHERE event_id = ?").bind(eventId).run();
+      await session.prepare("DELETE FROM event_tags_cache_multi WHERE event_id = ?").bind(eventId).run();
+      const result = await session.prepare("DELETE FROM events WHERE id = ?").bind(eventId).run();
       if (result.meta.changes > 0) {
         console.log(`Event ${eventId} deleted from D1.`);
         deletedCount++;
@@ -3465,12 +3598,16 @@ async function processDeletionEvent(event, env) {
   }
   const saveResult = await saveEventToDatabase(event, env);
   if (errors.length > 0) {
-    return { success: false, message: errors[0], bookmark: saveResult.bookmark ?? (session.getBookmark() ?? void 0) };
+    return {
+      success: false,
+      message: errors[0],
+      bookmark: saveResult.bookmark ?? session.getBookmark() ?? void 0
+    };
   }
   return {
     success: true,
     message: deletedCount > 0 ? `Successfully deleted ${deletedCount} event(s)` : "No matching events found to delete",
-    bookmark: saveResult.bookmark ?? (session.getBookmark() ?? void 0)
+    bookmark: saveResult.bookmark ?? session.getBookmark() ?? void 0
   };
 }
 __name(processDeletionEvent, "processDeletionEvent");
@@ -3487,14 +3624,12 @@ function buildCountQuery(filter) {
   const conditions = [];
   const directTags = [];
   const otherTags = [];
-  for (const [key, values] of Object.entries(filter)) {
-    if (key.startsWith("#") && Array.isArray(values) && values.length > 0) {
-      const tagName = key.substring(1);
-      if (["p", "e", "a", "t", "d", "r", "L", "s", "u"].includes(tagName)) {
-        directTags.push({ name: tagName, values });
-      } else {
-        otherTags.push({ name: tagName, values });
-      }
+  for (const [key, values] of getTagFilterEntries(filter)) {
+    const tagName = key.substring(1);
+    if (["p", "e", "a", "t", "d", "r", "L", "s", "u"].includes(tagName)) {
+      directTags.push({ name: tagName, values });
+    } else {
+      otherTags.push({ name: tagName, values });
     }
   }
   if (directTags.length > 0 && otherTags.length === 0) {
@@ -3643,15 +3778,13 @@ function buildQuery(filter) {
   let tagCount = 0;
   const directTags = [];
   const otherTags = [];
-  for (const [key, values] of Object.entries(filter)) {
-    if (key.startsWith("#") && Array.isArray(values) && values.length > 0) {
-      tagCount += values.length;
-      const tagName = key.substring(1);
-      if (["p", "e", "a", "t", "d", "r", "L", "s", "u"].includes(tagName)) {
-        directTags.push({ name: tagName, values });
-      } else {
-        otherTags.push({ name: tagName, values });
-      }
+  for (const [key, values] of getTagFilterEntries(filter)) {
+    tagCount += values.length;
+    const tagName = key.substring(1);
+    if (["p", "e", "a", "t", "d", "r", "L", "s", "u"].includes(tagName)) {
+      directTags.push({ name: tagName, values });
+    } else {
+      otherTags.push({ name: tagName, values });
     }
   }
   if (directTags.length > 0 && otherTags.length === 0) {
@@ -3706,7 +3839,7 @@ function buildQuery(filter) {
     if (filter.cursor) {
       const [timestamp, lastId] = filter.cursor.split(":");
       whereConditions.push("(e.created_at < ? OR (e.created_at = ? AND e.id > ?))");
-      params.push(parseInt(timestamp), parseInt(timestamp), lastId);
+      params.push(Number.parseInt(timestamp), Number.parseInt(timestamp), lastId);
     }
     if (whereConditions.length > 0) {
       sql2 += " AND " + whereConditions.join(" AND ");
@@ -3747,7 +3880,7 @@ function buildQuery(filter) {
       if (filter.cursor) {
         const [timestamp, lastId] = filter.cursor.split(":");
         whereConditions2.push("(e.created_at < ? OR (e.created_at = ? AND e.id > ?))");
-        params.push(parseInt(timestamp), parseInt(timestamp), lastId);
+        params.push(Number.parseInt(timestamp), Number.parseInt(timestamp), lastId);
       }
       if (whereConditions2.length > 0) {
         sql3 += " AND " + whereConditions2.join(" AND ");
@@ -3791,7 +3924,7 @@ function buildQuery(filter) {
     if (filter.cursor) {
       const [timestamp, lastId] = filter.cursor.split(":");
       whereConditions.push("(e.created_at < ? OR (e.created_at = ? AND e.id > ?))");
-      params.push(parseInt(timestamp), parseInt(timestamp), lastId);
+      params.push(Number.parseInt(timestamp), Number.parseInt(timestamp), lastId);
     }
     if (whereConditions.length > 0) {
       sql2 += " AND " + whereConditions.join(" AND ");
@@ -3849,7 +3982,7 @@ function buildQuery(filter) {
   if (filter.cursor) {
     const [timestamp, lastId] = filter.cursor.split(":");
     conditions.push("(created_at < ? OR (created_at = ? AND id > ?))");
-    params.push(parseInt(timestamp), parseInt(timestamp), lastId);
+    params.push(Number.parseInt(timestamp), Number.parseInt(timestamp), lastId);
   }
   if (conditions.length > 0) {
     sql += " WHERE " + conditions.join(" AND ");
@@ -3882,10 +4015,10 @@ async function queryDatabaseChunked(filter, bookmark, env) {
     needsChunking.kinds = true;
     delete baseFilter.kinds;
   }
-  for (const [key, values] of Object.entries(filter)) {
-    if (key.startsWith("#") && Array.isArray(values) && values.length > CHUNK_SIZE) {
+  for (const [key, values] of getTagFilterEntries(filter)) {
+    if (values.length > CHUNK_SIZE) {
       needsChunking.tags[key] = true;
-      delete baseFilter[key];
+      deleteTagFilter(baseFilter, key.substring(1));
     }
   }
   const processStringChunks = /* @__PURE__ */ __name(async (filterType, values) => {
@@ -3897,7 +4030,7 @@ async function queryDatabaseChunked(filter, bookmark, env) {
       } else if (filterType === "authors") {
         chunkFilter.authors = chunk;
       } else if (filterType.startsWith("#")) {
-        chunkFilter[filterType] = chunk;
+        setTagFilter(chunkFilter, filterType.substring(1), chunk);
       }
       const query = buildQuery(chunkFilter);
       try {
@@ -3910,7 +4043,7 @@ async function queryDatabaseChunked(filter, bookmark, env) {
       }
     }
   }, "processStringChunks");
-  const processNumberChunks = /* @__PURE__ */ __name(async (filterType, values) => {
+  const processNumberChunks = /* @__PURE__ */ __name(async (values) => {
     const chunks = chunkArray(values, CHUNK_SIZE);
     for (const chunk of chunks) {
       const chunkFilter = { ...baseFilter };
@@ -3933,11 +4066,12 @@ async function queryDatabaseChunked(filter, bookmark, env) {
     await processStringChunks("authors", filter.authors);
   }
   if (needsChunking.kinds && filter.kinds) {
-    await processNumberChunks("kinds", filter.kinds);
+    await processNumberChunks(filter.kinds);
   }
-  for (const [tagKey, _] of Object.entries(needsChunking.tags)) {
-    const tagValues = filter[tagKey];
-    if (Array.isArray(tagValues) && tagValues.every((v) => typeof v === "string")) {
+  for (const [tagKey] of Object.entries(needsChunking.tags)) {
+    const tagName = tagKey.substring(1);
+    const tagValues = getTagFilter(filter, tagName);
+    if (tagValues) {
       await processStringChunks(tagKey, tagValues);
     }
   }
@@ -3978,9 +4112,7 @@ async function queryEvents(filters, bookmark, env) {
         console.warn(`Query too complex (complexity: ${complexity}), skipping filter`);
         continue;
       }
-      const needsChunking = filter.ids && filter.ids.length > CHUNK_SIZE || filter.authors && filter.authors.length > CHUNK_SIZE || filter.kinds && filter.kinds.length > CHUNK_SIZE || Object.entries(filter).some(
-        ([key, values]) => key.startsWith("#") && Array.isArray(values) && values.length > CHUNK_SIZE
-      );
+      const needsChunking = filter.ids && filter.ids.length > CHUNK_SIZE || filter.authors && filter.authors.length > CHUNK_SIZE || filter.kinds && filter.kinds.length > CHUNK_SIZE || getTagFilterEntries(filter).some(([, values]) => values.length > CHUNK_SIZE);
       if (needsChunking) {
         chunkedFilters.push(filter);
       } else {
@@ -3996,8 +4128,7 @@ async function queryEvents(filters, bookmark, env) {
       console.log(`Filter has arrays >${CHUNK_SIZE} items, using chunked query...`);
       const chunkedResult = await queryDatabaseChunked(filter, bookmark, env);
       for (const event of chunkedResult.events) {
-        if (totalEventsRead >= GLOBAL_MAX_EVENTS)
-          break;
+        if (totalEventsRead >= GLOBAL_MAX_EVENTS) break;
         eventSet.set(event.id, event);
         totalEventsRead++;
       }
@@ -4005,13 +4136,15 @@ async function queryEvents(filters, bookmark, env) {
     if (batchableFilters.length > 0 && totalEventsRead < GLOBAL_MAX_EVENTS) {
       const validFilters = [];
       for (const filter of batchableFilters) {
-        const hasTagFilters = Object.keys(filter).some((key) => key.startsWith("#"));
+        const hasTagFilters = getTagFilterEntries(filter).length > 0;
         if (hasTagFilters) {
           const countQuery = buildCountQuery(filter);
           const countResult = await session.prepare(countQuery.sql).bind(...countQuery.params).first();
           const estimatedRows = countResult?.count || 0;
           if (estimatedRows > 1e4) {
-            console.warn(`Query precheck: estimated ${estimatedRows} rows, skipping filter to prevent timeout`);
+            console.warn(
+              `Query precheck: estimated ${estimatedRows} rows, skipping filter to prevent timeout`
+            );
             continue;
           } else {
             console.log(`Query precheck: estimated ${estimatedRows} rows, proceeding`);
@@ -4040,8 +4173,7 @@ async function queryEvents(filters, bookmark, env) {
             }
             if (result.success && result.results) {
               for (const row of result.results) {
-                if (totalEventsRead >= GLOBAL_MAX_EVENTS)
-                  break;
+                if (totalEventsRead >= GLOBAL_MAX_EVENTS) break;
                 allRows.push(row);
                 totalEventsRead++;
               }
@@ -4062,7 +4194,7 @@ async function queryEvents(filters, bookmark, env) {
             eventSet.set(event.id, event);
           }
         } catch (error) {
-          console.error(`Batch query execution error: ${error.message}`);
+          console.error(`Batch query execution error: ${getErrorMessage(error)}`);
           throw error;
         }
       }
@@ -4077,7 +4209,7 @@ async function queryEvents(filters, bookmark, env) {
     console.log(`Found ${events.length} events. New bookmark: ${newBookmark}`);
     return { events, bookmark: newBookmark };
   } catch (error) {
-    console.error(`Error querying events: ${error.message}`);
+    console.error(`Error querying events: ${getErrorMessage(error)}`);
     return { events: [], bookmark: null };
   }
 }
@@ -4103,26 +4235,19 @@ function handleRelayInfoRequest(request) {
 }
 __name(handleRelayInfoRequest, "handleRelayInfoRequest");
 function serveLandingPage() {
+  const nonce = crypto.randomUUID().replace(/-/g, "");
   const paySection = PAY_TO_RELAY_ENABLED2 ? `
     <div id="paySection" class="subscribe-section">
-      <p style="margin-bottom: 1rem; color: var(--text-secondary);">One-time payment for lifetime relay access</p>
-      <button id="payButton"
-        class="subscribe-button"
-        data-npub="${relayNpub2}"
-        data-lnaddress="${relayLnAddress2}"
-        data-relays="wss://relay.damus.io,wss://relay.primal.net,wss://nos.lol,wss://relay.nostr.band,wss://purplepag.es"
-        data-sats-amount="${RELAY_ACCESS_PRICE_SATS2}">
-        Pay ${RELAY_ACCESS_PRICE_SATS2.toLocaleString()} sats \u26A1
-      </button>
-      <p class="price-info">Pay with Lightning via Nostr Wallet Connect or extension</p>
+      <p class="price-info">Managed relay access costs ${RELAY_ACCESS_PRICE_SATS2.toLocaleString()} sats.</p>
+      <a class="subscribe-button" href="https://redshiftapp.com/admin">Manage Cloud access</a>
     </div>
   ` : "";
   const accessSection = `
-    <div id="accessSection" class="info-box" style="${PAY_TO_RELAY_ENABLED2 ? "display: none;" : ""}">
-      <p style="margin-bottom: 1rem;">Connect your Nostr client to:</p>
-      <div class="url-display" onclick="copyToClipboard()" id="relay-url">
+    <div id="accessSection" class="info-box">
+      <p>Connect your Nostr client to:</p>
+      <button type="button" class="url-display" id="relay-url">
         <!-- URL will be inserted by JavaScript -->
-      </div>
+      </button>
       <p class="copy-hint">Click to copy</p>
     </div>
   `;
@@ -4134,7 +4259,7 @@ function serveLandingPage() {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="${relayInfo2.description}" />
     <title>${relayInfo2.name}</title>
-    <style>
+    <style nonce="${nonce}">
         /* Tokyo Night Storm Theme */
         :root {
             --bg-dark: #1a1b26;
@@ -4388,14 +4513,14 @@ function serveLandingPage() {
         </div>
         
         <div class="links">
-            <a href="${relayInfo2.privacy_policy || "#"}" class="link" target="_blank">Privacy Policy</a>
-            <a href="${relayInfo2.terms_of_service || "#"}" class="link" target="_blank">Terms of Service</a>
+            <a href="${relayInfo2.privacy_policy || "#"}" class="link" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+            <a href="${relayInfo2.terms_of_service || "#"}" class="link" target="_blank" rel="noopener noreferrer">Terms of Service</a>
         </div>
     </div>
     
     <div class="toast" id="toast">Copied to clipboard!</div>
     
-    <script>
+    <script nonce="${nonce}">
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const relayUrl = protocol + '//' + window.location.host;
         const relayUrlElement = document.getElementById('relay-url');
@@ -4413,6 +4538,7 @@ function serveLandingPage() {
                 }, 2000);
             });
         }
+        if (relayUrlElement) relayUrlElement.addEventListener('click', copyToClipboard);
         
         ${PAY_TO_RELAY_ENABLED2 ? `
         // Payment handling code
@@ -4477,40 +4603,8 @@ function serveLandingPage() {
         });
 
         async function initPayment() {
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/gh/Spl0itable/nosflare@main/nostr-zap.js';
-            script.onload = () => {
-                if (window.nostrZap) {
-                    window.nostrZap.initTargets('#payButton');
-                    
-                    document.getElementById('payButton').addEventListener('click', () => {
-                        if (!paymentCheckInterval) {
-                            paymentCheckInterval = setInterval(async () => {
-                                await checkPaymentStatus();
-                            }, 3000);
-                        }
-                    });
-                }
-            };
-            document.head.appendChild(script);
-            
-            // Initial check
             await checkPaymentStatus();
-
-            // Retry after nostr-login has time to initialize (for returning users)
-            setTimeout(async () => {
-                await checkPaymentStatus();
-            }, 1000);
         }
-
-        // Listen for nostr-login authentication events
-        document.addEventListener('nlAuth', async (e) => {
-            console.log('nostr-login auth event:', e.detail);
-            if (e.detail.type === 'login' || e.detail.type === 'signup') {
-                // User just logged in, check their payment status
-                await checkPaymentStatus();
-            }
-        });
 
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initPayment);
@@ -4519,7 +4613,6 @@ function serveLandingPage() {
         }
         ` : ""}
     </script>
-    ${PAY_TO_RELAY_ENABLED2 ? '<script src="https://unpkg.com/nostr-login@latest/dist/unpkg.js" data-perms="sign_event:1" data-methods="connect,extension,local" data-dark-mode="true"></script>' : ""}
 </body>
 </html>
   `;
@@ -4527,7 +4620,10 @@ function serveLandingPage() {
     status: 200,
     headers: {
       "Content-Type": "text/html;charset=UTF-8",
-      "Cache-Control": "public, max-age=3600"
+      "Cache-Control": "public, max-age=3600",
+      "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src https://redshiftapp.com data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'`,
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff"
     }
   });
 }
@@ -4596,47 +4692,133 @@ async function handlePaymentNotification(request, env) {
   if (request.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
   }
+  const jsonHeaders = {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*"
+  };
   try {
     const url = new URL(request.url);
-    const pubkey = url.searchParams.get("npub");
-    if (!pubkey) {
-      return new Response(JSON.stringify({ error: "Missing pubkey" }), {
+    const npub = url.searchParams.get("npub");
+    if (!npub) {
+      return new Response(JSON.stringify({ error: "Missing npub query parameter" }), {
         status: 400,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*"
-        }
+        headers: jsonHeaders
       });
     }
-    const success = await savePaidPubkey(pubkey, env);
-    return new Response(JSON.stringify({
-      success,
-      message: success ? "Payment recorded successfully" : "Failed to save payment"
-    }), {
-      status: success ? 200 : 500,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*"
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        status: 400,
+        headers: jsonHeaders
+      });
+    }
+    if (!body.zapReceipt) {
+      return new Response(JSON.stringify({ error: "Missing zapReceipt in request body" }), {
+        status: 401,
+        headers: jsonHeaders
+      });
+    }
+    const zapReceipt = body.zapReceipt;
+    if (zapReceipt.kind !== 9735) {
+      return new Response(JSON.stringify({ error: "Invalid zap receipt: expected kind 9735" }), {
+        status: 401,
+        headers: jsonHeaders
+      });
+    }
+    if (!zapReceipt.id || !zapReceipt.pubkey || !zapReceipt.sig) {
+      return new Response(
+        JSON.stringify({ error: "Invalid zap receipt: missing id, pubkey, or sig" }),
+        {
+          status: 401,
+          headers: jsonHeaders
+        }
+      );
+    }
+    const validSig = await verifyEventSignature(zapReceipt);
+    if (!validSig) {
+      return new Response(
+        JSON.stringify({ error: "Invalid zap receipt: signature verification failed" }),
+        {
+          status: 401,
+          headers: jsonHeaders
+        }
+      );
+    }
+    const pTag = zapReceipt.tags.find((t) => t[0] === "p");
+    if (!pTag || pTag[1] !== relayInfo2.pubkey) {
+      return new Response(
+        JSON.stringify({
+          error: "Invalid zap receipt: payment was not directed to this relay"
+        }),
+        {
+          status: 401,
+          headers: jsonHeaders
+        }
+      );
+    }
+    const descriptionTag = zapReceipt.tags.find((t) => t[0] === "description");
+    if (!descriptionTag || !descriptionTag[1]) {
+      return new Response(
+        JSON.stringify({ error: "Invalid zap receipt: missing description tag" }),
+        {
+          status: 401,
+          headers: jsonHeaders
+        }
+      );
+    }
+    let zapRequest;
+    try {
+      zapRequest = JSON.parse(descriptionTag[1]);
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid zap receipt: malformed description tag" }),
+        {
+          status: 401,
+          headers: jsonHeaders
+        }
+      );
+    }
+    if (!zapRequest.pubkey || zapRequest.pubkey !== npub) {
+      return new Response(
+        JSON.stringify({
+          error: "Invalid zap receipt: npub does not match zap request sender"
+        }),
+        {
+          status: 401,
+          headers: jsonHeaders
+        }
+      );
+    }
+    const success = await savePaidPubkey(npub, env);
+    return new Response(
+      JSON.stringify({
+        success,
+        message: success ? "Payment recorded successfully" : "Failed to save payment"
+      }),
+      {
+        status: success ? 200 : 500,
+        headers: jsonHeaders
       }
-    });
+    );
   } catch (error) {
     console.error("Error processing payment notification:", error);
     return new Response(JSON.stringify({ error: "Invalid request" }), {
       status: 400,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*"
-      }
+      headers: jsonHeaders
     });
   }
 }
 __name(handlePaymentNotification, "handlePaymentNotification");
-async function getOptimalDO(cf, env, url) {
+async function getOptimalDO(cf, env) {
   const continent = cf?.continent || "NA";
   const country = cf?.country || "US";
   const region = cf?.region || "unknown";
   const colo = cf?.colo || "unknown";
-  console.log(`User location: continent=${continent}, country=${country}, region=${region}, colo=${colo}`);
+  console.log(
+    `User location: continent=${continent}, country=${country}, region=${region}, colo=${colo}`
+  );
   const ALL_ENDPOINTS = [
     { name: "relay-WNAM-primary", hint: "wnam" },
     { name: "relay-ENAM-primary", hint: "enam" },
@@ -4650,283 +4832,283 @@ async function getOptimalDO(cf, env, url) {
   ];
   const countryToHint = {
     // North America
-    "US": "enam",
-    "CA": "enam",
-    "MX": "wnam",
+    US: "enam",
+    CA: "enam",
+    MX: "wnam",
     // Central America & Caribbean (route to WNAM)
-    "GT": "wnam",
-    "BZ": "wnam",
-    "SV": "wnam",
-    "HN": "wnam",
-    "NI": "wnam",
-    "CR": "wnam",
-    "PA": "wnam",
-    "CU": "wnam",
-    "DO": "wnam",
-    "HT": "wnam",
-    "JM": "wnam",
-    "PR": "wnam",
-    "TT": "wnam",
-    "BB": "wnam",
+    GT: "wnam",
+    BZ: "wnam",
+    SV: "wnam",
+    HN: "wnam",
+    NI: "wnam",
+    CR: "wnam",
+    PA: "wnam",
+    CU: "wnam",
+    DO: "wnam",
+    HT: "wnam",
+    JM: "wnam",
+    PR: "wnam",
+    TT: "wnam",
+    BB: "wnam",
     // South America
-    "BR": "sam",
-    "AR": "sam",
-    "CL": "sam",
-    "CO": "sam",
-    "PE": "sam",
-    "VE": "sam",
-    "EC": "sam",
-    "BO": "sam",
-    "PY": "sam",
-    "UY": "sam",
-    "GY": "sam",
-    "SR": "sam",
-    "GF": "sam",
+    BR: "sam",
+    AR: "sam",
+    CL: "sam",
+    CO: "sam",
+    PE: "sam",
+    VE: "sam",
+    EC: "sam",
+    BO: "sam",
+    PY: "sam",
+    UY: "sam",
+    GY: "sam",
+    SR: "sam",
+    GF: "sam",
     // Western Europe
-    "GB": "weur",
-    "FR": "weur",
-    "DE": "weur",
-    "ES": "weur",
-    "IT": "weur",
-    "NL": "weur",
-    "BE": "weur",
-    "CH": "weur",
-    "AT": "weur",
-    "PT": "weur",
-    "IE": "weur",
-    "LU": "weur",
-    "MC": "weur",
-    "AD": "weur",
-    "SM": "weur",
-    "VA": "weur",
-    "LI": "weur",
-    "MT": "weur",
+    GB: "weur",
+    FR: "weur",
+    DE: "weur",
+    ES: "weur",
+    IT: "weur",
+    NL: "weur",
+    BE: "weur",
+    CH: "weur",
+    AT: "weur",
+    PT: "weur",
+    IE: "weur",
+    LU: "weur",
+    MC: "weur",
+    AD: "weur",
+    SM: "weur",
+    VA: "weur",
+    LI: "weur",
+    MT: "weur",
     // Nordic countries (route to WEUR)
-    "SE": "weur",
-    "NO": "weur",
-    "DK": "weur",
-    "FI": "weur",
-    "IS": "weur",
+    SE: "weur",
+    NO: "weur",
+    DK: "weur",
+    FI: "weur",
+    IS: "weur",
     // Eastern Europe
-    "PL": "eeur",
-    "RU": "eeur",
-    "UA": "eeur",
-    "RO": "eeur",
-    "CZ": "eeur",
-    "HU": "eeur",
-    "GR": "eeur",
-    "BG": "eeur",
-    "SK": "eeur",
-    "HR": "eeur",
-    "RS": "eeur",
-    "SI": "eeur",
-    "BA": "eeur",
-    "AL": "eeur",
-    "MK": "eeur",
-    "ME": "eeur",
-    "XK": "eeur",
-    "BY": "eeur",
-    "MD": "eeur",
-    "LT": "eeur",
-    "LV": "eeur",
-    "EE": "eeur",
-    "CY": "eeur",
+    PL: "eeur",
+    RU: "eeur",
+    UA: "eeur",
+    RO: "eeur",
+    CZ: "eeur",
+    HU: "eeur",
+    GR: "eeur",
+    BG: "eeur",
+    SK: "eeur",
+    HR: "eeur",
+    RS: "eeur",
+    SI: "eeur",
+    BA: "eeur",
+    AL: "eeur",
+    MK: "eeur",
+    ME: "eeur",
+    XK: "eeur",
+    BY: "eeur",
+    MD: "eeur",
+    LT: "eeur",
+    LV: "eeur",
+    EE: "eeur",
+    CY: "eeur",
     // Asia-Pacific
-    "JP": "apac",
-    "CN": "apac",
-    "KR": "apac",
-    "IN": "apac",
-    "SG": "apac",
-    "TH": "apac",
-    "ID": "apac",
-    "MY": "apac",
-    "VN": "apac",
-    "PH": "apac",
-    "TW": "apac",
-    "HK": "apac",
-    "MO": "apac",
-    "KH": "apac",
-    "LA": "apac",
-    "MM": "apac",
-    "BD": "apac",
-    "LK": "apac",
-    "NP": "apac",
-    "BT": "apac",
-    "MV": "apac",
-    "PK": "apac",
-    "AF": "apac",
-    "MN": "apac",
-    "KP": "apac",
-    "BN": "apac",
-    "TL": "apac",
-    "PG": "apac",
-    "FJ": "apac",
-    "SB": "apac",
-    "VU": "apac",
-    "NC": "apac",
-    "PF": "apac",
-    "WS": "apac",
-    "TO": "apac",
-    "KI": "apac",
-    "PW": "apac",
-    "MH": "apac",
-    "FM": "apac",
-    "NR": "apac",
-    "TV": "apac",
-    "CK": "apac",
-    "NU": "apac",
-    "TK": "apac",
-    "GU": "apac",
-    "MP": "apac",
-    "AS": "apac",
+    JP: "apac",
+    CN: "apac",
+    KR: "apac",
+    IN: "apac",
+    SG: "apac",
+    TH: "apac",
+    ID: "apac",
+    MY: "apac",
+    VN: "apac",
+    PH: "apac",
+    TW: "apac",
+    HK: "apac",
+    MO: "apac",
+    KH: "apac",
+    LA: "apac",
+    MM: "apac",
+    BD: "apac",
+    LK: "apac",
+    NP: "apac",
+    BT: "apac",
+    MV: "apac",
+    PK: "apac",
+    AF: "apac",
+    MN: "apac",
+    KP: "apac",
+    BN: "apac",
+    TL: "apac",
+    PG: "apac",
+    FJ: "apac",
+    SB: "apac",
+    VU: "apac",
+    NC: "apac",
+    PF: "apac",
+    WS: "apac",
+    TO: "apac",
+    KI: "apac",
+    PW: "apac",
+    MH: "apac",
+    FM: "apac",
+    NR: "apac",
+    TV: "apac",
+    CK: "apac",
+    NU: "apac",
+    TK: "apac",
+    GU: "apac",
+    MP: "apac",
+    AS: "apac",
     // Oceania
-    "AU": "oc",
-    "NZ": "oc",
+    AU: "oc",
+    NZ: "oc",
     // Middle East
-    "AE": "me",
-    "SA": "me",
-    "IL": "me",
-    "TR": "me",
-    "EG": "me",
-    "IQ": "me",
-    "IR": "me",
-    "SY": "me",
-    "JO": "me",
-    "LB": "me",
-    "KW": "me",
-    "QA": "me",
-    "BH": "me",
-    "OM": "me",
-    "YE": "me",
-    "PS": "me",
-    "GE": "me",
-    "AM": "me",
-    "AZ": "me",
+    AE: "me",
+    SA: "me",
+    IL: "me",
+    TR: "me",
+    EG: "me",
+    IQ: "me",
+    IR: "me",
+    SY: "me",
+    JO: "me",
+    LB: "me",
+    KW: "me",
+    QA: "me",
+    BH: "me",
+    OM: "me",
+    YE: "me",
+    PS: "me",
+    GE: "me",
+    AM: "me",
+    AZ: "me",
     // Africa
-    "ZA": "afr",
-    "NG": "afr",
-    "KE": "afr",
-    "MA": "afr",
-    "TN": "afr",
-    "DZ": "afr",
-    "LY": "afr",
-    "ET": "afr",
-    "GH": "afr",
-    "TZ": "afr",
-    "UG": "afr",
-    "SD": "afr",
-    "AO": "afr",
-    "MZ": "afr",
-    "MG": "afr",
-    "CM": "afr",
-    "CI": "afr",
-    "NE": "afr",
-    "BF": "afr",
-    "ML": "afr",
-    "MW": "afr",
-    "ZM": "afr",
-    "SN": "afr",
-    "SO": "afr",
-    "TD": "afr",
-    "ZW": "afr",
-    "GN": "afr",
-    "RW": "afr",
-    "BJ": "afr",
-    "BI": "afr",
-    "TG": "afr",
-    "SL": "afr",
-    "LR": "afr",
-    "MR": "afr",
-    "CF": "afr",
-    "ER": "afr",
-    "GM": "afr",
-    "BW": "afr",
-    "NA": "afr",
-    "GA": "afr",
-    "LS": "afr",
-    "GW": "afr",
-    "GQ": "afr",
-    "MU": "afr",
-    "SZ": "afr",
-    "DJ": "afr",
-    "KM": "afr",
-    "CV": "afr",
-    "SC": "afr",
-    "ST": "afr",
-    "SS": "afr",
-    "EH": "afr",
-    "CG": "afr",
-    "CD": "afr",
+    ZA: "afr",
+    NG: "afr",
+    KE: "afr",
+    MA: "afr",
+    TN: "afr",
+    DZ: "afr",
+    LY: "afr",
+    ET: "afr",
+    GH: "afr",
+    TZ: "afr",
+    UG: "afr",
+    SD: "afr",
+    AO: "afr",
+    MZ: "afr",
+    MG: "afr",
+    CM: "afr",
+    CI: "afr",
+    NE: "afr",
+    BF: "afr",
+    ML: "afr",
+    MW: "afr",
+    ZM: "afr",
+    SN: "afr",
+    SO: "afr",
+    TD: "afr",
+    ZW: "afr",
+    GN: "afr",
+    RW: "afr",
+    BJ: "afr",
+    BI: "afr",
+    TG: "afr",
+    SL: "afr",
+    LR: "afr",
+    MR: "afr",
+    CF: "afr",
+    ER: "afr",
+    GM: "afr",
+    BW: "afr",
+    NA: "afr",
+    GA: "afr",
+    LS: "afr",
+    GW: "afr",
+    GQ: "afr",
+    MU: "afr",
+    SZ: "afr",
+    DJ: "afr",
+    KM: "afr",
+    CV: "afr",
+    SC: "afr",
+    ST: "afr",
+    SS: "afr",
+    EH: "afr",
+    CG: "afr",
+    CD: "afr",
     // Central Asia (route to APAC)
-    "KZ": "apac",
-    "UZ": "apac",
-    "TM": "apac",
-    "TJ": "apac",
-    "KG": "apac"
+    KZ: "apac",
+    UZ: "apac",
+    TM: "apac",
+    TJ: "apac",
+    KG: "apac"
   };
   const usStateToHint = {
     // Western states -> WNAM
-    "California": "wnam",
-    "Oregon": "wnam",
-    "Washington": "wnam",
-    "Nevada": "wnam",
-    "Arizona": "wnam",
-    "Utah": "wnam",
-    "Idaho": "wnam",
-    "Montana": "wnam",
-    "Wyoming": "wnam",
-    "Colorado": "wnam",
+    California: "wnam",
+    Oregon: "wnam",
+    Washington: "wnam",
+    Nevada: "wnam",
+    Arizona: "wnam",
+    Utah: "wnam",
+    Idaho: "wnam",
+    Montana: "wnam",
+    Wyoming: "wnam",
+    Colorado: "wnam",
     "New Mexico": "wnam",
-    "Alaska": "wnam",
-    "Hawaii": "wnam",
+    Alaska: "wnam",
+    Hawaii: "wnam",
     // Eastern states -> ENAM
     "New York": "enam",
-    "Florida": "enam",
-    "Texas": "enam",
-    "Illinois": "enam",
-    "Georgia": "enam",
-    "Pennsylvania": "enam",
-    "Ohio": "enam",
-    "Michigan": "enam",
+    Florida: "enam",
+    Texas: "enam",
+    Illinois: "enam",
+    Georgia: "enam",
+    Pennsylvania: "enam",
+    Ohio: "enam",
+    Michigan: "enam",
     "North Carolina": "enam",
-    "Virginia": "enam",
-    "Massachusetts": "enam",
+    Virginia: "enam",
+    Massachusetts: "enam",
     "New Jersey": "enam",
-    "Maryland": "enam",
-    "Connecticut": "enam",
-    "Maine": "enam",
+    Maryland: "enam",
+    Connecticut: "enam",
+    Maine: "enam",
     "New Hampshire": "enam",
-    "Vermont": "enam",
+    Vermont: "enam",
     "Rhode Island": "enam",
     "South Carolina": "enam",
-    "Tennessee": "enam",
-    "Alabama": "enam",
-    "Mississippi": "enam",
-    "Louisiana": "enam",
-    "Arkansas": "enam",
-    "Missouri": "enam",
-    "Iowa": "enam",
-    "Minnesota": "enam",
-    "Wisconsin": "enam",
-    "Indiana": "enam",
-    "Kentucky": "enam",
+    Tennessee: "enam",
+    Alabama: "enam",
+    Mississippi: "enam",
+    Louisiana: "enam",
+    Arkansas: "enam",
+    Missouri: "enam",
+    Iowa: "enam",
+    Minnesota: "enam",
+    Wisconsin: "enam",
+    Indiana: "enam",
+    Kentucky: "enam",
     "West Virginia": "enam",
-    "Delaware": "enam",
-    "Oklahoma": "enam",
-    "Kansas": "enam",
-    "Nebraska": "enam",
+    Delaware: "enam",
+    Oklahoma: "enam",
+    Kansas: "enam",
+    Nebraska: "enam",
     "South Dakota": "enam",
     "North Dakota": "enam",
     // DC
     "District of Columbia": "enam"
   };
   const continentToHint = {
-    "NA": "enam",
-    "SA": "sam",
-    "EU": "weur",
-    "AS": "apac",
-    "AF": "afr",
-    "OC": "oc"
+    NA: "enam",
+    SA: "sam",
+    EU: "weur",
+    AS: "apac",
+    AF: "afr",
+    OC: "oc"
   };
   let bestHint;
   if (country === "US" && region && region !== "unknown") {
@@ -4973,7 +5155,9 @@ __name(getDatabaseSizeBytes, "getDatabaseSizeBytes");
 async function pruneOldEvents(session, targetSizeBytes) {
   let totalEventsDeleted = 0;
   let currentSize = await getDatabaseSizeBytes(session);
-  console.log(`Starting database pruning. Current size: ${(currentSize / (1024 * 1024 * 1024)).toFixed(2)} GB, Target: ${(targetSizeBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`);
+  console.log(
+    `Starting database pruning. Current size: ${(currentSize / (1024 * 1024 * 1024)).toFixed(2)} GB, Target: ${(targetSizeBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+  );
   const protectedKindsArray = Array.from(pruneProtectedKinds2);
   const protectedKindsClause = protectedKindsArray.length > 0 ? `AND kind NOT IN (${protectedKindsArray.join(",")})` : "";
   while (currentSize > targetSizeBytes) {
@@ -5030,7 +5214,7 @@ var relay_worker_default = {
       if (url.pathname === "/") {
         if (request.headers.get("Upgrade") === "websocket") {
           const cf = request.cf;
-          const { stub, doName } = await getOptimalDO(cf, env, url);
+          const { stub, doName } = await getOptimalDO(cf, env);
           const newUrl = new URL(request.url);
           newUrl.searchParams.set("region", cf?.region || "unknown");
           newUrl.searchParams.set("colo", cf?.colo || "unknown");
@@ -5059,19 +5243,25 @@ var relay_worker_default = {
     }
   },
   // Scheduled handler for 24hr database maintenance (runs daily at 00:00 UTC)
-  async scheduled(event, env, ctx) {
+  async scheduled(_event, env, _ctx) {
     console.log("Running scheduled 24hr database maintenance...");
     try {
       const session = env.RELAY_DATABASE.withSession("first-primary");
       if (DB_PRUNING_ENABLED2) {
         const currentSizeBytes = await getDatabaseSizeBytes(session);
         const currentSizeGB = currentSizeBytes / (1024 * 1024 * 1024);
-        console.log(`Current database size: ${currentSizeGB.toFixed(2)} GB (threshold: ${DB_SIZE_THRESHOLD_GB2} GB)`);
+        console.log(
+          `Current database size: ${currentSizeGB.toFixed(2)} GB (threshold: ${DB_SIZE_THRESHOLD_GB2} GB)`
+        );
         if (currentSizeGB >= DB_SIZE_THRESHOLD_GB2) {
-          console.log(`Database size (${currentSizeGB.toFixed(2)} GB) exceeds threshold (${DB_SIZE_THRESHOLD_GB2} GB). Starting pruning...`);
+          console.log(
+            `Database size (${currentSizeGB.toFixed(2)} GB) exceeds threshold (${DB_SIZE_THRESHOLD_GB2} GB). Starting pruning...`
+          );
           const targetSizeBytes = DB_PRUNE_TARGET_GB2 * 1024 * 1024 * 1024;
           const pruneResult = await pruneOldEvents(session, targetSizeBytes);
-          console.log(`Pruning completed. Deleted ${pruneResult.eventsDeleted} events. Final size: ${(pruneResult.finalSizeBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`);
+          console.log(
+            `Pruning completed. Deleted ${pruneResult.eventsDeleted} events. Final size: ${(pruneResult.finalSizeBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+          );
         } else {
           console.log("Database size is within limits. No pruning needed.");
         }
@@ -5096,10 +5286,17 @@ var relay_worker_default = {
 };
 
 // src/durable-object.ts
+var MAX_PROCESSED_EVENTS = 1e4;
+var PROCESSED_EVENTS_TTL = 5 * 60 * 1e3;
 var _RelayWebSocket = class _RelayWebSocket {
   constructor(state, env) {
     this.processedEvents = /* @__PURE__ */ new Map();
     // eventId -> timestamp
+    this.principalQuotas = new PrincipalQuotaRegistry(
+      PUBKEY_RATE_LIMIT,
+      REQ_RATE_LIMIT,
+      MAX_PRINCIPAL_SUBSCRIPTIONS
+    );
     // Query cache for REQ messages
     this.queryCache = /* @__PURE__ */ new Map();
     this.QUERY_CACHE_TTL = 6e4;
@@ -5141,6 +5338,7 @@ var _RelayWebSocket = class _RelayWebSocket {
       await this.cleanup();
       return;
     }
+    this.cleanupProcessedEvents();
     const nextAlarm = now + this.IDLE_TIMEOUT;
     await this.state.storage.setAlarm(nextAlarm);
     console.log(`Next alarm scheduled for DO ${this.doName} in ${this.IDLE_TIMEOUT}ms`);
@@ -5154,8 +5352,33 @@ var _RelayWebSocket = class _RelayWebSocket {
     this.paymentCache.clear();
     this.processedEvents.clear();
     this.sessions.clear();
+    this.principalQuotas = new PrincipalQuotaRegistry(
+      PUBKEY_RATE_LIMIT,
+      REQ_RATE_LIMIT,
+      MAX_PRINCIPAL_SUBSCRIPTIONS
+    );
     await this.cleanupOrphanedSubscriptions();
     console.log(`Cleanup complete for DO ${this.doName}`);
+  }
+  // Clean up processedEvents map to prevent unbounded growth
+  cleanupProcessedEvents() {
+    const now = Date.now();
+    const cutoff = now - PROCESSED_EVENTS_TTL;
+    for (const [eventId, timestamp] of this.processedEvents) {
+      if (timestamp < cutoff) {
+        this.processedEvents.delete(eventId);
+      }
+    }
+    if (this.processedEvents.size > MAX_PROCESSED_EVENTS) {
+      const entries = Array.from(this.processedEvents.entries()).sort((a, b) => a[1] - b[1]);
+      const toRemove = this.processedEvents.size - MAX_PROCESSED_EVENTS;
+      for (let i = 0; i < toRemove; i++) {
+        this.processedEvents.delete(entries[i][0]);
+      }
+      console.log(
+        `Evicted ${toRemove} oldest processedEvents entries (over ${MAX_PROCESSED_EVENTS} limit)`
+      );
+    }
   }
   // Remove orphaned subscription data from storage
   async cleanupOrphanedSubscriptions() {
@@ -5227,11 +5450,30 @@ var _RelayWebSocket = class _RelayWebSocket {
       timestamp: Date.now()
     });
     if (this.paymentCache.size > 1e3) {
-      const sortedEntries = Array.from(this.paymentCache.entries()).sort((a, b) => a[1].timestamp - b[1].timestamp);
+      const sortedEntries = Array.from(this.paymentCache.entries()).sort(
+        (a, b) => a[1].timestamp - b[1].timestamp
+      );
       const toRemove = Math.floor(this.paymentCache.size * 0.2);
       for (let i = 0; i < toRemove; i++) {
         this.paymentCache.delete(sortedEntries[i][0]);
       }
+    }
+  }
+  async applyDurableQuota(request) {
+    try {
+      const id = this.env.PRINCIPAL_QUOTA.idFromName("global");
+      const response = await this.env.PRINCIPAL_QUOTA.get(id).fetch(
+        new Request("https://quota.internal/", {
+          method: "POST",
+          body: JSON.stringify(request)
+        })
+      );
+      if (!response.ok) return false;
+      const result = await response.json();
+      return result.allowed === true;
+    } catch (error) {
+      console.error("Durable quota coordinator failed:", error);
+      return false;
     }
   }
   // Helper to generate global cache key
@@ -5357,16 +5599,14 @@ var _RelayWebSocket = class _RelayWebSocket {
           this.queryCacheIndex.get(indexKey).add(cacheKey);
         }
       }
-      for (const [key, values] of Object.entries(filter)) {
-        if (key.startsWith("#") && Array.isArray(values)) {
-          const tagName = key.substring(1);
-          for (const value of values) {
-            const indexKey = `tag:${tagName}:${value}`;
-            if (!this.queryCacheIndex.has(indexKey)) {
-              this.queryCacheIndex.set(indexKey, /* @__PURE__ */ new Set());
-            }
-            this.queryCacheIndex.get(indexKey).add(cacheKey);
+      for (const [key, values] of getTagFilterEntries(filter)) {
+        const tagName = key.substring(1);
+        for (const value of values) {
+          const indexKey = `tag:${tagName}:${value}`;
+          if (!this.queryCacheIndex.has(indexKey)) {
+            this.queryCacheIndex.set(indexKey, /* @__PURE__ */ new Set());
           }
+          this.queryCacheIndex.get(indexKey).add(cacheKey);
         }
       }
     }
@@ -5409,7 +5649,9 @@ var _RelayWebSocket = class _RelayWebSocket {
       this.removeFromCacheIndex(key);
     }
     if (keysToInvalidate.size > 0) {
-      console.log(`Invalidated ${keysToInvalidate.size} local cache entries for event ${event.id} (kind:${event.kind}, author:${event.pubkey.substring(0, 8)}...)`);
+      console.log(
+        `Invalidated ${keysToInvalidate.size} local cache entries for event ${event.id} (kind:${event.kind}, author:${event.pubkey.substring(0, 8)}...)`
+      );
     }
   }
   async fetch(request) {
@@ -5427,11 +5669,20 @@ var _RelayWebSocket = class _RelayWebSocket {
     }
     this.region = url.searchParams.get("region") || this.region || "unknown";
     const colo = url.searchParams.get("colo") || "default";
-    console.log(`WebSocket connection to DO: ${this.doName} (region: ${this.region}, colo: ${colo})`);
-    const webSocketPair = new WebSocketPair();
-    const [client, server] = Object.values(webSocketPair);
+    console.log(
+      `WebSocket connection to DO: ${this.doName} (region: ${this.region}, colo: ${colo})`
+    );
     const sessionId = crypto.randomUUID();
     const host = request.headers.get("host") || url.host;
+    const relayUrl = normalizeAuthRelayUrl(
+      `${url.protocol === "http:" ? "ws:" : "wss:"}//${host}${url.pathname}`
+    );
+    if (!relayUrl) return new Response("Invalid relay URL", { status: 400 });
+    if (!await this.applyDurableQuota({ action: "reserve-preauth", sessionId })) {
+      return new Response("Connection quota exceeded", { status: 429 });
+    }
+    const webSocketPair = new WebSocketPair();
+    const [client, server] = Object.values(webSocketPair);
     const session = {
       id: sessionId,
       webSocket: server,
@@ -5440,14 +5691,15 @@ var _RelayWebSocket = class _RelayWebSocket {
       reqRateLimiter: new RateLimiter(REQ_RATE_LIMIT.rate, REQ_RATE_LIMIT.capacity),
       bookmark: "first-unconstrained",
       host,
-      challenge: AUTH_REQUIRED ? this.generateAuthChallenge() : void 0,
-      authenticatedPubkeys: /* @__PURE__ */ new Set()
+      relayUrl,
+      challenge: AUTH_REQUIRED ? this.generateAuthChallenge() : void 0
     };
     this.sessions.set(sessionId, session);
     const attachment = {
       sessionId,
       bookmark: session.bookmark,
       host,
+      relayUrl,
       doName: this.doName
     };
     server.serializeAttachment(attachment);
@@ -5486,11 +5738,21 @@ var _RelayWebSocket = class _RelayWebSocket {
         reqRateLimiter: new RateLimiter(REQ_RATE_LIMIT.rate, REQ_RATE_LIMIT.capacity),
         bookmark: attachment.bookmark,
         host: attachment.host,
-        // NIP-42: Generate new challenge after hibernation (old one is lost)
-        challenge: AUTH_REQUIRED ? this.generateAuthChallenge() : void 0,
-        authenticatedPubkeys: /* @__PURE__ */ new Set()
+        relayUrl: attachment.relayUrl,
+        // Re-authenticate only sessions that were not already bound.
+        challenge: AUTH_REQUIRED && !attachment.authenticatedPubkey ? this.generateAuthChallenge() : void 0,
+        authenticatedPubkey: attachment.authenticatedPubkey
       };
       this.sessions.set(attachment.sessionId, session);
+      if (attachment.authenticatedPubkey) {
+        for (const subscriptionId of subscriptions.keys()) {
+          this.principalQuotas.reserveSubscription(
+            attachment.authenticatedPubkey,
+            attachment.sessionId,
+            subscriptionId
+          );
+        }
+      }
       if (AUTH_REQUIRED && session.challenge) {
         this.sendAuth(ws, session.challenge);
       }
@@ -5509,7 +5771,9 @@ var _RelayWebSocket = class _RelayWebSocket {
         sessionId: session.id,
         bookmark: session.bookmark,
         host: session.host,
+        relayUrl: session.relayUrl,
         doName: this.doName,
+        authenticatedPubkey: session.authenticatedPubkey,
         hasPaid: attachment.hasPaid
       };
       ws.serializeAttachment(updatedAttachment);
@@ -5522,11 +5786,17 @@ var _RelayWebSocket = class _RelayWebSocket {
       }
     }
   }
-  async webSocketClose(ws, code, reason, wasClean) {
+  async webSocketClose(ws, _code, _reason, _wasClean) {
     const attachment = ws.deserializeAttachment();
     if (attachment) {
       console.log(`WebSocket closed: ${attachment.sessionId} on DO ${this.doName}`);
       this.sessions.delete(attachment.sessionId);
+      this.principalQuotas.releaseSession(attachment.sessionId);
+      await this.applyDurableQuota({
+        action: attachment.authenticatedPubkey ? "release-session" : "release-preauth",
+        ...attachment.authenticatedPubkey ? { principal: attachment.authenticatedPubkey } : {},
+        sessionId: attachment.sessionId
+      });
       await this.deleteSubscriptions(attachment.sessionId);
       const activeWebSockets = this.state.getWebSockets();
       if (activeWebSockets.length === 0) {
@@ -5540,6 +5810,12 @@ var _RelayWebSocket = class _RelayWebSocket {
     if (attachment) {
       console.error(`WebSocket error for session ${attachment.sessionId}:`, error);
       this.sessions.delete(attachment.sessionId);
+      this.principalQuotas.releaseSession(attachment.sessionId);
+      await this.applyDurableQuota({
+        action: attachment.authenticatedPubkey ? "release-session" : "release-preauth",
+        ...attachment.authenticatedPubkey ? { principal: attachment.authenticatedPubkey } : {},
+        sessionId: attachment.sessionId
+      });
     }
   }
   async handleDOBroadcast(request) {
@@ -5553,20 +5829,19 @@ var _RelayWebSocket = class _RelayWebSocket {
       console.log(`DO ${this.doName} received event ${event.id} from ${sourceDoId}`);
       await this.broadcastToLocalSessions(event);
       const fiveMinutesAgo = Date.now() - 3e5;
-      let cleaned = 0;
       for (const [eventId, timestamp] of this.processedEvents) {
-        if (timestamp < fiveMinutesAgo) {
-          this.processedEvents.delete(eventId);
-          cleaned++;
-        }
+        if (timestamp < fiveMinutesAgo) this.processedEvents.delete(eventId);
       }
       return new Response(JSON.stringify({ success: true }));
     } catch (error) {
       console.error("Error handling DO broadcast:", error);
-      return new Response(JSON.stringify({ success: false, error: error.message }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" }
-      });
+      return new Response(
+        JSON.stringify({ success: false, error: "internal event processing failed" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
     }
   }
   async handleMessage(session, message) {
@@ -5598,26 +5873,41 @@ var _RelayWebSocket = class _RelayWebSocket {
     }
   }
   async handleEvent(session, event) {
+    let eventId = "";
     try {
-      if (!event || typeof event !== "object") {
-        this.sendOK(session.webSocket, "", false, "invalid: event object required");
+      if (!isNostrEvent(event)) {
+        this.sendOK(session.webSocket, "", false, "invalid: malformed event");
         return;
       }
-      if (!event.id || !event.pubkey || !event.sig || !event.created_at || event.kind === void 0 || !Array.isArray(event.tags) || event.content === void 0 || event.content === null) {
-        this.sendOK(session.webSocket, event.id || "", false, "invalid: missing required fields");
-        return;
-      }
+      eventId = event.id;
       if (event.kind === 22242) {
-        this.sendOK(session.webSocket, event.id, false, "invalid: kind 22242 events are for authentication only");
+        this.sendOK(
+          session.webSocket,
+          event.id,
+          false,
+          "invalid: kind 22242 events are for authentication only"
+        );
         return;
       }
-      if (AUTH_REQUIRED && !session.authenticatedPubkeys.has(event.pubkey)) {
-        this.sendOK(session.webSocket, event.id, false, "auth-required: authenticate to publish events");
+      const writeAuthorization = authorizeEventWrite(event, session.authenticatedPubkey);
+      if (!writeAuthorization.allowed) {
+        this.sendOK(
+          session.webSocket,
+          event.id,
+          false,
+          `auth-required: ${writeAuthorization.reason}`
+        );
         return;
       }
+      const accountPrincipal = writeAuthorization.principal;
       if (!excludedRateLimitKinds.has(event.kind)) {
-        if (!session.pubkeyRateLimiter.removeToken()) {
-          console.log(`Rate limit exceeded for pubkey ${event.pubkey}`);
+        const locallyAllowed = this.principalQuotas.consumePublish(accountPrincipal);
+        const durablyAllowed = locallyAllowed && await this.applyDurableQuota({
+          action: "consume-publish",
+          principal: accountPrincipal
+        });
+        if (!durablyAllowed) {
+          console.log(`Rate limit exceeded for pubkey ${accountPrincipal}`);
           this.sendOK(session.webSocket, event.id, false, "rate-limited: slow down there chief");
           return;
         }
@@ -5629,16 +5919,21 @@ var _RelayWebSocket = class _RelayWebSocket {
         return;
       }
       if (PAY_TO_RELAY_ENABLED) {
-        let hasPaid = await this.getCachedPaymentStatus(event.pubkey);
+        let hasPaid = await this.getCachedPaymentStatus(accountPrincipal);
         if (hasPaid === null) {
-          hasPaid = await hasPaidForRelay(event.pubkey, this.env);
-          this.setCachedPaymentStatus(event.pubkey, hasPaid);
+          hasPaid = await hasPaidForRelay(accountPrincipal, this.env);
+          this.setCachedPaymentStatus(accountPrincipal, hasPaid);
         }
         if (!hasPaid) {
           const protocol = "https:";
           const relayUrl = `${protocol}//${session.host}`;
-          console.error(`Event denied. Pubkey ${event.pubkey} has not paid for relay access.`);
-          this.sendOK(session.webSocket, event.id, false, `blocked: payment required. Visit ${relayUrl} to pay for relay access.`);
+          console.error(`Event denied. Pubkey ${accountPrincipal} has not paid for relay access.`);
+          this.sendOK(
+            session.webSocket,
+            event.id,
+            false,
+            `blocked: payment required. Visit ${relayUrl} to pay for relay access.`
+          );
           return;
         }
       }
@@ -5649,12 +5944,22 @@ var _RelayWebSocket = class _RelayWebSocket {
       }
       if (!isEventKindAllowed(event.kind)) {
         console.error(`Event denied. Event kind ${event.kind} is not allowed.`);
-        this.sendOK(session.webSocket, event.id, false, `blocked: event kind ${event.kind} not allowed`);
+        this.sendOK(
+          session.webSocket,
+          event.id,
+          false,
+          `blocked: event kind ${event.kind} not allowed`
+        );
         return;
       }
       if (containsBlockedContent(event)) {
         console.error("Event denied. Content contains blocked phrases.");
-        this.sendOK(session.webSocket, event.id, false, "blocked: content contains blocked phrases");
+        this.sendOK(
+          session.webSocket,
+          event.id,
+          false,
+          "blocked: content contains blocked phrases"
+        );
         return;
       }
       for (const tag of event.tags) {
@@ -5664,7 +5969,7 @@ var _RelayWebSocket = class _RelayWebSocket {
           return;
         }
       }
-      const result = await processEvent(event, session.id, this.env);
+      const result = await processEvent(event, this.env);
       if (result.bookmark) {
         session.bookmark = result.bookmark;
       }
@@ -5679,37 +5984,45 @@ var _RelayWebSocket = class _RelayWebSocket {
       }
     } catch (error) {
       console.error("Error handling event:", error);
-      this.sendOK(session.webSocket, event?.id || "", false, `error: ${error.message}`);
+      this.sendOK(session.webSocket, eventId, false, "error: internal event processing failed");
     }
   }
   async handleReq(session, message) {
     const [_, subscriptionId, ...filters] = message;
     if (!subscriptionId || typeof subscriptionId !== "string" || subscriptionId === "" || subscriptionId.length > 64) {
-      this.sendError(session.webSocket, "Invalid subscription ID: must be non-empty string of max 64 chars");
+      this.sendError(
+        session.webSocket,
+        "Invalid subscription ID: must be non-empty string of max 64 chars"
+      );
       return;
     }
-    if (AUTH_REQUIRED && session.authenticatedPubkeys.size === 0) {
-      this.sendClosed(session.webSocket, subscriptionId, "auth-required: authentication required to subscribe");
-      return;
-    }
-    if (!session.reqRateLimiter.removeToken()) {
-      console.error(`REQ rate limit exceeded for subscription: ${subscriptionId}`);
-      this.sendClosed(session.webSocket, subscriptionId, "rate-limited: slow down there chief");
+    if (AUTH_REQUIRED && !session.authenticatedPubkey) {
+      this.sendClosed(
+        session.webSocket,
+        subscriptionId,
+        "auth-required: authentication required to subscribe"
+      );
       return;
     }
     if (filters.length === 0) {
       this.sendClosed(session.webSocket, subscriptionId, "error: at least one filter required");
       return;
     }
-    for (const filter of filters) {
-      if (typeof filter !== "object" || filter === null) {
+    const validatedFilters = [];
+    for (const value of filters) {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) {
         this.sendClosed(session.webSocket, subscriptionId, "invalid: filter must be an object");
         return;
       }
+      const filter = value;
       if (filter.ids) {
         for (const id of filter.ids) {
           if (!/^[a-f0-9]{64}$/.test(id)) {
-            this.sendClosed(session.webSocket, subscriptionId, `invalid: Invalid event ID format: ${id}`);
+            this.sendClosed(
+              session.webSocket,
+              subscriptionId,
+              `invalid: Invalid event ID format: ${id}`
+            );
             return;
           }
         }
@@ -5717,7 +6030,11 @@ var _RelayWebSocket = class _RelayWebSocket {
       if (filter.authors) {
         for (const author of filter.authors) {
           if (!/^[a-f0-9]{64}$/.test(author)) {
-            this.sendClosed(session.webSocket, subscriptionId, `invalid: Invalid author pubkey format: ${author}`);
+            this.sendClosed(
+              session.webSocket,
+              subscriptionId,
+              `invalid: Invalid author pubkey format: ${author}`
+            );
             return;
           }
         }
@@ -5726,12 +6043,20 @@ var _RelayWebSocket = class _RelayWebSocket {
         const blockedKinds = filter.kinds.filter((kind) => !isEventKindAllowed(kind));
         if (blockedKinds.length > 0) {
           console.error(`Blocked kinds in subscription: ${blockedKinds.join(", ")}`);
-          this.sendClosed(session.webSocket, subscriptionId, `blocked: kinds ${blockedKinds.join(", ")} not allowed`);
+          this.sendClosed(
+            session.webSocket,
+            subscriptionId,
+            `blocked: kinds ${blockedKinds.join(", ")} not allowed`
+          );
           return;
         }
       }
       if (filter.ids && filter.ids.length > 5e3) {
-        this.sendClosed(session.webSocket, subscriptionId, "invalid: too many event IDs (max 5000)");
+        this.sendClosed(
+          session.webSocket,
+          subscriptionId,
+          "invalid: too many event IDs (max 5000)"
+        );
         return;
       }
       if (filter.limit && filter.limit > 500) {
@@ -5739,12 +6064,67 @@ var _RelayWebSocket = class _RelayWebSocket {
       } else if (!filter.limit) {
         filter.limit = 500;
       }
+      validatedFilters.push(filter);
     }
-    session.subscriptions.set(subscriptionId, filters);
+    const readAuthorization = authorizeReadFilters(validatedFilters, session.authenticatedPubkey);
+    if (!readAuthorization.allowed) {
+      this.sendClosed(session.webSocket, subscriptionId, `blocked: ${readAuthorization.reason}`);
+      return;
+    }
+    const locallyAllowed = this.principalQuotas.consumeRequest(readAuthorization.principal);
+    const durablyAllowed = locallyAllowed && await this.applyDurableQuota({
+      action: "consume-request",
+      principal: readAuthorization.principal
+    });
+    if (!durablyAllowed) {
+      console.error(`REQ rate limit exceeded for principal ${readAuthorization.principal}`);
+      this.sendClosed(session.webSocket, subscriptionId, "rate-limited: slow down there chief");
+      return;
+    }
+    if (PAY_TO_RELAY_ENABLED) {
+      let hasPaid = await this.getCachedPaymentStatus(readAuthorization.principal);
+      if (hasPaid === null) {
+        hasPaid = await hasPaidForRelay(readAuthorization.principal, this.env);
+        this.setCachedPaymentStatus(readAuthorization.principal, hasPaid);
+      }
+      if (!hasPaid) {
+        this.sendClosed(session.webSocket, subscriptionId, "blocked: payment required");
+        return;
+      }
+    }
+    const reservedLocally = this.principalQuotas.reserveSubscription(
+      readAuthorization.principal,
+      session.id,
+      subscriptionId
+    );
+    const reservedDurably = reservedLocally && await this.applyDurableQuota({
+      action: "reserve-subscription",
+      principal: readAuthorization.principal,
+      sessionId: session.id,
+      subscriptionId
+    });
+    if (!reservedDurably) {
+      if (reservedLocally) {
+        this.principalQuotas.releaseSubscription(
+          readAuthorization.principal,
+          session.id,
+          subscriptionId
+        );
+      }
+      this.sendClosed(
+        session.webSocket,
+        subscriptionId,
+        "rate-limited: subscription quota exceeded"
+      );
+      return;
+    }
+    session.subscriptions.set(subscriptionId, validatedFilters);
     await this.saveSubscriptions(session.id, session.subscriptions);
-    console.log(`New subscription ${subscriptionId} for session ${session.id} on DO ${this.doName}`);
+    console.log(
+      `New subscription ${subscriptionId} for session ${session.id} on DO ${this.doName}`
+    );
     try {
-      const result = await this.getCachedOrQuery(filters, session.bookmark);
+      const result = await this.getCachedOrQuery(validatedFilters, session.bookmark);
       if (result.bookmark) {
         session.bookmark = result.bookmark;
       }
@@ -5754,18 +6134,37 @@ var _RelayWebSocket = class _RelayWebSocket {
       this.sendEOSE(session.webSocket, subscriptionId);
     } catch (error) {
       console.error(`Error processing REQ for subscription ${subscriptionId}:`, error);
-      this.sendClosed(session.webSocket, subscriptionId, "error: could not connect to the database");
+      this.sendClosed(
+        session.webSocket,
+        subscriptionId,
+        "error: could not connect to the database"
+      );
     }
   }
   async handleCloseSubscription(session, subscriptionId) {
-    if (!subscriptionId) {
+    if (typeof subscriptionId !== "string" || !subscriptionId) {
       this.sendError(session.webSocket, "Invalid subscription ID for CLOSE");
       return;
     }
     const deleted = session.subscriptions.delete(subscriptionId);
     if (deleted) {
+      if (session.authenticatedPubkey) {
+        this.principalQuotas.releaseSubscription(
+          session.authenticatedPubkey,
+          session.id,
+          subscriptionId
+        );
+        await this.applyDurableQuota({
+          action: "release-subscription",
+          principal: session.authenticatedPubkey,
+          sessionId: session.id,
+          subscriptionId
+        });
+      }
       await this.saveSubscriptions(session.id, session.subscriptions);
-      console.log(`Closed subscription ${subscriptionId} for session ${session.id} on DO ${this.doName}`);
+      console.log(
+        `Closed subscription ${subscriptionId} for session ${session.id} on DO ${this.doName}`
+      );
       this.sendClosed(session.webSocket, subscriptionId, "Subscription closed");
     } else {
       this.sendClosed(session.webSocket, subscriptionId, "Subscription not found");
@@ -5773,33 +6172,47 @@ var _RelayWebSocket = class _RelayWebSocket {
   }
   // NIP-42: Handle AUTH message from client
   async handleAuth(session, authEvent) {
+    let eventId = "";
     try {
-      if (!authEvent || typeof authEvent !== "object") {
-        this.sendOK(session.webSocket, "", false, "invalid: auth event object required");
+      if (!isNostrEvent(authEvent)) {
+        this.sendOK(session.webSocket, "", false, "invalid: malformed auth event");
         return;
       }
-      if (!authEvent.id || !authEvent.pubkey || !authEvent.sig || !authEvent.created_at || authEvent.kind === void 0 || !Array.isArray(authEvent.tags) || authEvent.content === void 0) {
-        this.sendOK(session.webSocket, authEvent.id || "", false, "invalid: missing required fields");
-        return;
-      }
+      eventId = authEvent.id;
       if (authEvent.kind !== 22242) {
-        this.sendOK(session.webSocket, authEvent.id, false, "invalid: auth event must be kind 22242");
+        this.sendOK(
+          session.webSocket,
+          authEvent.id,
+          false,
+          "invalid: auth event must be kind 22242"
+        );
         return;
       }
       const isValidSignature = await verifyEventSignature(authEvent);
       if (!isValidSignature) {
-        this.sendOK(session.webSocket, authEvent.id, false, "invalid: signature verification failed");
+        this.sendOK(
+          session.webSocket,
+          authEvent.id,
+          false,
+          "invalid: signature verification failed"
+        );
         return;
       }
       const now = Math.floor(Date.now() / 1e3);
       const timeDiff = Math.abs(now - authEvent.created_at);
       const timeoutSeconds = AUTH_TIMEOUT_MS / 1e3;
       if (timeDiff > timeoutSeconds) {
-        this.sendOK(session.webSocket, authEvent.id, false, "invalid: auth event created_at is too far from current time");
+        this.sendOK(
+          session.webSocket,
+          authEvent.id,
+          false,
+          "invalid: auth event created_at is too far from current time"
+        );
         return;
       }
-      const challengeTag = authEvent.tags.find((tag) => tag[0] === "challenge");
-      if (!challengeTag || !challengeTag[1]) {
+      const challengeTags = authEvent.tags.filter((tag) => tag[0] === "challenge");
+      const challengeTag = challengeTags[0];
+      if (challengeTags.length !== 1 || !challengeTag?.[1]) {
         this.sendOK(session.webSocket, authEvent.id, false, "invalid: missing challenge tag");
         return;
       }
@@ -5811,28 +6224,38 @@ var _RelayWebSocket = class _RelayWebSocket {
         this.sendOK(session.webSocket, authEvent.id, false, "invalid: challenge mismatch");
         return;
       }
-      const relayTag = authEvent.tags.find((tag) => tag[0] === "relay");
-      if (!relayTag || !relayTag[1]) {
+      const relayTags = authEvent.tags.filter((tag) => tag[0] === "relay");
+      const relayTag = relayTags[0];
+      if (relayTags.length !== 1 || !relayTag?.[1]) {
         this.sendOK(session.webSocket, authEvent.id, false, "invalid: missing relay tag");
         return;
       }
-      try {
-        const authRelayUrl = new URL(relayTag[1]);
-        const sessionHost = session.host.toLowerCase().replace(/:\d+$/, "");
-        const authHost = authRelayUrl.host.toLowerCase().replace(/:\d+$/, "");
-        if (authHost !== sessionHost) {
-          this.sendOK(session.webSocket, authEvent.id, false, `invalid: relay URL mismatch (expected ${sessionHost})`);
-          return;
-        }
-      } catch {
-        this.sendOK(session.webSocket, authEvent.id, false, "invalid: malformed relay URL");
+      const authRelayUrl = normalizeAuthRelayUrl(relayTag[1]);
+      if (!authRelayUrl || authRelayUrl !== session.relayUrl) {
+        this.sendOK(
+          session.webSocket,
+          authEvent.id,
+          false,
+          `invalid: relay URL mismatch (expected ${session.relayUrl})`
+        );
         return;
       }
-      session.authenticatedPubkeys.add(authEvent.pubkey);
+      if (session.authenticatedPubkey && session.authenticatedPubkey !== authEvent.pubkey) {
+        this.sendOK(session.webSocket, authEvent.id, false, "invalid: principal is already bound");
+        return;
+      }
+      session.authenticatedPubkey = authEvent.pubkey;
+      session.challenge = void 0;
+      await this.applyDurableQuota({ action: "release-preauth", sessionId: session.id });
       this.sendOK(session.webSocket, authEvent.id, true, "");
     } catch (error) {
       console.error("Error handling AUTH:", error);
-      this.sendOK(session.webSocket, authEvent?.id || "", false, `error: ${error.message}`);
+      this.sendOK(
+        session.webSocket,
+        eventId,
+        false,
+        "error: internal authentication processing failed"
+      );
     }
   }
   async broadcastEvent(event) {
@@ -5844,8 +6267,7 @@ var _RelayWebSocket = class _RelayWebSocket {
     const activeWebSockets = this.state.getWebSockets();
     for (const ws of activeWebSockets) {
       const attachment = ws.deserializeAttachment();
-      if (!attachment)
-        continue;
+      if (!attachment) continue;
       let session = this.sessions.get(attachment.sessionId);
       if (!session) {
         const subscriptions = await this.loadSubscriptions(attachment.sessionId);
@@ -5857,13 +6279,23 @@ var _RelayWebSocket = class _RelayWebSocket {
           reqRateLimiter: new RateLimiter(REQ_RATE_LIMIT.rate, REQ_RATE_LIMIT.capacity),
           bookmark: attachment.bookmark,
           host: attachment.host,
-          challenge: AUTH_REQUIRED ? this.generateAuthChallenge() : void 0,
-          authenticatedPubkeys: /* @__PURE__ */ new Set()
+          relayUrl: attachment.relayUrl,
+          challenge: AUTH_REQUIRED && !attachment.authenticatedPubkey ? this.generateAuthChallenge() : void 0,
+          authenticatedPubkey: attachment.authenticatedPubkey
         };
         this.sessions.set(attachment.sessionId, session);
+        if (attachment.authenticatedPubkey) {
+          for (const subscriptionId of subscriptions.keys()) {
+            this.principalQuotas.reserveSubscription(
+              attachment.authenticatedPubkey,
+              attachment.sessionId,
+              subscriptionId
+            );
+          }
+        }
       }
       for (const [subscriptionId, filters] of session.subscriptions) {
-        if (this.matchesFilters(event, filters)) {
+        if (authorizeReadFilters(filters, session.authenticatedPubkey).allowed && this.matchesFilters(event, filters)) {
           try {
             this.sendEvent(ws, subscriptionId, event);
             broadcastCount++;
@@ -5874,26 +6306,31 @@ var _RelayWebSocket = class _RelayWebSocket {
       }
     }
     if (broadcastCount > 0) {
-      console.log(`Event ${event.id} broadcast to ${broadcastCount} local subscriptions on DO ${this.doName}`);
+      console.log(
+        `Event ${event.id} broadcast to ${broadcastCount} local subscriptions on DO ${this.doName}`
+      );
     }
   }
   async broadcastToOtherDOs(event) {
     const broadcasts = [];
     for (const endpoint of _RelayWebSocket.ALLOWED_ENDPOINTS) {
-      if (endpoint === this.doName)
-        continue;
+      if (endpoint === this.doName) continue;
       broadcasts.push(this.sendToSpecificDO(endpoint, event));
     }
     const results = await Promise.allSettled(
-      broadcasts.map((p) => Promise.race([
-        p,
-        new Promise(
-          (_, reject) => setTimeout(() => reject(new Error("Broadcast timeout")), 3e3)
-        )
-      ]))
+      broadcasts.map(
+        (p) => Promise.race([
+          p,
+          new Promise(
+            (_, reject) => setTimeout(() => reject(new Error("Broadcast timeout")), 3e3)
+          )
+        ])
+      )
     );
     const successful = results.filter((r) => r.status === "fulfilled").length;
-    console.log(`Event ${event.id} broadcast from DO ${this.doName} to ${successful}/${broadcasts.length} remote DOs`);
+    console.log(
+      `Event ${event.id} broadcast from DO ${this.doName} to ${successful}/${broadcasts.length} remote DOs`
+    );
   }
   async sendToSpecificDO(doName, event) {
     try {
@@ -5905,13 +6342,15 @@ var _RelayWebSocket = class _RelayWebSocket {
       const stub = this.env.RELAY_WEBSOCKET.get(id, { locationHint });
       const url = new URL("https://internal/do-broadcast");
       url.searchParams.set("doName", doName);
-      return await stub.fetch(new Request(url.toString(), {
-        method: "POST",
-        body: JSON.stringify({
-          event,
-          sourceDoId: this.doId
+      return await stub.fetch(
+        new Request(url.toString(), {
+          method: "POST",
+          body: JSON.stringify({
+            event,
+            sourceDoId: this.doId
+          })
         })
-      }));
+      );
     } catch (error) {
       console.error(`Failed to broadcast to ${doName}:`, error);
       throw error;
@@ -5936,14 +6375,12 @@ var _RelayWebSocket = class _RelayWebSocket {
     if (filter.until && event.created_at > filter.until) {
       return false;
     }
-    for (const [key, values] of Object.entries(filter)) {
-      if (key.startsWith("#") && Array.isArray(values) && values.length > 0) {
-        const tagName = key.substring(1);
-        const eventTagValues = event.tags.filter((tag) => tag[0] === tagName).map((tag) => tag[1]);
-        const hasMatch = values.some((v) => eventTagValues.includes(v));
-        if (!hasMatch) {
-          return false;
-        }
+    for (const [key, values] of getTagFilterEntries(filter)) {
+      const tagName = key.substring(1);
+      const eventTagValues = event.tags.filter((tag) => tag[0] === tagName).map((tag) => tag[1]);
+      const hasMatch = values.some((v) => eventTagValues.includes(v));
+      if (!hasMatch) {
+        return false;
       }
     }
     return true;
@@ -6042,7 +6479,131 @@ _RelayWebSocket.ENDPOINT_HINTS = {
   // ME redirects to EEUR
 };
 var RelayWebSocket = _RelayWebSocket;
+
+// src/quota-object.ts
+var SUBSCRIPTION_LEASE_MS = 60 * 60 * 1e3;
+var PREAUTH_LEASE_MS = 10 * 60 * 1e3;
+var MAX_PREAUTH_CONNECTIONS = 500;
+function isQuotaRequest(value) {
+  if (!value || typeof value !== "object") return false;
+  const request = value;
+  return typeof request.action === "string";
+}
+__name(isQuotaRequest, "isQuotaRequest");
+var _PrincipalQuota = class _PrincipalQuota {
+  constructor(state) {
+    this.state = state;
+  }
+  async fetch(request) {
+    if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+    const body = await request.json();
+    if (!isQuotaRequest(body)) return Response.json({ allowed: false }, { status: 400 });
+    const allowed = await this.apply(body);
+    return Response.json({ allowed });
+  }
+  async apply(request) {
+    switch (request.action) {
+      case "consume-publish":
+        return request.principal ? this.consume("publish", request.principal, PUBKEY_RATE_LIMIT) : false;
+      case "consume-request":
+        return request.principal ? this.consume("request", request.principal, REQ_RATE_LIMIT) : false;
+      case "reserve-subscription":
+        return request.principal && request.sessionId && request.subscriptionId ? this.reserveSubscription(request.principal, request.sessionId, request.subscriptionId) : false;
+      case "release-subscription":
+        return request.principal && request.sessionId && request.subscriptionId ? this.releaseSubscription(request.principal, request.sessionId, request.subscriptionId) : false;
+      case "release-session":
+        return request.principal && request.sessionId ? this.releaseSession(request.principal, request.sessionId) : false;
+      case "reserve-preauth":
+        return request.sessionId ? this.reservePreAuth(request.sessionId) : false;
+      case "release-preauth":
+        return request.sessionId ? this.releasePreAuth(request.sessionId) : false;
+    }
+  }
+  async consume(type, principal, config) {
+    return this.state.storage.transaction(async (transaction) => {
+      const key = `rate:${type}:${principal}`;
+      const now = Date.now();
+      const previous = await transaction.get(key);
+      const elapsed = previous ? Math.max(0, now - previous.updatedAt) : 0;
+      const available = previous ? Math.min(config.capacity, previous.tokens + elapsed * config.rate) : config.capacity;
+      const allowed = available >= 1;
+      await transaction.put(key, {
+        tokens: allowed ? available - 1 : available,
+        updatedAt: now
+      });
+      return allowed;
+    });
+  }
+  async reserveSubscription(principal, sessionId, subscriptionId) {
+    return this.state.storage.transaction(async (transaction) => {
+      const key = `subscriptions:${principal}`;
+      const state = await transaction.get(key) ?? { entries: {} };
+      const now = Date.now();
+      for (const [entry2, expiresAt] of Object.entries(state.entries)) {
+        if (expiresAt <= now) delete state.entries[entry2];
+      }
+      const entry = `${sessionId}\0${subscriptionId}`;
+      if (!Object.prototype.hasOwnProperty.call(state.entries, entry) && Object.keys(state.entries).length >= MAX_PRINCIPAL_SUBSCRIPTIONS) {
+        return false;
+      }
+      state.entries[entry] = now + SUBSCRIPTION_LEASE_MS;
+      await transaction.put(key, state);
+      return true;
+    });
+  }
+  async releaseSubscription(principal, sessionId, subscriptionId) {
+    return this.state.storage.transaction(async (transaction) => {
+      const key = `subscriptions:${principal}`;
+      const state = await transaction.get(key);
+      if (!state) return true;
+      delete state.entries[`${sessionId}\0${subscriptionId}`];
+      await transaction.put(key, state);
+      return true;
+    });
+  }
+  async releaseSession(principal, sessionId) {
+    return this.state.storage.transaction(async (transaction) => {
+      const key = `subscriptions:${principal}`;
+      const state = await transaction.get(key);
+      if (!state) return true;
+      const prefix = `${sessionId}\0`;
+      for (const entry of Object.keys(state.entries)) {
+        if (entry.startsWith(prefix)) delete state.entries[entry];
+      }
+      await transaction.put(key, state);
+      return true;
+    });
+  }
+  async reservePreAuth(sessionId) {
+    return this.state.storage.transaction(async (transaction) => {
+      const key = "preauth";
+      const state = await transaction.get(key) ?? { entries: {} };
+      const now = Date.now();
+      for (const [entry, expiresAt] of Object.entries(state.entries)) {
+        if (expiresAt <= now) delete state.entries[entry];
+      }
+      if (!Object.prototype.hasOwnProperty.call(state.entries, sessionId) && Object.keys(state.entries).length >= MAX_PREAUTH_CONNECTIONS) {
+        return false;
+      }
+      state.entries[sessionId] = now + PREAUTH_LEASE_MS;
+      await transaction.put(key, state);
+      return true;
+    });
+  }
+  async releasePreAuth(sessionId) {
+    return this.state.storage.transaction(async (transaction) => {
+      const state = await transaction.get("preauth");
+      if (!state) return true;
+      delete state.entries[sessionId];
+      await transaction.put("preauth", state);
+      return true;
+    });
+  }
+};
+__name(_PrincipalQuota, "PrincipalQuota");
+var PrincipalQuota = _PrincipalQuota;
 export {
+  PrincipalQuota,
   RelayWebSocket,
   relay_worker_default as default
 };
@@ -6052,20 +6613,10 @@ export {
   (*! noble-hashes - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
 
 @noble/curves/esm/utils.js:
-  (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-
 @noble/curves/esm/abstract/modular.js:
-  (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-
 @noble/curves/esm/abstract/curve.js:
-  (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-
 @noble/curves/esm/abstract/weierstrass.js:
-  (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-
 @noble/curves/esm/_shortw_utils.js:
-  (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-
 @noble/curves/esm/secp256k1.js:
   (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
 */

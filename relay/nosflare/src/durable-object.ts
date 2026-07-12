@@ -1,6 +1,7 @@
 import {
 	AUTH_REQUIRED,
 	AUTH_TIMEOUT_MS,
+	MAX_PRINCIPAL_SUBSCRIPTIONS,
 	PAY_TO_RELAY_ENABLED,
 	PUBKEY_RATE_LIMIT,
 	REQ_RATE_LIMIT,
@@ -10,6 +11,9 @@ import {
 	isPubkeyAllowed,
 	isTagAllowed,
 } from './config';
+import { isNostrEvent } from './event-verifier';
+import { PrincipalQuotaRegistry } from './principal-quota';
+import { authorizeEventWrite, authorizeReadFilters, normalizeAuthRelayUrl } from './relay-policy';
 import { hasPaidForRelay, processEvent, queryEvents, verifyEventSignature } from './relay-worker';
 import {
 	type DOBroadcastRequest,
@@ -27,7 +31,9 @@ interface SessionAttachment {
 	sessionId: string;
 	bookmark: string;
 	host: string;
+	relayUrl: string;
 	doName: string;
+	authenticatedPubkey?: string;
 	hasPaid?: boolean;
 }
 
@@ -45,6 +51,13 @@ interface PaymentCacheEntry {
 	timestamp: number;
 }
 
+interface QuotaRequest {
+	action: string;
+	principal?: string;
+	sessionId?: string;
+	subscriptionId?: string;
+}
+
 // Maximum number of processed event entries to retain
 const MAX_PROCESSED_EVENTS = 10000;
 // TTL for processed event entries (5 minutes)
@@ -58,6 +71,11 @@ export class RelayWebSocket implements DurableObject {
 	private doId: string;
 	private doName: string;
 	private processedEvents: Map<string, number> = new Map(); // eventId -> timestamp
+	private principalQuotas = new PrincipalQuotaRegistry(
+		PUBKEY_RATE_LIMIT,
+		REQ_RATE_LIMIT,
+		MAX_PRINCIPAL_SUBSCRIPTIONS,
+	);
 
 	// Query cache for REQ messages
 	private queryCache: Map<string, CacheEntry> = new Map();
@@ -160,8 +178,13 @@ export class RelayWebSocket implements DurableObject {
 		this.paymentCache.clear();
 		this.processedEvents.clear();
 
-		// Clear sessions
+		// Clear sessions and identity-scoped quota state.
 		this.sessions.clear();
+		this.principalQuotas = new PrincipalQuotaRegistry(
+			PUBKEY_RATE_LIMIT,
+			REQ_RATE_LIMIT,
+			MAX_PRINCIPAL_SUBSCRIPTIONS,
+		);
 
 		// Clean up orphaned subscription storage data
 		await this.cleanupOrphanedSubscriptions();
@@ -294,6 +317,24 @@ export class RelayWebSocket implements DurableObject {
 			for (let i = 0; i < toRemove; i++) {
 				this.paymentCache.delete(sortedEntries[i][0]);
 			}
+		}
+	}
+
+	private async applyDurableQuota(request: QuotaRequest) {
+		try {
+			const id = this.env.PRINCIPAL_QUOTA.idFromName('global');
+			const response = await this.env.PRINCIPAL_QUOTA.get(id).fetch(
+				new Request('https://quota.internal/', {
+					method: 'POST',
+					body: JSON.stringify(request),
+				}),
+			);
+			if (!response.ok) return false;
+			const result = (await response.json()) as { allowed?: unknown };
+			return result.allowed === true;
+		} catch (error) {
+			console.error('Durable quota coordinator failed:', error);
+			return false;
 		}
 	}
 
@@ -565,12 +606,19 @@ export class RelayWebSocket implements DurableObject {
 			`WebSocket connection to DO: ${this.doName} (region: ${this.region}, colo: ${colo})`,
 		);
 
-		const webSocketPair = new WebSocketPair();
-		const [client, server] = Object.values(webSocketPair);
-
-		// Create session data
+		// Create session data and reserve a global unauthenticated connection lease.
 		const sessionId = crypto.randomUUID();
 		const host = request.headers.get('host') || url.host;
+		const relayUrl = normalizeAuthRelayUrl(
+			`${url.protocol === 'http:' ? 'ws:' : 'wss:'}//${host}${url.pathname}`,
+		);
+		if (!relayUrl) return new Response('Invalid relay URL', { status: 400 });
+		if (!(await this.applyDurableQuota({ action: 'reserve-preauth', sessionId }))) {
+			return new Response('Connection quota exceeded', { status: 429 });
+		}
+
+		const webSocketPair = new WebSocketPair();
+		const [client, server] = Object.values(webSocketPair);
 
 		// Create session object with NIP-42 auth state
 		const session: WebSocketSession = {
@@ -581,8 +629,8 @@ export class RelayWebSocket implements DurableObject {
 			reqRateLimiter: new RateLimiter(REQ_RATE_LIMIT.rate, REQ_RATE_LIMIT.capacity),
 			bookmark: 'first-unconstrained',
 			host,
+			relayUrl,
 			challenge: AUTH_REQUIRED ? this.generateAuthChallenge() : undefined,
-			authenticatedPubkeys: new Set(),
 		};
 		this.sessions.set(sessionId, session);
 
@@ -591,6 +639,7 @@ export class RelayWebSocket implements DurableObject {
 			sessionId,
 			bookmark: session.bookmark,
 			host,
+			relayUrl,
 			doName: this.doName,
 		};
 		server.serializeAttachment(attachment);
@@ -646,11 +695,24 @@ export class RelayWebSocket implements DurableObject {
 				reqRateLimiter: new RateLimiter(REQ_RATE_LIMIT.rate, REQ_RATE_LIMIT.capacity),
 				bookmark: attachment.bookmark,
 				host: attachment.host,
-				// NIP-42: Generate new challenge after hibernation (old one is lost)
-				challenge: AUTH_REQUIRED ? this.generateAuthChallenge() : undefined,
-				authenticatedPubkeys: new Set(),
+				relayUrl: attachment.relayUrl,
+				// Re-authenticate only sessions that were not already bound.
+				challenge:
+					AUTH_REQUIRED && !attachment.authenticatedPubkey
+						? this.generateAuthChallenge()
+						: undefined,
+				authenticatedPubkey: attachment.authenticatedPubkey,
 			};
 			this.sessions.set(attachment.sessionId, session);
+			if (attachment.authenticatedPubkey) {
+				for (const subscriptionId of subscriptions.keys()) {
+					this.principalQuotas.reserveSubscription(
+						attachment.authenticatedPubkey,
+						attachment.sessionId,
+						subscriptionId,
+					);
+				}
+			}
 
 			// Send new AUTH challenge after hibernation recovery
 			if (AUTH_REQUIRED && session.challenge) {
@@ -659,7 +721,7 @@ export class RelayWebSocket implements DurableObject {
 		}
 
 		try {
-			let parsedMessage: any;
+			let parsedMessage: unknown;
 
 			if (typeof message === 'string') {
 				parsedMessage = JSON.parse(message);
@@ -676,7 +738,9 @@ export class RelayWebSocket implements DurableObject {
 				sessionId: session.id,
 				bookmark: session.bookmark,
 				host: session.host,
+				relayUrl: session.relayUrl,
 				doName: this.doName,
+				authenticatedPubkey: session.authenticatedPubkey,
 				hasPaid: attachment.hasPaid,
 			};
 			ws.serializeAttachment(updatedAttachment);
@@ -692,14 +756,20 @@ export class RelayWebSocket implements DurableObject {
 
 	async webSocketClose(
 		ws: WebSocket,
-		code: number,
-		reason: string,
-		wasClean: boolean,
+		_code: number,
+		_reason: string,
+		_wasClean: boolean,
 	): Promise<void> {
 		const attachment = ws.deserializeAttachment() as SessionAttachment | null;
 		if (attachment) {
 			console.log(`WebSocket closed: ${attachment.sessionId} on DO ${this.doName}`);
 			this.sessions.delete(attachment.sessionId);
+			this.principalQuotas.releaseSession(attachment.sessionId);
+			await this.applyDurableQuota({
+				action: attachment.authenticatedPubkey ? 'release-session' : 'release-preauth',
+				...(attachment.authenticatedPubkey ? { principal: attachment.authenticatedPubkey } : {}),
+				sessionId: attachment.sessionId,
+			});
 
 			// Clean up stored subscriptions
 			await this.deleteSubscriptions(attachment.sessionId);
@@ -713,11 +783,17 @@ export class RelayWebSocket implements DurableObject {
 		}
 	}
 
-	async webSocketError(ws: WebSocket, error: any): Promise<void> {
+	async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
 		const attachment = ws.deserializeAttachment() as SessionAttachment | null;
 		if (attachment) {
 			console.error(`WebSocket error for session ${attachment.sessionId}:`, error);
 			this.sessions.delete(attachment.sessionId);
+			this.principalQuotas.releaseSession(attachment.sessionId);
+			await this.applyDurableQuota({
+				action: attachment.authenticatedPubkey ? 'release-session' : 'release-preauth',
+				...(attachment.authenticatedPubkey ? { principal: attachment.authenticatedPubkey } : {}),
+				sessionId: attachment.sessionId,
+			});
 		}
 	}
 
@@ -740,12 +816,8 @@ export class RelayWebSocket implements DurableObject {
 
 			// Clean up old processed events periodically
 			const fiveMinutesAgo = Date.now() - 300000;
-			let cleaned = 0;
 			for (const [eventId, timestamp] of this.processedEvents) {
-				if (timestamp < fiveMinutesAgo) {
-					this.processedEvents.delete(eventId);
-					cleaned++;
-				}
+				if (timestamp < fiveMinutesAgo) this.processedEvents.delete(eventId);
 			}
 
 			return new Response(JSON.stringify({ success: true }));
@@ -762,7 +834,7 @@ export class RelayWebSocket implements DurableObject {
 		}
 	}
 
-	private async handleMessage(session: WebSocketSession, message: any[]): Promise<void> {
+	private async handleMessage(session: WebSocketSession, message: unknown): Promise<void> {
 		if (!Array.isArray(message)) {
 			this.sendError(session.webSocket, 'Invalid message format: expected JSON array');
 			return;
@@ -793,28 +865,14 @@ export class RelayWebSocket implements DurableObject {
 		}
 	}
 
-	private async handleEvent(session: WebSocketSession, event: NostrEvent): Promise<void> {
+	private async handleEvent(session: WebSocketSession, event: unknown): Promise<void> {
+		let eventId = '';
 		try {
-			// Validate event object
-			if (!event || typeof event !== 'object') {
-				this.sendOK(session.webSocket, '', false, 'invalid: event object required');
+			if (!isNostrEvent(event)) {
+				this.sendOK(session.webSocket, '', false, 'invalid: malformed event');
 				return;
 			}
-
-			// Check required fields (content can be empty string but not null/undefined)
-			if (
-				!event.id ||
-				!event.pubkey ||
-				!event.sig ||
-				!event.created_at ||
-				event.kind === undefined ||
-				!Array.isArray(event.tags) ||
-				event.content === undefined ||
-				event.content === null
-			) {
-				this.sendOK(session.webSocket, event.id || '', false, 'invalid: missing required fields');
-				return;
-			}
+			eventId = event.id;
 
 			// NIP-42: Reject kind 22242 events - they are for authentication only, not publishing
 			if (event.kind === 22242) {
@@ -827,21 +885,29 @@ export class RelayWebSocket implements DurableObject {
 				return;
 			}
 
-			// NIP-42: Check if the event's pubkey is authenticated
-			if (AUTH_REQUIRED && !session.authenticatedPubkeys.has(event.pubkey)) {
+			const writeAuthorization = authorizeEventWrite(event, session.authenticatedPubkey);
+			if (!writeAuthorization.allowed) {
 				this.sendOK(
 					session.webSocket,
 					event.id,
 					false,
-					'auth-required: authenticate to publish events',
+					`auth-required: ${writeAuthorization.reason}`,
 				);
 				return;
 			}
+			const accountPrincipal = writeAuthorization.principal;
 
 			// Rate limiting (skip for excluded kinds)
 			if (!excludedRateLimitKinds.has(event.kind)) {
-				if (!session.pubkeyRateLimiter.removeToken()) {
-					console.log(`Rate limit exceeded for pubkey ${event.pubkey}`);
+				const locallyAllowed = this.principalQuotas.consumePublish(accountPrincipal);
+				const durablyAllowed =
+					locallyAllowed &&
+					(await this.applyDurableQuota({
+						action: 'consume-publish',
+						principal: accountPrincipal,
+					}));
+				if (!durablyAllowed) {
+					console.log(`Rate limit exceeded for pubkey ${accountPrincipal}`);
 					this.sendOK(session.webSocket, event.id, false, 'rate-limited: slow down there chief');
 					return;
 				}
@@ -858,19 +924,19 @@ export class RelayWebSocket implements DurableObject {
 			// Check if pay to relay is enabled
 			if (PAY_TO_RELAY_ENABLED) {
 				// Check cache first
-				let hasPaid = await this.getCachedPaymentStatus(event.pubkey);
+				let hasPaid = await this.getCachedPaymentStatus(accountPrincipal);
 
 				if (hasPaid === null) {
 					// Not in cache, check database
-					hasPaid = await hasPaidForRelay(event.pubkey, this.env);
+					hasPaid = await hasPaidForRelay(accountPrincipal, this.env);
 					// Cache the result
-					this.setCachedPaymentStatus(event.pubkey, hasPaid);
+					this.setCachedPaymentStatus(accountPrincipal, hasPaid);
 				}
 
 				if (!hasPaid) {
 					const protocol = 'https:';
 					const relayUrl = `${protocol}//${session.host}`;
-					console.error(`Event denied. Pubkey ${event.pubkey} has not paid for relay access.`);
+					console.error(`Event denied. Pubkey ${accountPrincipal} has not paid for relay access.`);
 					this.sendOK(
 						session.webSocket,
 						event.id,
@@ -922,7 +988,7 @@ export class RelayWebSocket implements DurableObject {
 			}
 
 			// Process the event (save to database)
-			const result = await processEvent(event, session.id, this.env);
+			const result = await processEvent(event, this.env);
 
 			// Update session bookmark for read-after-write consistency
 			if (result.bookmark) {
@@ -945,18 +1011,13 @@ export class RelayWebSocket implements DurableObject {
 			} else {
 				this.sendOK(session.webSocket, event.id, false, result.message);
 			}
-		} catch (error: any) {
+		} catch (error: unknown) {
 			console.error('Error handling event:', error);
-			this.sendOK(
-				session.webSocket,
-				event?.id || '',
-				false,
-				'error: internal event processing failed',
-			);
+			this.sendOK(session.webSocket, eventId, false, 'error: internal event processing failed');
 		}
 	}
 
-	private async handleReq(session: WebSocketSession, message: any[]): Promise<void> {
+	private async handleReq(session: WebSocketSession, message: unknown[]): Promise<void> {
 		const [_, subscriptionId, ...filters] = message;
 
 		if (
@@ -972,20 +1033,12 @@ export class RelayWebSocket implements DurableObject {
 			return;
 		}
 
-		// NIP-42: Check authentication if required
-		if (AUTH_REQUIRED && session.authenticatedPubkeys.size === 0) {
+		if (AUTH_REQUIRED && !session.authenticatedPubkey) {
 			this.sendClosed(
 				session.webSocket,
 				subscriptionId,
 				'auth-required: authentication required to subscribe',
 			);
-			return;
-		}
-
-		// Rate limiting
-		if (!session.reqRateLimiter.removeToken()) {
-			console.error(`REQ rate limit exceeded for subscription: ${subscriptionId}`);
-			this.sendClosed(session.webSocket, subscriptionId, 'rate-limited: slow down there chief');
 			return;
 		}
 
@@ -996,11 +1049,13 @@ export class RelayWebSocket implements DurableObject {
 		}
 
 		// Validate each filter
-		for (const filter of filters) {
-			if (typeof filter !== 'object' || filter === null) {
+		const validatedFilters: NostrFilter[] = [];
+		for (const value of filters) {
+			if (typeof value !== 'object' || value === null || Array.isArray(value)) {
 				this.sendClosed(session.webSocket, subscriptionId, 'invalid: filter must be an object');
 				return;
 			}
+			const filter = value as NostrFilter;
 
 			// Validate IDs format
 			if (filter.ids) {
@@ -1060,10 +1115,69 @@ export class RelayWebSocket implements DurableObject {
 			} else if (!filter.limit) {
 				filter.limit = 500;
 			}
+			validatedFilters.push(filter);
 		}
 
-		// Store subscription
-		session.subscriptions.set(subscriptionId, filters);
+		const readAuthorization = authorizeReadFilters(validatedFilters, session.authenticatedPubkey);
+		if (!readAuthorization.allowed) {
+			this.sendClosed(session.webSocket, subscriptionId, `blocked: ${readAuthorization.reason}`);
+			return;
+		}
+		const locallyAllowed = this.principalQuotas.consumeRequest(readAuthorization.principal);
+		const durablyAllowed =
+			locallyAllowed &&
+			(await this.applyDurableQuota({
+				action: 'consume-request',
+				principal: readAuthorization.principal,
+			}));
+		if (!durablyAllowed) {
+			console.error(`REQ rate limit exceeded for principal ${readAuthorization.principal}`);
+			this.sendClosed(session.webSocket, subscriptionId, 'rate-limited: slow down there chief');
+			return;
+		}
+		if (PAY_TO_RELAY_ENABLED) {
+			let hasPaid = await this.getCachedPaymentStatus(readAuthorization.principal);
+			if (hasPaid === null) {
+				hasPaid = await hasPaidForRelay(readAuthorization.principal, this.env);
+				this.setCachedPaymentStatus(readAuthorization.principal, hasPaid);
+			}
+			if (!hasPaid) {
+				this.sendClosed(session.webSocket, subscriptionId, 'blocked: payment required');
+				return;
+			}
+		}
+
+		const reservedLocally = this.principalQuotas.reserveSubscription(
+			readAuthorization.principal,
+			session.id,
+			subscriptionId,
+		);
+		const reservedDurably =
+			reservedLocally &&
+			(await this.applyDurableQuota({
+				action: 'reserve-subscription',
+				principal: readAuthorization.principal,
+				sessionId: session.id,
+				subscriptionId,
+			}));
+		if (!reservedDurably) {
+			if (reservedLocally) {
+				this.principalQuotas.releaseSubscription(
+					readAuthorization.principal,
+					session.id,
+					subscriptionId,
+				);
+			}
+			this.sendClosed(
+				session.webSocket,
+				subscriptionId,
+				'rate-limited: subscription quota exceeded',
+			);
+			return;
+		}
+
+		// Store only recipient-scoped subscriptions.
+		session.subscriptions.set(subscriptionId, validatedFilters);
 
 		// Save to storage
 		await this.saveSubscriptions(session.id, session.subscriptions);
@@ -1074,7 +1188,7 @@ export class RelayWebSocket implements DurableObject {
 
 		try {
 			// Query events with caching
-			const result = await this.getCachedOrQuery(filters, session.bookmark);
+			const result = await this.getCachedOrQuery(validatedFilters, session.bookmark);
 
 			// Update session bookmark
 			if (result.bookmark) {
@@ -1088,7 +1202,7 @@ export class RelayWebSocket implements DurableObject {
 
 			// Send EOSE
 			this.sendEOSE(session.webSocket, subscriptionId);
-		} catch (error: any) {
+		} catch (error: unknown) {
 			console.error(`Error processing REQ for subscription ${subscriptionId}:`, error);
 			this.sendClosed(
 				session.webSocket,
@@ -1100,15 +1214,28 @@ export class RelayWebSocket implements DurableObject {
 
 	private async handleCloseSubscription(
 		session: WebSocketSession,
-		subscriptionId: string,
+		subscriptionId: unknown,
 	): Promise<void> {
-		if (!subscriptionId) {
+		if (typeof subscriptionId !== 'string' || !subscriptionId) {
 			this.sendError(session.webSocket, 'Invalid subscription ID for CLOSE');
 			return;
 		}
 
 		const deleted = session.subscriptions.delete(subscriptionId);
 		if (deleted) {
+			if (session.authenticatedPubkey) {
+				this.principalQuotas.releaseSubscription(
+					session.authenticatedPubkey,
+					session.id,
+					subscriptionId,
+				);
+				await this.applyDurableQuota({
+					action: 'release-subscription',
+					principal: session.authenticatedPubkey,
+					sessionId: session.id,
+					subscriptionId,
+				});
+			}
 			// Save updated subscriptions to storage
 			await this.saveSubscriptions(session.id, session.subscriptions);
 
@@ -1122,32 +1249,14 @@ export class RelayWebSocket implements DurableObject {
 	}
 
 	// NIP-42: Handle AUTH message from client
-	private async handleAuth(session: WebSocketSession, authEvent: NostrEvent): Promise<void> {
+	private async handleAuth(session: WebSocketSession, authEvent: unknown): Promise<void> {
+		let eventId = '';
 		try {
-			// Validate auth event object
-			if (!authEvent || typeof authEvent !== 'object') {
-				this.sendOK(session.webSocket, '', false, 'invalid: auth event object required');
+			if (!isNostrEvent(authEvent)) {
+				this.sendOK(session.webSocket, '', false, 'invalid: malformed auth event');
 				return;
 			}
-
-			// Check required fields
-			if (
-				!authEvent.id ||
-				!authEvent.pubkey ||
-				!authEvent.sig ||
-				!authEvent.created_at ||
-				authEvent.kind === undefined ||
-				!Array.isArray(authEvent.tags) ||
-				authEvent.content === undefined
-			) {
-				this.sendOK(
-					session.webSocket,
-					authEvent.id || '',
-					false,
-					'invalid: missing required fields',
-				);
-				return;
-			}
+			eventId = authEvent.id;
 
 			// Verify kind is 22242
 			if (authEvent.kind !== 22242) {
@@ -1186,9 +1295,9 @@ export class RelayWebSocket implements DurableObject {
 				return;
 			}
 
-			// Find challenge tag
-			const challengeTag = authEvent.tags.find((tag) => tag[0] === 'challenge');
-			if (!challengeTag || !challengeTag[1]) {
+			const challengeTags = authEvent.tags.filter((tag) => tag[0] === 'challenge');
+			const challengeTag = challengeTags[0];
+			if (challengeTags.length !== 1 || !challengeTag?.[1]) {
 				this.sendOK(session.webSocket, authEvent.id, false, 'invalid: missing challenge tag');
 				return;
 			}
@@ -1204,42 +1313,38 @@ export class RelayWebSocket implements DurableObject {
 				return;
 			}
 
-			// Find relay tag
-			const relayTag = authEvent.tags.find((tag) => tag[0] === 'relay');
-			if (!relayTag || !relayTag[1]) {
+			const relayTags = authEvent.tags.filter((tag) => tag[0] === 'relay');
+			const relayTag = relayTags[0];
+			if (relayTags.length !== 1 || !relayTag?.[1]) {
 				this.sendOK(session.webSocket, authEvent.id, false, 'invalid: missing relay tag');
 				return;
 			}
 
-			// Verify relay URL matches (check domain at minimum)
-			try {
-				const authRelayUrl = new URL(relayTag[1]);
-				const sessionHost = session.host.toLowerCase().replace(/:\d+$/, '');
-				const authHost = authRelayUrl.host.toLowerCase().replace(/:\d+$/, '');
-
-				if (authHost !== sessionHost) {
-					this.sendOK(
-						session.webSocket,
-						authEvent.id,
-						false,
-						`invalid: relay URL mismatch (expected ${sessionHost})`,
-					);
-					return;
-				}
-			} catch {
-				this.sendOK(session.webSocket, authEvent.id, false, 'invalid: malformed relay URL');
+			const authRelayUrl = normalizeAuthRelayUrl(relayTag[1]);
+			if (!authRelayUrl || authRelayUrl !== session.relayUrl) {
+				this.sendOK(
+					session.webSocket,
+					authEvent.id,
+					false,
+					`invalid: relay URL mismatch (expected ${session.relayUrl})`,
+				);
 				return;
 			}
 
-			// All checks passed - add pubkey to authenticated list
-			session.authenticatedPubkeys.add(authEvent.pubkey);
+			if (session.authenticatedPubkey && session.authenticatedPubkey !== authEvent.pubkey) {
+				this.sendOK(session.webSocket, authEvent.id, false, 'invalid: principal is already bound');
+				return;
+			}
+			session.authenticatedPubkey = authEvent.pubkey;
+			session.challenge = undefined;
+			await this.applyDurableQuota({ action: 'release-preauth', sessionId: session.id });
 
 			this.sendOK(session.webSocket, authEvent.id, true, '');
-		} catch (error: any) {
+		} catch (error: unknown) {
 			console.error('Error handling AUTH:', error);
 			this.sendOK(
 				session.webSocket,
-				authEvent?.id || '',
+				eventId,
 				false,
 				'error: internal authentication processing failed',
 			);
@@ -1279,14 +1384,30 @@ export class RelayWebSocket implements DurableObject {
 					reqRateLimiter: new RateLimiter(REQ_RATE_LIMIT.rate, REQ_RATE_LIMIT.capacity),
 					bookmark: attachment.bookmark,
 					host: attachment.host,
-					challenge: AUTH_REQUIRED ? this.generateAuthChallenge() : undefined,
-					authenticatedPubkeys: new Set(),
+					relayUrl: attachment.relayUrl,
+					challenge:
+						AUTH_REQUIRED && !attachment.authenticatedPubkey
+							? this.generateAuthChallenge()
+							: undefined,
+					authenticatedPubkey: attachment.authenticatedPubkey,
 				};
 				this.sessions.set(attachment.sessionId, session);
+				if (attachment.authenticatedPubkey) {
+					for (const subscriptionId of subscriptions.keys()) {
+						this.principalQuotas.reserveSubscription(
+							attachment.authenticatedPubkey,
+							attachment.sessionId,
+							subscriptionId,
+						);
+					}
+				}
 			}
 
 			for (const [subscriptionId, filters] of session.subscriptions) {
-				if (this.matchesFilters(event, filters)) {
+				if (
+					authorizeReadFilters(filters, session.authenticatedPubkey).allowed &&
+					this.matchesFilters(event, filters)
+				) {
 					try {
 						this.sendEvent(ws, subscriptionId, event);
 						broadcastCount++;

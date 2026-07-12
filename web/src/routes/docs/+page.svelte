@@ -82,7 +82,7 @@ import DocsPage from '$lib/components/DocsPage.svelte';
 		<li><strong>Client-side encryption</strong> - Your secrets are encrypted before leaving your device</li>
 		<li><strong>No vendor lock-in</strong> - Your data is stored on open relays you control</li>
 		<li><strong>Censorship resistance</strong> - No single point of failure or control</li>
-		<li><strong>Familiar workflow</strong> - Doppler-compatible CLI commands</li>
+		<li><strong>Familiar workflow</strong> - Doppler-inspired setup, secret, and run commands</li>
 	</ul>
 
 	<ProseHeading level={2} id="how-it-works">How it works</ProseHeading>

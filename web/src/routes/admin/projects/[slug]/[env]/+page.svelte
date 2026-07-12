@@ -1,11 +1,61 @@
 <script lang="ts">
-import { page } from '$app/state';
-import { onMount, untrack } from 'svelte';
-
 import { goto } from '$app/navigation';
-import { getAuthState, supportsEncryption } from '$lib/stores/auth.svelte';
+import { page } from '$app/state';
+import {
+	ArrowDownAZ,
+	ArrowUpAZ,
+	ArrowUpDown,
+	Check,
+	ChevronDown,
+	Circle,
+	CircleCheck,
+	CircleDot,
+	Clipboard,
+	Clock,
+	Download,
+	Ellipsis,
+	Eye,
+	EyeOff,
+	GitBranch,
+	LoaderCircle,
+	Plus,
+	Search,
+	Trash2,
+	TriangleAlert,
+	Upload,
+} from '@lucide/svelte';
+import { untrack } from 'svelte';
+import { flip } from 'svelte/animate';
+import { fade, slide } from 'svelte/transition';
+import { Motion } from 'svelte-motion';
+
+import AddEnvironmentModal from '$lib/components/AddEnvironmentModal.svelte';
+import CreateProjectModal from '$lib/components/CreateProjectModal.svelte';
+import ExportSecretsModal from '$lib/components/ExportSecretsModal.svelte';
+import ImportSecretsModal from '$lib/components/ImportSecretsModal.svelte';
+import MultiEnvSaveModal from '$lib/components/MultiEnvSaveModal.svelte';
+import SecretHistoryPanel from '$lib/components/SecretHistoryPanel.svelte';
+import { Button } from '$lib/components/ui/button';
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from '$lib/components/ui/dialog';
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from '$lib/components/ui/dropdown-menu';
+import { Input } from '$lib/components/ui/input';
+import { getAuthState, isAuthRestorationAttempted, supportsEncryption } from '$lib/stores/auth.svelte';
 import { deleteEnvironment, deleteProject, getProjectsState } from '$lib/stores/projects.svelte';
 import {
+	clearSaveError,
 	deleteSecret,
 	getMissingSecretsState,
 	getSecretsState,
@@ -14,7 +64,7 @@ import {
 	subscribeToSecrets,
 	unsubscribeFromSecrets,
 } from '$lib/stores/secrets.svelte';
-import type { Environment } from '$lib/types/nostr';
+import type { Environment, Secret } from '$lib/types/nostr';
 import { fuzzyMatch } from '$lib/utils/search';
 
 // Get project slug and environment from route params
@@ -322,22 +372,14 @@ $effect(() => {
 	}
 });
 
-// Warn before leaving with unsaved changes
-function handleBeforeUnload(e: BeforeUnloadEvent) {
-	if (hasUnsavedChanges) {
-		e.preventDefault();
-		// Modern browsers ignore custom messages, but we need to return something
-		return 'You have unsaved changes. Are you sure you want to leave?';
-	}
-}
+// Cleanup when the subscribed environment changes or the route unmounts.
+$effect(() => {
+	const currentProjectSlug = project?.slug;
+	const currentEnvSlug = selectedEnv?.slug;
 
-// Cleanup on unmount
-onMount(() => {
-	// Add beforeunload listener
-	window.addEventListener('beforeunload', handleBeforeUnload);
+	if (!currentProjectSlug || !currentEnvSlug) return;
 
 	return () => {
-		window.removeEventListener('beforeunload', handleBeforeUnload);
 		unsubscribeFromSecrets();
 	};
 });
@@ -574,10 +616,7 @@ function handleKeydown(e: KeyboardEvent) {
 	}
 }
 
-async function handleImportSecrets(
-	importedSecrets: import('$lib/types/nostr').Secret[],
-	mode: 'merge' | 'replace',
-) {
+async function handleImportSecrets(importedSecrets: Secret[], mode: 'merge' | 'replace') {
 	const auth = getAuthState();
 	if (!auth.isConnected || !auth.pubkey) {
 		console.error('Must be connected to import secrets');
@@ -728,6 +767,7 @@ async function handleDeleteEnvironment() {
 				</div>
 
 				<div class="flex shrink-0 items-center gap-2">
+					<SecretHistoryPanel />
 					<Button 
 						variant={hasUnsavedChanges ? "default" : "outline"} 
 						size="sm"

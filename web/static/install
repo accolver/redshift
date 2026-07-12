@@ -37,7 +37,7 @@ detect_os() {
     case "$(uname -s)" in
         Linux*)     OS="linux";;
         Darwin*)    OS="darwin";;
-        MINGW*|MSYS*|CYGWIN*) OS="windows";;
+        MINGW*|MSYS*|CYGWIN*) error "Windows binaries are not currently published";;
         *)          error "Unsupported operating system: $(uname -s)";;
     esac
 }
@@ -51,39 +51,93 @@ detect_arch() {
     esac
 }
 
-# Get latest release version from GitHub
+# Resolve an explicitly pinned version or the latest release from GitHub.
 get_latest_version() {
-    VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    if [ -z "$VERSION" ]; then
-        error "Failed to fetch latest version from GitHub"
+    if [ -n "${REDSHIFT_VERSION:-}" ]; then
+        VERSION=$REDSHIFT_VERSION
+    else
+        VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        if [ -z "$VERSION" ]; then
+            error "Failed to fetch latest version from GitHub"
+        fi
+    fi
+    if ! printf '%s' "$VERSION" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$'; then
+        error "Invalid release tag"
     fi
 }
 
-# Download and install binary
+# Download, verify, and atomically install binary
 install_binary() {
-    DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_NAME}-${OS}-${ARCH}"
-    
-    if [ "$OS" = "windows" ]; then
-        DOWNLOAD_URL="${DOWNLOAD_URL}.exe"
-        BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}.exe"
-    else
-        BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
+    if ! command -v gh >/dev/null 2>&1; then
+        error "GitHub CLI (gh) is required to verify the release attestation"
     fi
 
+    ASSET_NAME="${BINARY_NAME}-${OS}-${ARCH}"
+    BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
+    DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET_NAME}"
+    mkdir -p "$INSTALL_DIR" || error "Failed to create install directory"
+    # The candidate must be on the destination filesystem so mv remains atomic.
+    TEMP_BINARY=$(mktemp "${INSTALL_DIR}/.redshift.XXXXXX") || error "Failed to create temporary file"
+    CHECKSUM_FILE="${TEMP_BINARY}.checksums.txt"
+    trap 'rm -f "$TEMP_BINARY" "$CHECKSUM_FILE"' EXIT HUP INT TERM
+
     info "Downloading Redshift ${VERSION} for ${OS}/${ARCH}..."
-    
-    # Create install directory if it doesn't exist
-    mkdir -p "$INSTALL_DIR"
-    
-    # Download binary
-    if ! curl -fsSL "$DOWNLOAD_URL" -o "$BINARY_PATH"; then
+    if ! curl -fsSL "$DOWNLOAD_URL" -o "$TEMP_BINARY"; then
         error "Failed to download binary from $DOWNLOAD_URL"
     fi
-    
-    # Make executable
-    chmod +x "$BINARY_PATH"
-    
-    success "Installed Redshift to $BINARY_PATH"
+    if ! curl -fsSL "https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt" -o "$CHECKSUM_FILE"; then
+        error "Failed to download trusted checksum manifest"
+    fi
+
+    info "Resolving release source identity..."
+    if ! SOURCE_DIGEST=$(gh api "repos/${REPO}/commits/${VERSION}" --jq .sha); then
+        error "Failed to resolve the release source digest"
+    fi
+    if ! printf '%s' "$SOURCE_DIGEST" | grep -Eq '^[0-9a-f]{40}([0-9a-f]{24})?$'; then
+        error "GitHub returned an invalid release source digest"
+    fi
+
+    info "Verifying GitHub artifact attestation..."
+    if ! gh attestation verify "$TEMP_BINARY" \
+        --repo "$REPO" \
+        --signer-workflow "${REPO}/.github/workflows/release.yml" \
+        --source-digest "$SOURCE_DIGEST" \
+        --deny-self-hosted-runners >/dev/null; then
+        error "Release attestation verification failed; refusing to install"
+    fi
+    if ! gh attestation verify "$CHECKSUM_FILE" \
+        --repo "$REPO" \
+        --signer-workflow "${REPO}/.github/workflows/release.yml" \
+        --source-digest "$SOURCE_DIGEST" \
+        --deny-self-hosted-runners >/dev/null; then
+        error "Checksum manifest attestation verification failed; refusing to install"
+    fi
+
+    EXPECTED_HASH=$(awk -v asset="$ASSET_NAME" '
+        $2 == asset { count += 1; hash = $1 }
+        END { if (count == 1) print hash }
+    ' "$CHECKSUM_FILE")
+    if ! printf '%s' "$EXPECTED_HASH" | grep -Eq '^[0-9a-f]{64}$'; then
+        error "Trusted manifest must contain exactly one canonical checksum for $ASSET_NAME"
+    fi
+    if command -v sha256sum >/dev/null 2>&1; then
+        ACTUAL_HASH=$(sha256sum "$TEMP_BINARY" | awk '{print $1}')
+    else
+        ACTUAL_HASH=$(shasum -a 256 "$TEMP_BINARY" | awk '{print $1}')
+    fi
+    if [ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]; then
+        error "Downloaded binary checksum verification failed"
+    fi
+
+    chmod +x "$TEMP_BINARY"
+    if ! "$TEMP_BINARY" --version >/dev/null 2>&1; then
+        error "Downloaded binary failed its smoke test; refusing to install"
+    fi
+    mv -f "$TEMP_BINARY" "$BINARY_PATH"
+    rm -f "$CHECKSUM_FILE"
+    trap - EXIT HUP INT TERM
+
+    success "Installed verified Redshift binary to $BINARY_PATH"
 }
 
 # Check if install directory is in PATH

@@ -1,0 +1,61 @@
+name: Verify Published Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Immutable release tag to certify
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  attestations: read
+
+jobs:
+  verify:
+    name: Fresh install ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Verify public installer, lifecycle, and forced upgrade
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          bash scripts/test-release-containers.sh
+          "${{ inputs.tag }}"
+          "${{ matrix.platform }}"
+
+  verify-macos:
+    name: Fresh install ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            platform: darwin/x64
+          - runner: macos-14
+            platform: darwin/arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: 1.26.5
+      - name: Install pinned local relay tool
+        run: |
+          go install github.com/fiatjaf/nak@v0.19.7
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Verify public installer, lifecycle, and forced upgrade
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: sh tests/release/container-entrypoint.sh "${{ inputs.tag }}"

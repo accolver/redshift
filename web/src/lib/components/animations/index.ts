@@ -46,7 +46,7 @@ export const inView: Action<
 		destroy() {
 			observer.disconnect();
 		},
-		update(newOptions) {
+		update() {
 			// Options are set at initialization, no dynamic updates needed
 		},
 	};

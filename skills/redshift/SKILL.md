@@ -1,6 +1,6 @@
 ---
 name: redshift
-description: Manages application secrets with the Redshift CLI — decentralized, encrypted secret management built on Nostr. Use when setting, getting, deleting, listing, uploading, or downloading secrets, injecting secrets into commands, configuring projects/environments, or authenticating with Nostr keys. Covers redshift login, redshift setup, redshift secrets, redshift run, redshift configure, redshift serve, and redshift upgrade.
+description: Manages application secrets with the Redshift CLI — decentralized, encrypted secret management built on Nostr. Use when setting, getting, deleting, listing, uploading, downloading, backing up, inspecting authenticated history, comparing versions, or restoring secrets; recovering partial relay publications; injecting secrets into commands; configuring projects/environments; or authenticating with Nostr keys. Covers redshift login, setup, secrets, history, backup, recovery, run, configure, serve, and upgrade.
 ---
 
 # Redshift CLI
@@ -29,18 +29,19 @@ Docs: https://redshiftapp.com/docs
   to the network — default `127.0.0.1` is localhost-only
 - All encryption is client-side; secrets never leave the device unencrypted
 - Private keys are stored in the system keychain, not in plaintext config files
+- Backup passphrases must use hidden prompts or explicit `--passphrase-stdin`; never put them in argv, config, or environment variables
 
 ## Authentication
 
 ```bash
 redshift login                    # Interactive (recommended)
 redshift login --nsec nsec1...    # Direct private key (use env var in CI instead)
-redshift login --bunker "bunker://pubkey?relay=wss://relay.example&secret=xxx"  # NIP-46 (ALWAYS quote the URL)
+redshift login --bunker-stdin       # NIP-46 one-time pairing URI via hidden input
 redshift login --connect          # Generate NostrConnect URI for bunker app
 redshift login --overwrite        # Overwrite existing credentials
 redshift me                       # Check current identity (alias: whoami)
 redshift logout                   # Clear credentials
-redshift logout -y                # Clear credentials without confirmation
+redshift logout                # Clear credentials without confirmation
 ```
 
 CI/CD: set `REDSHIFT_NSEC` or `REDSHIFT_BUNKER` env vars instead of
@@ -60,36 +61,20 @@ Creates `redshift.yaml` with project, environment, and relay list.
 ## Secrets
 
 ```bash
-# List all
-redshift secrets                          # Redacted values
-redshift secrets --raw                    # Show plaintext values
-redshift secrets --json                   # JSON output
-redshift secrets --only-names             # Names only
-
-# Get
+# List/get (redacted unless --raw is explicit)
+redshift secrets
+redshift secrets --raw
+redshift secrets --json
 redshift secrets get API_KEY
-redshift secrets get API_KEY --plain      # Raw value, no formatting
-redshift secrets get API_KEY --copy       # Copy to clipboard
-redshift secrets get KEY1 KEY2            # Multiple keys
+redshift secrets get API_KEY --raw
 
-# Set
+# One validated mutation per invocation
 redshift secrets set API_KEY sk_live_xxx
-redshift secrets set API_KEY '123' DB_URL 'postgres://...'    # Multiple at once
-
-# Delete
 redshift secrets delete OLD_KEY
-redshift secrets delete KEY1 KEY2 -y      # Skip confirmation
 
-# Download
-redshift secrets download ./secrets.json                     # JSON (default)
-redshift secrets download --format=env --no-file             # Print .env to stdout
-redshift secrets download --format=env ./secrets.env         # Save as .env file
-redshift secrets download --passphrase=xxx ./secrets.json    # Encrypted download
-# Formats: json, env, yaml, docker, env-no-quotes
-
-# Upload (merge with existing secrets on relay)
-redshift secrets upload .env              # Upload from .env file
-redshift secrets upload secrets.json      # Upload from JSON
+# Plaintext .env portability
+redshift secrets download ./secrets.env --raw
+redshift secrets upload .env
 ```
 
 Override project/environment on any secrets command with `-p` / `-c`:
@@ -98,6 +83,42 @@ Override project/environment on any secrets command with `-p` / `-c`:
 redshift secrets -p backend -c production --raw
 redshift secrets set -p myapp -c staging FEATURE_FLAG true
 ```
+
+## Relay publication recovery
+
+When a mutation reports degraded redundancy or fails below quorum, inspect the owner-only local record and retry the exact signed encrypted event. Never create a replacement event automatically.
+
+```bash
+redshift recovery list
+redshift recovery show <event-id>
+redshift recovery retry <event-id>   # unavailable relays only
+redshift recovery remove <event-id>  # local notice only; does not delete relay data
+```
+
+Recovery is not a backup, history, cryptographic erasure, or an availability guarantee.
+
+## Encrypted local backup
+
+```bash
+redshift backup create secrets.redshift
+redshift backup restore secrets.redshift
+redshift backup restore secrets.redshift --allow-identity-change
+redshift backup restore secrets.redshift --allow-identity-change --overwrite
+```
+
+The archive contains current logical state observed from responding configured relays. It excludes signer credentials, relay config, history/tombstones, and recovery files. Default restore performs no writes on conflicts; identical state is a no-op. Each restored bundle uses normal quorum and exact-event recovery, but the multi-bundle operation is not globally atomic.
+
+## Authenticated history
+
+```bash
+redshift history list --project my-app --config production
+redshift history compare <from-event-id> <to-event-id> --project my-app --config production
+redshift history restore <event-id> --project my-app --config production --yes
+```
+
+History output contains event/timestamp/tombstone/key metadata only, never values. Results are bounded state observed from responding relays, not a complete audit log. Restore publishes the selected complete bundle or tombstone as a newer event and aborts if refreshed current state changed; `--overwrite-current` is an explicit override but cannot provide Nostr compare-and-swap.
+
+Never claim this is automatic/managed/offsite retention, complete relay history, key recovery, RPO/RTO, availability, or an SLA.
 
 ## Run with secrets injected
 
@@ -110,15 +131,6 @@ redshift run -- npm start
 redshift run -- python app.py
 redshift run --command "npm start && npm test"
 redshift run -p myapp -c prod -- docker-compose up
-
-# Mount secrets to a file instead of env vars
-redshift run --mount secrets.json -- cat secrets.json
-redshift run --mount secrets.env --mount-format env -- cat secrets.env
-
-# Fallback for offline mode
-redshift run --fallback ./fallback.json -- npm start
-redshift run --fallback-only -- npm start          # Read only from fallback
-redshift run --no-fallback -- npm start            # Disable fallback entirely
 
 # Preserve existing env values for specific keys
 redshift run --preserve-env PORT,HOST -- npm start
@@ -158,9 +170,7 @@ redshift upgrade --tag v0.5.0         # Install specific version
 | -------------- | ----- | --------------------------------- |
 | `--help`       | `-h`  | Show help                         |
 | `--version`    | `-v`  | Show version                      |
-| `--json`       |       | JSON output                       |
-| `--silent`     |       | Suppress info messages            |
-| `--debug`      |       | Verbose debug output              |
+| `--json`       |       | JSON output where supported       |
 | `--config-dir` |       | Override config dir (~/.redshift) |
 
 ## Environment variables

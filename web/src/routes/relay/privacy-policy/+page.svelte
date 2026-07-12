@@ -174,7 +174,7 @@ import { Shield, Eye, EyeOff, Server, Lock, Globe, Mail } from '@lucide/svelte';
 			<h2 id="data-storage-security">4. Data Storage and Security</h2>
 
 			<h3 id="infrastructure">4.1 Infrastructure</h3>
-			<div class="not-prose my-6 grid gap-4 sm:grid-cols-3">
+			<div class="not-prose my-6 grid gap-4 sm:grid-cols-2">
 				<div class="flex flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center">
 					<Server class="size-6 text-tokyo-blue" />
 					<span class="text-sm font-medium">Relay</span>
@@ -183,12 +183,7 @@ import { Shield, Eye, EyeOff, Server, Lock, Globe, Mail } from '@lucide/svelte';
 				<div class="flex flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center">
 					<Server class="size-6 text-tokyo-purple" />
 					<span class="text-sm font-medium">Storage</span>
-					<span class="text-xs text-muted-foreground">Cloudflare Durable Objects & R2</span>
-				</div>
-				<div class="flex flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center">
-					<Server class="size-6 text-tokyo-cyan" />
-					<span class="text-sm font-medium">Backups</span>
-					<span class="text-xs text-muted-foreground">Cloudflare R2 (geo-replicated)</span>
+					<span class="text-xs text-muted-foreground">Cloudflare D1 and Durable Objects</span>
 				</div>
 			</div>
 
@@ -198,7 +193,6 @@ import { Shield, Eye, EyeOff, Server, Lock, Globe, Mail } from '@lucide/svelte';
 				<li>NIP-78 Kind 30078 events for application data storage</li>
 				<li>NIP-42 authentication required for all operations</li>
 				<li>Rate limiting to prevent abuse</li>
-				<li>Automatic encrypted backups</li>
 				<li>No plaintext secrets ever touch our servers</li>
 			</ul>
 
@@ -212,49 +206,12 @@ import { Shield, Eye, EyeOff, Server, Lock, Globe, Mail } from '@lucide/svelte';
 
 		<section>
 			<h2 id="data-retention">5. Data Retention</h2>
-			<div class="not-prose my-6 overflow-x-auto">
-				<table class="w-full text-sm">
-					<thead>
-						<tr class="border-b border-border">
-							<th class="px-4 py-3 text-left font-medium">Data Type</th>
-							<th class="px-4 py-3 text-left font-medium">Active Subscriber</th>
-							<th class="px-4 py-3 text-left font-medium">After Subscription Ends</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr class="border-b border-border/50">
-							<td class="px-4 py-3">Encrypted events</td>
-							<td class="px-4 py-3 text-muted-foreground">Indefinite</td>
-							<td class="px-4 py-3 text-muted-foreground">30 days</td>
-						</tr>
-						<tr class="border-b border-border/50">
-							<td class="px-4 py-3">Audit logs <span class="ml-1 rounded bg-tokyo-blue/10 px-1.5 py-0.5 text-xs text-tokyo-blue">Cloud only</span></td>
-							<td class="px-4 py-3 text-muted-foreground">7 days rolling</td>
-							<td class="px-4 py-3 text-muted-foreground">Deleted immediately</td>
-						</tr>
-						<tr class="border-b border-border/50">
-							<td class="px-4 py-3">Access tokens</td>
-							<td class="px-4 py-3 text-muted-foreground">30 days (refresh)</td>
-							<td class="px-4 py-3 text-muted-foreground">Deleted on expiry</td>
-						</tr>
-						<tr class="border-b border-border/50">
-							<td class="px-4 py-3">Connection logs</td>
-							<td class="px-4 py-3 text-muted-foreground">24 hours</td>
-							<td class="px-4 py-3 text-muted-foreground">24 hours</td>
-						</tr>
-						<tr class="border-b border-border/50">
-							<td class="px-4 py-3">IP address logs</td>
-							<td class="px-4 py-3 text-muted-foreground">7 days</td>
-							<td class="px-4 py-3 text-muted-foreground">7 days</td>
-						</tr>
-						<tr class="border-b border-border/50">
-							<td class="px-4 py-3">Payment records</td>
-							<td class="px-4 py-3 text-muted-foreground">2 years</td>
-							<td class="px-4 py-3 text-muted-foreground">2 years (legal)</td>
-						</tr>
-					</tbody>
-				</table>
-			</div>
+			<p>
+				Encrypted events and payment records are retained as needed to operate the service,
+				control abuse, and satisfy applicable obligations. Relay storage may be pruned for
+				capacity. We do not currently promise a backup, audit-log, or recovery retention
+				period. Logical tombstones do not guarantee erasure of older ciphertext.
+			</p>
 		</section>
 
 		<section>
@@ -267,9 +224,7 @@ import { Shield, Eye, EyeOff, Server, Lock, Globe, Mail } from '@lucide/svelte';
 			<h3 id="service-providers">6.1 Service Providers</h3>
 			<p>We use the following service providers who may process data on our behalf:</p>
 			<ul>
-				<li><strong>Cloudflare</strong> - Infrastructure hosting (Workers, R2, Durable Objects)</li>
-				<li><strong>BTCPay Server</strong> - Payment processing (self-hosted)</li>
-				<li><strong>Voltage Cloud</strong> - Lightning payment infrastructure</li>
+				<li><strong>Cloudflare</strong> - Workers, Durable Objects, and D1 infrastructure</li>
 			</ul>
 			<p>
 				These providers are bound by their own privacy policies and data protection
@@ -299,9 +254,9 @@ import { Shield, Eye, EyeOff, Server, Lock, Globe, Mail } from '@lucide/svelte';
 			<h3 id="deletion">7.2 Deletion</h3>
 			<p>You can:</p>
 			<ul>
-				<li>Delete specific events using NIP-09 deletion events</li>
-				<li>Request account deletion (removes metadata, tokens)</li>
-				<li>Note: Encrypted backups may persist per retention schedule</li>
+				<li>Publish newer encrypted logical tombstones through a Redshift client</li>
+				<li>Request account deletion for service metadata and payment records</li>
+				<li>Older ciphertext may persist on relays or backups until their retention expires</li>
 			</ul>
 
 			<h3 id="correction">7.3 Correction</h3>

@@ -14,5 +14,5 @@ export const docsStore = {
 	},
 	set currentTitle(value: string) {
 		currentTitle = value;
-	}
+	},
 };

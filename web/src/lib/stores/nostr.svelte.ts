@@ -1,11 +1,45 @@
 import { REDSHIFT_KIND } from '$lib/constants';
-import { getRedshiftSecretsFilter } from '$lib/crypto';
+import { HISTORY_LIMITS, getRedshiftSecretsFilter } from '$lib/crypto';
 import { clearDecryptionCache } from '$lib/models/gift-wrap-secrets';
-import { RateLimiter, withPublishBackoff } from '$lib/rate-limiter';
+import {
+	type QuorumReport,
+	QuorumError,
+	RateLimiter,
+	executeWithQuorum,
+	getUnavailableTargets,
+	hasQuorum,
+	parseNip20Reason,
+	withPublishBackoff,
+} from '$lib/rate-limiter';
 import { DEFAULT_RELAYS as CRYPTO_DEFAULT_RELAYS } from '@redshift/crypto';
 import { EventStore } from 'applesauce-core';
 import { RelayPool, onlyEvents } from 'applesauce-relay';
-import type { NostrEvent } from 'nostr-tools';
+import type { EventTemplate, NostrEvent } from 'nostr-tools';
+import {
+	firstValueFrom,
+	last,
+	scan,
+	startWith,
+	take,
+	takeUntil,
+	takeWhile,
+	tap,
+	timer,
+	timeout,
+} from 'rxjs';
+import type { Subscription } from 'rxjs';
+import {
+	clearPublicationRecovery,
+	finalizePublicationRecovery,
+	getPublicationRecoveryRecord,
+	isExactPublicationEvent,
+	mergePublicationRecovery,
+	normalizePublicationRelayUrls,
+	preparePublicationRecovery,
+	setPublicationRecoveryError,
+	setPublicationRetrying,
+} from './publication-recovery.svelte';
+import type { PublicationContext } from './publication-recovery.svelte';
 
 // Re-export constants for backward compatibility with existing imports
 export { REDSHIFT_KIND, getProjectDTag } from '$lib/constants';
@@ -16,6 +50,7 @@ export { REDSHIFT_KIND, getProjectDTag } from '$lib/constants';
  * - Minimum 100ms between requests
  */
 const rateLimiter = new RateLimiter(10, 1000, 100);
+const HISTORY_TEXT_ENCODER = new TextEncoder();
 
 /**
  * Shared Nostr infrastructure for the entire app
@@ -28,6 +63,38 @@ export const DEFAULT_RELAYS: string[] = [...CRYPTO_DEFAULT_RELAYS];
 // Managed relay for Cloud tier subscribers
 export const MANAGED_RELAY = 'wss://relay.redshiftapp.com';
 export const MANAGED_RELAY_API = 'https://relay.redshiftapp.com';
+
+interface RuntimeRelayConfig {
+	relays?: unknown;
+}
+
+declare global {
+	interface Window {
+		__REDSHIFT_RUNTIME_CONFIG__?: RuntimeRelayConfig;
+	}
+}
+
+export function getRuntimeRelays(
+	config: RuntimeRelayConfig | undefined = typeof window !== 'undefined'
+		? window.__REDSHIFT_RUNTIME_CONFIG__
+		: undefined,
+) {
+	if (!Array.isArray(config?.relays)) return [...DEFAULT_RELAYS];
+	const relays: string[] = [];
+	for (const value of config.relays) {
+		if (typeof value !== 'string') return [...DEFAULT_RELAYS];
+		try {
+			const url = new URL(value);
+			const localPlaintext =
+				url.protocol === 'ws:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1');
+			if (url.protocol !== 'wss:' && !localPlaintext) return [...DEFAULT_RELAYS];
+			relays.push(url.href);
+		} catch {
+			return [...DEFAULT_RELAYS];
+		}
+	}
+	return relays.length > 0 ? [...new Set(relays)] : [...DEFAULT_RELAYS];
+}
 
 // Cache for payment status to avoid repeated API calls
 let paymentStatusCache: { pubkey: string; paid: boolean; checkedAt: number } | null = null;
@@ -73,13 +140,13 @@ export async function checkManagedRelayAccess(pubkey: string): Promise<boolean> 
  */
 export async function getRelaysForUser(pubkey: string): Promise<string[]> {
 	const hasAccess = await checkManagedRelayAccess(pubkey);
+	const baseRelays = getRuntimeRelays();
 
 	if (hasAccess) {
-		// Put managed relay first for priority
-		return [MANAGED_RELAY, ...DEFAULT_RELAYS];
+		return [MANAGED_RELAY, ...baseRelays.filter((relay) => relay !== MANAGED_RELAY)];
 	}
 
-	return DEFAULT_RELAYS;
+	return baseRelays;
 }
 
 /**
@@ -95,13 +162,8 @@ export async function syncSecretsToManagedRelay(): Promise<{ synced: number; err
 	let synced = 0;
 	let errors = 0;
 
-	// Get all events from the EventStore
-	// Gift-wrapped secrets (kind 1059) and Redshift app data (kind 30078)
-	const allEvents = eventStore.database.getAll();
-
-	const secretEvents = allEvents.filter(
-		(event) => event.kind === 1059 || event.kind === REDSHIFT_KIND,
-	);
+	// Get all gift-wrapped secrets (kind 1059) and Redshift app data (kind 30078)
+	const secretEvents = eventStore.database.getByFilters([{ kinds: [1059, REDSHIFT_KIND] }]);
 
 	console.debug(`Syncing ${secretEvents.length} events to managed relay...`);
 
@@ -146,6 +208,40 @@ export const relayPool = new RelayPool();
 
 // Track active subscriptions
 let activeSubscription: { unsubscribe: () => void } | null = null;
+let managedRelayAuthSubscription: Subscription | null = null;
+
+interface ManagedAuthRelay {
+	readonly authenticated: boolean;
+	challenge$: {
+		subscribe(observer: (challenge: string | null) => void): Subscription;
+	};
+	authenticate(signer: {
+		signEvent(event: EventTemplate): NostrEvent | Promise<NostrEvent>;
+	}): Promise<{ ok: boolean; message?: string }>;
+}
+
+export function watchManagedRelayAuthentication(
+	relay: ManagedAuthRelay,
+	signAuthEvent: (event: EventTemplate) => Promise<NostrEvent>,
+	onError: (error: Error) => void,
+): Subscription {
+	let inFlight = false;
+	return relay.challenge$.subscribe((challenge) => {
+		if (!challenge || relay.authenticated || inFlight) return;
+		inFlight = true;
+		void relay
+			.authenticate({ signEvent: signAuthEvent })
+			.then((response) => {
+				if (!response.ok) throw new Error(response.message || 'Relay authentication rejected');
+			})
+			.catch((error: unknown) => {
+				onError(error instanceof Error ? error : new Error(String(error)));
+			})
+			.finally(() => {
+				inFlight = false;
+			});
+	});
+}
 
 // Track the latest event timestamp seen for incremental sync on reconnection
 let lastSeenTimestamp: number | null = null;
@@ -185,6 +281,9 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 		activeSubscription.unsubscribe();
 	}
 
+	managedRelayAuthSubscription?.unsubscribe();
+	managedRelayAuthSubscription = null;
+
 	// Update relay state
 	const hasManagedAccess = relays.includes(MANAGED_RELAY);
 	relayState = {
@@ -199,7 +298,24 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 	// 1. NIP-59 Gift Wrap events (kind 1059) with redshift-secrets type tag for encrypted secrets
 	// 2. Redshift events (Kind 30078) for project metadata
 	// 3. Profile events (Kind 0) for displaying user info
-	const secretsFilter = getRedshiftSecretsFilter(pubkey);
+	if (hasManagedAccess) {
+		managedRelayAuthSubscription = watchManagedRelayAuthentication(
+			relayPool.relay(MANAGED_RELAY),
+			async (template) => {
+				const { signEvent } = await import('./auth.svelte');
+				return signEvent(template);
+			},
+			(error) => {
+				console.error('Managed relay authentication failed:', error);
+				relayState = { ...relayState, status: 'error' };
+			},
+		);
+	}
+
+	const secretsFilter = {
+		...getRedshiftSecretsFilter(pubkey),
+		limit: HISTORY_LIMITS.maxObservedEvents,
+	};
 
 	// Build filters, adding `since` for incremental sync on reconnection
 	// Subtract 60 seconds as safety margin against clock skew between relays
@@ -270,6 +386,8 @@ export function disconnect(): void {
 		activeSubscription.unsubscribe();
 		activeSubscription = null;
 	}
+	managedRelayAuthSubscription?.unsubscribe();
+	managedRelayAuthSubscription = null;
 	relayState = {
 		status: 'disconnected',
 		connectedCount: 0,
@@ -286,31 +404,177 @@ export function disconnect(): void {
 	lastSeenTimestamp = null;
 	// Reset sync flag so next session will sync again
 	resetManagedRelaySync();
+	// Recovery state is scoped to the authenticated browser session.
+	clearPublicationRecovery();
+}
+
+export async function withPublishTimeout<T>(
+	operation: Promise<T>,
+	relay: string,
+	timeoutMs = 5000,
+) {
+	let timeout: ReturnType<typeof setTimeout> | undefined;
+	try {
+		const timeoutPromise = new Promise<never>((_, reject) => {
+			timeout = setTimeout(() => reject(new Error(`Publish timeout for ${relay}`)), timeoutMs);
+		});
+		return await Promise.race([operation, timeoutPromise]);
+	} finally {
+		if (timeout) clearTimeout(timeout);
+	}
 }
 
 /**
  * Publish an event to relays with rate limiting and exponential backoff
  */
+export async function refreshRedshiftEvents(pubkey: string) {
+	if (!/^[0-9a-f]{64}$/.test(pubkey)) throw new Error('Invalid Redshift history owner');
+	const targets = normalizePublicationRelayUrls(
+		relayState.relays.length > 0 ? relayState.relays : DEFAULT_RELAYS,
+	);
+	await rateLimiter.waitForSlot();
+	const initial = {
+		events: [] as NostrEvent[],
+		ciphertextBytes: 0,
+		truncated: false,
+	};
+	let deadlineReached = false;
+	const deadline = timer(10_000).pipe(
+		tap(() => {
+			deadlineReached = true;
+		}),
+	);
+	const collected = await firstValueFrom(
+		relayPool
+			.request(targets, [
+				{ ...getRedshiftSecretsFilter(pubkey), limit: HISTORY_LIMITS.maxObservedEvents + 1 },
+			])
+			.pipe(
+				takeUntil(deadline),
+				scan((state, event) => {
+					const eventBytes = HISTORY_TEXT_ENCODER.encode(event.content).length;
+					if (
+						state.events.length >= HISTORY_LIMITS.maxObservedEvents ||
+						state.ciphertextBytes + eventBytes > HISTORY_LIMITS.maxCiphertextBytes
+					) {
+						state.truncated = true;
+						return state;
+					}
+					state.events.push(event);
+					state.ciphertextBytes += eventBytes;
+					return state;
+				}, initial),
+				takeWhile((state) => !state.truncated, true),
+				startWith(initial),
+				last(),
+			),
+	);
+	if (deadlineReached) throw new Error('Relay history refresh timed out before completion');
+	const unique = new Map(collected.events.map((event) => [event.id, event]));
+	const ordered = [...unique.values()].sort((left, right) => {
+		if (left.created_at !== right.created_at) return right.created_at - left.created_at;
+		return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+	});
+	for (const event of ordered.slice(0, HISTORY_LIMITS.maxObservedEvents)) eventStore.add(event);
+	return {
+		observedEvents: ordered.length,
+		truncated:
+			collected.truncated ||
+			collected.events.length >= HISTORY_LIMITS.maxObservedEvents ||
+			ordered.length >= HISTORY_LIMITS.maxObservedEvents,
+	};
+}
+
 export async function publishEvent(
 	event: NostrEvent,
-	relays: string[] = DEFAULT_RELAYS,
-): Promise<void> {
-	// Add to local store immediately for optimistic updates
-	eventStore.add(event);
-
-	// Publish to relays with rate limiting and retry
-	await rateLimiter.waitForSlot();
-
-	// Publish with a timeout to avoid hanging on slow/failing relays
-	const publishWithTimeout = async () => {
-		const timeoutMs = 5000; // 5 second timeout per attempt
-		const publishPromise = relayPool.publish(relays, event);
-		const timeoutPromise = new Promise<void>((_, reject) =>
-			setTimeout(() => reject(new Error('Publish timeout - relays may be slow')), timeoutMs),
+	relays?: string[],
+	context?: PublicationContext,
+): Promise<QuorumReport<string>> {
+	const targets = normalizePublicationRelayUrls(
+		relays ?? (relayState.relays.length > 0 ? relayState.relays : DEFAULT_RELAYS),
+	);
+	const recoverableSecretEvent = event.kind === 1059;
+	if (recoverableSecretEvent) {
+		const ownerPubkey = context?.ownerPubkey ?? eventOwner(event);
+		preparePublicationRecovery(event, targets, { ...context, ownerPubkey });
+	}
+	let report: QuorumReport<string>;
+	try {
+		report = await executeWithQuorum(targets, event.id, (relay) =>
+			publishEventToRelay(relay, event),
 		);
+	} catch (error) {
+		if (!(error instanceof QuorumError)) throw error;
+		if (recoverableSecretEvent) {
+			finalizePublicationRecovery(event.id, error.report as QuorumReport<string>);
+		}
+		throw error;
+	}
+	if (recoverableSecretEvent) finalizePublicationRecovery(event.id, report);
+	// Only expose the event as durable local state after publication quorum succeeds.
+	eventStore.add(event);
+	return report;
+}
 
-		await Promise.race([publishPromise, timeoutPromise]);
-	};
+export async function retryPublication(eventId: string): Promise<QuorumReport<string>> {
+	const record = getPublicationRecoveryRecord(eventId);
+	if (!record) throw new Error(`Publication recovery record not found: ${eventId}`);
+	const unavailable = getUnavailableTargets(record.report);
+	if (unavailable.length === 0) return record.report;
+	setPublicationRetrying(eventId, true);
+	setPublicationRecoveryError(null);
+	try {
+		let retryReport: QuorumReport<string>;
+		try {
+			retryReport = await executeWithQuorum(unavailable, eventId, (relay) =>
+				publishEventToRelay(relay, record.event),
+			);
+		} catch (error) {
+			if (!(error instanceof QuorumError)) throw error;
+			retryReport = error.report as QuorumReport<string>;
+		}
+		const merged = mergePublicationRecovery(eventId, retryReport);
+		if (hasQuorum(merged)) eventStore.add(record.event);
+		return merged;
+	} catch (error) {
+		setPublicationRecoveryError(error instanceof Error ? error.message : String(error));
+		throw error;
+	} finally {
+		setPublicationRetrying(eventId, false);
+	}
+}
 
-	await withPublishBackoff(publishWithTimeout);
+async function publishEventToRelay(relay: string, event: NostrEvent) {
+	await withPublishBackoff(async () => {
+		await rateLimiter.waitForSlot();
+		try {
+			const publishPromise = relayPool
+				.publish([relay], event, { reconnect: false, timeout: 5000 })
+				.then((responses) => {
+					const response = responses[0];
+					if (!response?.ok)
+						throw new Error(response?.message || `Relay rejected event at ${relay}`);
+				});
+			await withPublishTimeout(publishPromise, relay);
+		} catch (error) {
+			if (parseNip20Reason(error).code !== 'duplicate') throw error;
+			try {
+				const candidate = await firstValueFrom(
+					relayPool.request([relay], [{ ids: [event.id] }]).pipe(take(1), timeout({ first: 2000 })),
+				);
+				if (isExactPublicationEvent(candidate, event)) return;
+			} catch {
+				// Unconfirmed duplicate remains unavailable and follows normal retry policy.
+			}
+			throw error;
+		}
+	});
+}
+
+function eventOwner(event: NostrEvent) {
+	if (event.kind !== 1059) return event.pubkey;
+	const recipients = event.tags.filter((tag) => tag[0] === 'p');
+	const owner = recipients.length === 1 ? recipients[0]?.[1] : undefined;
+	if (!owner) throw new Error('Gift Wrap publication requires exactly one owner recipient');
+	return owner;
 }

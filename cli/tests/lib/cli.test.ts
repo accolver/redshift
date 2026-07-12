@@ -5,8 +5,8 @@
  * L4: Integration-Contractor - Doppler-compatible CLI interface
  */
 
-import { describe, expect, it, beforeEach } from 'bun:test';
-import { CLI, createCLI, type CommandDef, type ParsedArgs } from '../../src/lib/cli';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { CLI, createCLI } from '../../src/lib/cli';
 
 describe('CLI Framework', () => {
 	let cli: CLI;
@@ -77,22 +77,50 @@ describe('CLI Framework', () => {
 			expect(result.globalFlags.json).toBe(true);
 		});
 
-		it('parses --silent flag', () => {
-			const result = cli.parse(['run', '--silent', '--', 'echo', 'hi']);
-
-			expect(result.globalFlags.silent).toBe(true);
-		});
-
-		it('parses --debug flag', () => {
-			const result = cli.parse(['login', '--debug']);
-
-			expect(result.globalFlags.debug).toBe(true);
+		it('rejects removed global --silent and --debug flags', () => {
+			expect(() => cli.parse(['run', '--silent', '--', 'echo', 'hi'])).toThrow('Unknown option');
+			expect(() => cli.parse(['login', '--debug'])).toThrow('Unknown option');
 		});
 
 		it('parses --config-dir flag', () => {
 			const result = cli.parse(['secrets', '--config-dir', '/custom/path']);
 
 			expect(result.globalFlags.configDir).toBe('/custom/path');
+		});
+	});
+
+	describe('parse() - strict failures and boundaries', () => {
+		it('rejects unknown flags and missing string values', () => {
+			expect(() => cli.parse(['secrets', '--porject', 'app'])).toThrow('Unknown option');
+			expect(() => cli.parse(['run', '--project'])).toThrow();
+		});
+
+		it('rejects unknown subcommands instead of choosing a default', () => {
+			expect(() => cli.parse(['secrets', 'gett', 'API_KEY'])).toThrow('Unknown subcommand');
+			expect(() => cli.parse(['bunker', 'stats'])).toThrow('Unknown subcommand');
+		});
+
+		it('keeps all tokens after run -- as exact child argv', () => {
+			const result = cli.parse(['run', '--', 'printf', '%s', '', 'a b', '--help', '\\path']);
+			expect(result.helpRequested).toBe(false);
+			expect(result.positionals).toEqual(['printf', '%s', '', 'a b', '--help', '\\path']);
+		});
+
+		it('supports config-dir before the command', () => {
+			const result = cli.parse(['--config-dir', '/tmp/redshift', 'secrets', '--json']);
+			expect(result.command).toBe('secrets');
+			expect(result.globalFlags.configDir).toBe('/tmp/redshift');
+			expect(result.flags.json).toBe(true);
+		});
+
+		it('rejects removed secret flags', () => {
+			expect(() => cli.parse(['secrets', 'get', 'KEY', '--copy'])).toThrow('Unknown option');
+			expect(() => cli.parse(['secrets', 'set', 'KEY=x', '--no-interactive'])).toThrow(
+				'Unknown option',
+			);
+			expect(() => cli.parse(['secrets', 'download', '--passphrase', 'secret'])).toThrow(
+				'Unknown option',
+			);
 		});
 	});
 
@@ -120,6 +148,131 @@ describe('CLI Framework', () => {
 		});
 	});
 
+	describe('parse() - backup command', () => {
+		it('parses create and restore with their explicit safety flags', () => {
+			const create = cli.parse([
+				'backup',
+				'create',
+				'snapshot.redshift',
+				'--force',
+				'--passphrase-stdin',
+			]);
+			expect(create.command).toBe('backup');
+			expect(create.subcommand).toBe('create');
+			expect(create.positionals).toEqual(['snapshot.redshift']);
+			expect(create.flags.force).toBe(true);
+			expect(create.flags['passphrase-stdin']).toBe(true);
+
+			const restore = cli.parse([
+				'backup',
+				'restore',
+				'snapshot.redshift',
+				'--overwrite',
+				'--allow-identity-change',
+			]);
+			expect(restore.subcommand).toBe('restore');
+			expect(restore.flags.overwrite).toBe(true);
+			expect(restore.flags['allow-identity-change']).toBe(true);
+		});
+
+		it('requires one path and rejects wrong-subcommand or passphrase flags', () => {
+			for (const subcommand of ['create', 'restore']) {
+				expect(() => cli.parse(['backup', subcommand])).toThrow(
+					'Missing required positional argument',
+				);
+				expect(() => cli.parse(['backup', subcommand, 'one', 'two'])).toThrow(
+					'Too many positional arguments',
+				);
+				expect(() => cli.parse(['backup', subcommand, 'file', '--passphrase', 'secret'])).toThrow(
+					'Unknown option',
+				);
+			}
+			expect(() => cli.parse(['backup', 'create', 'file', '--overwrite'])).toThrow(
+				'Unknown option',
+			);
+			expect(() => cli.parse(['backup', 'restore', 'file', '--force'])).toThrow('Unknown option');
+		});
+	});
+
+	describe('parse() - history command', () => {
+		it('parses list, compare, and explicitly confirmed restore flags', () => {
+			const list = cli.parse([
+				'history',
+				'list',
+				'--project',
+				'app',
+				'--config',
+				'prod',
+				'--limit',
+				'25',
+				'--cursor',
+				`v1.1.${'a'.repeat(64)}`,
+				'--json',
+			]);
+			expect(list.flags).toMatchObject({
+				project: 'app',
+				config: 'prod',
+				limit: '25',
+				cursor: `v1.1.${'a'.repeat(64)}`,
+				json: true,
+			});
+
+			const compare = cli.parse(['history', 'compare', 'a'.repeat(64), 'b'.repeat(64)]);
+			expect(compare.positionals).toEqual(['a'.repeat(64), 'b'.repeat(64)]);
+
+			const restore = cli.parse([
+				'history',
+				'restore',
+				'a'.repeat(64),
+				'--yes',
+				'--overwrite-current',
+			]);
+			expect(restore.flags.yes).toBe(true);
+			expect(restore.flags['overwrite-current']).toBe(true);
+		});
+
+		it('requires exact positional counts and isolates subcommand safety flags', () => {
+			expect(() => cli.parse(['history', 'list', 'extra'])).toThrow('Unexpected positional');
+			expect(() => cli.parse(['history', 'compare', 'a'.repeat(64)])).toThrow(
+				'Missing required positional',
+			);
+			expect(() =>
+				cli.parse(['history', 'compare', 'a'.repeat(64), 'b'.repeat(64), 'extra']),
+			).toThrow('Too many positional');
+			expect(() => cli.parse(['history', 'restore'])).toThrow('Missing required positional');
+			expect(() => cli.parse(['history', 'restore', 'a'.repeat(64), 'extra'])).toThrow(
+				'Too many positional',
+			);
+			expect(() => cli.parse(['history', 'list', '--overwrite-current'])).toThrow('Unknown option');
+			expect(() =>
+				cli.parse(['history', 'compare', 'a'.repeat(64), 'b'.repeat(64), '--yes']),
+			).toThrow('Unknown option');
+			expect(() => cli.parse(['history', 'restore', 'a'.repeat(64), '--limit', '2'])).toThrow(
+				'Unknown option',
+			);
+		});
+	});
+
+	describe('parse() - recovery command', () => {
+		it('parses list and exact-event operations', () => {
+			expect(cli.parse(['recovery', 'list']).subcommand).toBe('list');
+			const retry = cli.parse(['recovery', 'retry', 'a'.repeat(64)]);
+			expect(retry.command).toBe('recovery');
+			expect(retry.positionals).toEqual(['a'.repeat(64)]);
+		});
+
+		it('requires exactly one event ID for show, retry, and remove', () => {
+			for (const subcommand of ['show', 'retry', 'remove']) {
+				expect(() => cli.parse(['recovery', subcommand])).toThrow(
+					'Missing required positional argument',
+				);
+				expect(() => cli.parse(['recovery', subcommand, 'a'.repeat(64), 'extra'])).toThrow(
+					'Too many positional arguments',
+				);
+			}
+		});
+	});
+
 	describe('parse() - secrets command', () => {
 		it('parses secrets with no args (list)', () => {
 			const result = cli.parse(['secrets']);
@@ -136,12 +289,10 @@ describe('CLI Framework', () => {
 			expect(result.positionals).toEqual(['API_KEY']);
 		});
 
-		it('parses secrets get multiple keys', () => {
-			const result = cli.parse(['secrets', 'get', 'API_KEY', 'CRYPTO_KEY']);
-
-			expect(result.command).toBe('secrets');
-			expect(result.subcommand).toBe('get');
-			expect(result.positionals).toEqual(['API_KEY', 'CRYPTO_KEY']);
+		it('rejects secrets get with multiple keys', () => {
+			expect(() => cli.parse(['secrets', 'get', 'API_KEY', 'CRYPTO_KEY'])).toThrow(
+				'Too many positional arguments',
+			);
 		});
 
 		it('parses secrets set KEY VALUE', () => {
@@ -176,20 +327,9 @@ describe('CLI Framework', () => {
 			expect(result.positionals).toEqual(['/tmp/secrets.json']);
 		});
 
-		it('parses secrets download with --format flag', () => {
-			const result = cli.parse(['secrets', 'download', '--format', 'env']);
-
-			expect(result.command).toBe('secrets');
-			expect(result.subcommand).toBe('download');
-			expect(result.flags.format).toBe('env');
-		});
-
-		it('parses secrets download with --no-file flag', () => {
-			const result = cli.parse(['secrets', 'download', '--no-file']);
-
-			expect(result.command).toBe('secrets');
-			expect(result.subcommand).toBe('download');
-			expect(result.flags['no-file']).toBe(true);
+		it('rejects removed download format and no-file flags', () => {
+			expect(() => cli.parse(['secrets', 'download', '--format', 'env'])).toThrow('Unknown option');
+			expect(() => cli.parse(['secrets', 'download', '--no-file'])).toThrow('Unknown option');
 		});
 
 		it('parses secrets upload with filepath', () => {
@@ -215,27 +355,10 @@ describe('CLI Framework', () => {
 			expect(result.flags.raw).toBe(true);
 		});
 
-		it('parses secrets with --only-names flag', () => {
-			const result = cli.parse(['secrets', '--only-names']);
-
-			expect(result.command).toBe('secrets');
-			expect(result.flags['only-names']).toBe(true);
-		});
-
-		it('parses secrets get with --plain flag', () => {
-			const result = cli.parse(['secrets', 'get', 'API_KEY', '--plain']);
-
-			expect(result.command).toBe('secrets');
-			expect(result.subcommand).toBe('get');
-			expect(result.flags.plain).toBe(true);
-		});
-
-		it('parses secrets delete with --yes flag', () => {
-			const result = cli.parse(['secrets', 'delete', 'API_KEY', '-y']);
-
-			expect(result.command).toBe('secrets');
-			expect(result.subcommand).toBe('delete');
-			expect(result.flags.yes).toBe(true);
+		it('rejects removed only-names, plain, and delete confirmation flags', () => {
+			expect(() => cli.parse(['secrets', '--only-names'])).toThrow('Unknown option');
+			expect(() => cli.parse(['secrets', 'get', 'API_KEY', '--plain'])).toThrow('Unknown option');
+			expect(() => cli.parse(['secrets', 'delete', 'API_KEY', '-y'])).toThrow('Unknown option');
 		});
 	});
 
@@ -263,51 +386,18 @@ describe('CLI Framework', () => {
 			expect(result.flags.command).toBe('echo hi && echo bye');
 		});
 
-		it('parses run with --mount flag', () => {
-			const result = cli.parse(['run', '--mount', 'secrets.json', '--', 'cat', 'secrets.json']);
-
-			expect(result.command).toBe('run');
-			expect(result.flags.mount).toBe('secrets.json');
-			expect(result.positionals).toEqual(['cat', 'secrets.json']);
-		});
-
-		it('parses run with --mount-format flag', () => {
-			const result = cli.parse([
-				'run',
+		it('rejects deferred mount and fallback flags', () => {
+			for (const flag of [
 				'--mount',
-				'secrets.env',
 				'--mount-format',
-				'env',
-				'--',
-				'sh',
-				'-c',
-				'cat secrets.env',
-			]);
-
-			expect(result.command).toBe('run');
-			expect(result.flags.mount).toBe('secrets.env');
-			expect(result.flags['mount-format']).toBe('env');
-		});
-
-		it('parses run with --fallback flag', () => {
-			const result = cli.parse(['run', '--fallback', '/tmp/fallback.json', '--', 'npm', 'start']);
-
-			expect(result.command).toBe('run');
-			expect(result.flags.fallback).toBe('/tmp/fallback.json');
-		});
-
-		it('parses run with --fallback-only flag', () => {
-			const result = cli.parse(['run', '--fallback-only', '--', 'npm', 'start']);
-
-			expect(result.command).toBe('run');
-			expect(result.flags['fallback-only']).toBe(true);
-		});
-
-		it('parses run with --no-fallback flag', () => {
-			const result = cli.parse(['run', '--no-fallback', '--', 'npm', 'start']);
-
-			expect(result.command).toBe('run');
-			expect(result.flags['no-fallback']).toBe(true);
+				'--fallback',
+				'--fallback-only',
+				'--fallback-readonly',
+				'--no-fallback',
+				'--forward-signals',
+			]) {
+				expect(() => cli.parse(['run', flag, '--', 'echo', 'ok'])).toThrow('Unknown option');
+			}
 		});
 
 		it('parses run with --preserve-env flag', () => {
@@ -374,12 +464,8 @@ describe('CLI Framework', () => {
 			expect(result.subcommand).toBe('revoke');
 		});
 
-		it('parses login revoke with --yes flag', () => {
-			const result = cli.parse(['login', 'revoke', '-y']);
-
-			expect(result.command).toBe('login');
-			expect(result.subcommand).toBe('revoke');
-			expect(result.flags.yes).toBe(true);
+		it('rejects removed login revoke confirmation flag', () => {
+			expect(() => cli.parse(['login', 'revoke', '-y'])).toThrow('Unknown option');
 		});
 	});
 
@@ -390,11 +476,8 @@ describe('CLI Framework', () => {
 			expect(result.command).toBe('logout');
 		});
 
-		it('parses logout with --yes flag', () => {
-			const result = cli.parse(['logout', '-y']);
-
-			expect(result.command).toBe('logout');
-			expect(result.flags.yes).toBe(true);
+		it('rejects removed logout confirmation flag', () => {
+			expect(() => cli.parse(['logout', '-y'])).toThrow('Unknown option');
 		});
 	});
 
@@ -433,10 +516,19 @@ describe('CLI Framework', () => {
 			expect(result.flags.config).toBe('dev');
 		});
 
-		it('parses setup with --no-interactive flag', () => {
-			const result = cli.parse(['setup', '-p', 'myapp', '-c', 'dev', '--no-interactive']);
+		it('parses setup force and no-interactive independently', () => {
+			const result = cli.parse([
+				'setup',
+				'-p',
+				'myapp',
+				'-c',
+				'dev',
+				'--force',
+				'--no-interactive',
+			]);
 
 			expect(result.command).toBe('setup');
+			expect(result.flags.force).toBe(true);
 			expect(result.flags['no-interactive']).toBe(true);
 		});
 	});
@@ -453,6 +545,13 @@ describe('CLI Framework', () => {
 
 			expect(result.command).toBe('configure');
 			expect(result.flags.all).toBe(true);
+		});
+
+		it('parses configure relays subcommand', () => {
+			const result = cli.parse(['configure', 'relays']);
+
+			expect(result.command).toBe('configure');
+			expect(result.subcommand).toBe('relays');
 		});
 
 		it('parses configure get subcommand', () => {
@@ -559,6 +658,32 @@ describe('CLI Framework', () => {
 		});
 	});
 
+	describe('parse() - bunker command', () => {
+		it('parses bunker start with explicit plaintext-key acknowledgement', () => {
+			const result = cli.parse([
+				'bunker',
+				'start',
+				'--insecure-plaintext-keys',
+				'--relay',
+				'wss://relay.test,wss://relay2.test',
+			]);
+
+			expect(result.command).toBe('bunker');
+			expect(result.subcommand).toBe('start');
+			expect(result.flags['insecure-plaintext-keys']).toBe(true);
+			expect(result.flags.relay).toBe('wss://relay.test,wss://relay2.test');
+		});
+
+		it('parses bunker status without exposing secret flags', () => {
+			const result = cli.parse(['bunker', 'status', '--relay', 'wss://relay.test']);
+
+			expect(result.command).toBe('bunker');
+			expect(result.subcommand).toBe('status');
+			expect(result.flags.relay).toBe('wss://relay.test');
+			expect(result.flags['insecure-plaintext-keys']).toBeUndefined();
+		});
+	});
+
 	describe('parse() - upgrade command', () => {
 		it('parses upgrade with no args', () => {
 			const result = cli.parse(['upgrade']);
@@ -645,10 +770,9 @@ describe('CLI Framework', () => {
 			expect(help).toContain('Flags:');
 			expect(help).toContain('--help');
 			expect(help).toContain('--version');
-			expect(help).toContain('--json');
-			expect(help).toContain('--silent');
-			expect(help).toContain('--debug');
 			expect(help).toContain('--config-dir');
+			expect(help).not.toContain('--silent');
+			expect(help).not.toContain('--debug');
 		});
 
 		it('includes usage hint', () => {
@@ -680,12 +804,12 @@ describe('CLI Framework', () => {
 		it('generates help for secrets get subcommand', () => {
 			const help = cli.generateCommandHelp('secrets', 'get');
 
-			expect(help).toContain('Get the value of one or more secrets');
+			expect(help).toContain('Get the value of one secret');
 			expect(help).toContain('Usage:');
 			expect(help).toContain('redshift secrets get');
 			expect(help).toContain('Flags:');
-			expect(help).toContain('--plain');
-			expect(help).toContain('--copy');
+			expect(help).toContain('--raw');
+			expect(help).not.toContain('--copy');
 		});
 
 		it('generates help for run command', () => {
@@ -694,8 +818,9 @@ describe('CLI Framework', () => {
 			expect(help).toContain('Run a command with secrets injected');
 			expect(help).toContain('Examples:');
 			expect(help).toContain('redshift run -- YOUR_COMMAND');
-			expect(help).toContain('--mount');
-			expect(help).toContain('--fallback');
+			expect(help).toContain('--preserve-env');
+			expect(help).not.toContain('--mount');
+			expect(help).not.toContain('--fallback');
 		});
 
 		it('generates help for login command', () => {
