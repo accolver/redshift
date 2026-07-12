@@ -13,7 +13,11 @@ import { type ParsedArgs, createCLI } from './lib/cli';
 import { VERSION } from './version';
 
 // Import command handlers
+import { backupCommand } from './commands/backup';
+import { bunkerCommand } from './commands/bunker';
+import { historyCommand } from './commands/history';
 import { loginCommand, logoutCommand } from './commands/login';
+import { recoveryCommand } from './commands/recovery';
 import { runCommand } from './commands/run';
 import { type SecretsSubcommand, secretsCommand } from './commands/secrets';
 import { serveCommand } from './commands/serve';
@@ -28,7 +32,14 @@ const cli = createCLI(VERSION);
  */
 async function main(): Promise<void> {
 	const args = process.argv.slice(2);
-	const parsed = cli.parse(args);
+	let parsed: ParsedArgs;
+	try {
+		parsed = cli.parse(args);
+	} catch (error) {
+		console.error('Error:', error instanceof Error ? error.message : String(error));
+		process.exitCode = 2;
+		return;
+	}
 
 	// Handle global flags first
 	if (parsed.globalFlags.version) {
@@ -58,7 +69,8 @@ async function main(): Promise<void> {
 		console.error(`Unknown command: ${parsed.command}`);
 		console.log('');
 		console.log(cli.generateMainHelp());
-		process.exit(1);
+		process.exitCode = 2;
+		return;
 	}
 
 	// Set global config dir if provided
@@ -70,14 +82,8 @@ async function main(): Promise<void> {
 	try {
 		await executeCommand(parsed);
 	} catch (error) {
-		if (!parsed.globalFlags.silent) {
-			if (parsed.globalFlags.debug) {
-				console.error('Error:', error);
-			} else {
-				console.error('Error:', error instanceof Error ? error.message : String(error));
-			}
-		}
-		process.exit(1);
+		console.error('Error:', error instanceof Error ? error.message : String(error));
+		process.exitCode = 1;
 	}
 }
 
@@ -96,18 +102,59 @@ async function executeCommand(parsed: ParsedArgs): Promise<void> {
 			return handleRunCommand(parsed);
 		case 'secrets':
 			return handleSecretsCommand(parsed);
+		case 'history':
+			return handleHistoryCommand(parsed);
+		case 'backup': {
+			const file = parsed.positionals[0];
+			if (!file) throw new Error('Backup file path is required');
+			return backupCommand({
+				subcommand: (parsed.subcommand ?? 'create') as 'create' | 'restore',
+				file,
+				force: parsed.flags.force === true,
+				overwrite: parsed.flags.overwrite === true,
+				allowIdentityChange: parsed.flags['allow-identity-change'] === true,
+				passphraseStdin: parsed.flags['passphrase-stdin'] === true,
+			});
+		}
+		case 'recovery':
+			return recoveryCommand({
+				subcommand: (parsed.subcommand ?? 'list') as 'list' | 'show' | 'retry' | 'remove',
+				...(parsed.positionals[0] ? { eventId: parsed.positionals[0] } : {}),
+				json: parsed.globalFlags.json,
+			});
 		case 'serve':
 			return handleServeCommand(parsed);
+		case 'bunker':
+			return handleBunkerCommand(parsed);
 		case 'configure':
 			return handleConfigureCommand(parsed.subcommand, parsed.positionals, parsed.flags);
 		case 'me':
-			return handleMeCommand(parsed.globalFlags);
+			return handleMeCommand(parsed.flags);
 		case 'upgrade':
 			return handleUpgradeCommand(parsed);
 		default:
 			console.error(`Unknown command: ${parsed.command}`);
 			process.exit(1);
 	}
+}
+
+/**
+ * Handle the bunker command
+ */
+async function handleBunkerCommand(parsed: ParsedArgs): Promise<void> {
+	const relayFlag = parsed.flags.relay;
+	const relays =
+		typeof relayFlag === 'string'
+			? relayFlag
+					.split(',')
+					.map((relay) => relay.trim())
+					.filter(Boolean)
+			: undefined;
+	await bunkerCommand({
+		subcommand: parsed.subcommand === 'status' ? 'status' : 'start',
+		insecurePlaintextKeys: parsed.flags['insecure-plaintext-keys'] === true,
+		...(relays ? { relays } : {}),
+	});
 }
 
 /**
@@ -119,11 +166,14 @@ async function handleLoginCommand(parsed: ParsedArgs): Promise<void> {
 		await logoutCommand();
 		return;
 	}
+	const nsec = typeof parsed.flags.nsec === 'string' ? parsed.flags.nsec : undefined;
+	const bunker = typeof parsed.flags.bunker === 'string' ? parsed.flags.bunker : undefined;
 	await loginCommand({
-		nsec: typeof parsed.flags.nsec === 'string' ? parsed.flags.nsec : undefined,
-		bunker: typeof parsed.flags.bunker === 'string' ? parsed.flags.bunker : undefined,
+		bunkerStdin: parsed.flags['bunker-stdin'] === true,
 		connect: parsed.flags.connect === true,
 		force: parsed.flags.overwrite === true,
+		...(nsec ? { nsec } : {}),
+		...(bunker ? { bunker } : {}),
 	});
 }
 
@@ -131,11 +181,13 @@ async function handleLoginCommand(parsed: ParsedArgs): Promise<void> {
  * Handle the setup command
  */
 async function handleSetupCommand(parsed: ParsedArgs): Promise<void> {
+	const project = typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined;
+	const environment = typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined;
 	await setupCommand({
-		project: typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined,
-		// Map 'config' to 'environment' for Doppler compatibility
-		environment: typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined,
-		force: parsed.flags['no-interactive'] !== true,
+		force: parsed.flags.force === true,
+		interactive: parsed.flags['no-interactive'] !== true,
+		...(project ? { project } : {}),
+		...(environment ? { environment } : {}),
 	});
 }
 
@@ -143,28 +195,24 @@ async function handleSetupCommand(parsed: ParsedArgs): Promise<void> {
  * Handle the run command
  */
 async function handleRunCommand(parsed: ParsedArgs): Promise<void> {
-	let commandToRun: string[] = [];
-
-	if (typeof parsed.flags.command === 'string') {
-		// Treat as shell command - wrap in sh -c for proper parsing
-		commandToRun = ['sh', '-c', parsed.flags.command];
-	} else if (parsed.positionals.length > 0) {
-		// -- echo hi style
-		commandToRun = parsed.positionals;
-	}
-
-	if (commandToRun.length === 0) {
-		console.error('Error: No command specified after --');
-		console.error('Usage: redshift run -- <command>');
-		console.error('   or: redshift run --command "your command"');
-		process.exit(1);
-	}
-
-	await runCommand({
-		command: commandToRun,
-		project: typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined,
-		environment: typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined,
+	const preserveEnv =
+		typeof parsed.flags['preserve-env'] === 'string'
+			? parsed.flags['preserve-env']
+					.split(',')
+					.map((name) => name.trim())
+					.filter(Boolean)
+			: undefined;
+	const shellCommand = typeof parsed.flags.command === 'string' ? parsed.flags.command : undefined;
+	const project = typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined;
+	const environment = typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined;
+	const exitCode = await runCommand({
+		command: parsed.positionals,
+		...(shellCommand !== undefined ? { shellCommand } : {}),
+		...(project ? { project } : {}),
+		...(environment ? { environment } : {}),
+		...(preserveEnv ? { preserveEnv } : {}),
 	});
+	if (exitCode !== 0) process.exitCode = exitCode;
 }
 
 /**
@@ -178,10 +226,10 @@ async function handleSecretsCommand(parsed: ParsedArgs): Promise<void> {
 	const secretsOpts: Parameters<typeof secretsCommand>[0] = {
 		subcommand: secretsSubcommand,
 		raw: parsed.flags.raw === true,
-		project: typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined,
-		environment: typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined,
-		format: parsed.globalFlags.json ? 'json' : undefined,
 	};
+	if (typeof parsed.flags.project === 'string') secretsOpts.project = parsed.flags.project;
+	if (typeof parsed.flags.config === 'string') secretsOpts.environment = parsed.flags.config;
+	if (parsed.flags.json === true) secretsOpts.format = 'json';
 
 	// Handle positionals based on subcommand
 	switch (secretsSubcommand) {
@@ -191,20 +239,22 @@ async function handleSecretsCommand(parsed: ParsedArgs): Promise<void> {
 				secretsOpts.key = parsed.positionals[0];
 			}
 			break;
-		case 'set':
-			// Support both "set KEY VALUE" and "set KEY=VALUE"
-			if (parsed.positionals.length >= 2) {
-				secretsOpts.key = parsed.positionals[0];
-				secretsOpts.value = parsed.positionals[1];
-			} else if (parsed.positionals[0]?.includes('=')) {
-				const [key, ...valueParts] = parsed.positionals[0].split('=');
-				secretsOpts.key = key;
-				secretsOpts.value = valueParts.join('=');
-			} else if (parsed.positionals[0]) {
-				secretsOpts.key = parsed.positionals[0];
-				// Value might be provided interactively
+		case 'set': {
+			// Support both "set KEY VALUE" and "set KEY=VALUE".
+			const [first, second] = parsed.positionals;
+			if (first !== undefined && second !== undefined) {
+				secretsOpts.key = first;
+				secretsOpts.value = second;
+			} else if (first?.includes('=')) {
+				const separator = first.indexOf('=');
+				secretsOpts.key = first.slice(0, separator);
+				secretsOpts.value = first.slice(separator + 1);
+			} else if (first) {
+				secretsOpts.key = first;
+				// Value might be provided interactively.
 			}
 			break;
+		}
 		case 'delete':
 			if (parsed.positionals[0]) {
 				secretsOpts.key = parsed.positionals[0];
@@ -219,6 +269,53 @@ async function handleSecretsCommand(parsed: ParsedArgs): Promise<void> {
 	}
 
 	await secretsCommand(secretsOpts);
+}
+
+/** Handle bounded authenticated history commands. */
+async function handleHistoryCommand(parsed: ParsedArgs): Promise<void> {
+	const project = typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined;
+	const environment = typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined;
+	const limitValue = typeof parsed.flags.limit === 'string' ? parsed.flags.limit : undefined;
+	let limit: number | undefined;
+	if (limitValue !== undefined) {
+		if (!/^[1-9][0-9]{0,2}$/.test(limitValue)) {
+			throw new Error('History page limit must be a decimal integer between 1 and 100');
+		}
+		limit = Number(limitValue);
+	}
+	const common = {
+		...(project ? { project } : {}),
+		...(environment ? { environment } : {}),
+		json: parsed.flags.json === true,
+	};
+	if (!parsed.subcommand || parsed.subcommand === 'list') {
+		return historyCommand({
+			subcommand: 'list',
+			...common,
+			...(limit === undefined ? {} : { limit }),
+			...(typeof parsed.flags.cursor === 'string' ? { cursor: parsed.flags.cursor } : {}),
+		});
+	}
+	if (parsed.subcommand === 'compare') {
+		const fromEventId = parsed.positionals[0];
+		const toEventId = parsed.positionals[1];
+		if (!fromEventId || !toEventId) throw new Error('Two history event IDs are required');
+		return historyCommand({
+			subcommand: 'compare',
+			...common,
+			fromEventId,
+			toEventId,
+		});
+	}
+	const eventId = parsed.positionals[0];
+	if (!eventId) throw new Error('History event ID is required');
+	return historyCommand({
+		subcommand: 'restore',
+		...common,
+		eventId,
+		yes: parsed.flags.yes === true,
+		overwriteCurrent: parsed.flags['overwrite-current'] === true,
+	});
 }
 
 /**
@@ -239,9 +336,10 @@ async function handleServeCommand(parsed: ParsedArgs): Promise<void> {
  * Handle the upgrade command
  */
 async function handleUpgradeCommand(parsed: ParsedArgs): Promise<void> {
+	const version = typeof parsed.flags.tag === 'string' ? parsed.flags.tag : undefined;
 	await upgradeCommand({
 		force: parsed.flags.force === true,
-		version: typeof parsed.flags.tag === 'string' ? parsed.flags.tag : undefined,
+		...(version ? { version } : {}),
 	});
 }
 
@@ -253,20 +351,44 @@ async function handleConfigureCommand(
 	positionals: string[],
 	flags: Record<string, string | boolean | undefined>,
 ): Promise<void> {
-	const { loadConfig, saveConfig, getConfigDir } = await import('./lib/config');
+	const {
+		getConfigDir,
+		getRelayConfigStatus,
+		loadConfig,
+		normalizeRelayUrls,
+		redactConfig,
+		resetConfig,
+		saveConfig,
+	} = await import('./lib/config');
 
 	const SENSITIVE_KEYS = new Set(['nsec', 'bunker', 'authMethod', 'clientSecretKey']);
+	const RELAY_USAGE_LINES = [
+		'Set relays: redshift configure set relays=\'["wss://relay.example"]\'',
+		'Or CSV:     redshift configure set relays=wss://relay1.example,wss://relay2.example',
+		'Reset:      redshift configure unset relays',
+	];
 
 	switch (subcommand) {
+		case 'relays': {
+			const status = await getRelayConfigStatus();
+			console.log(`Relay source: ${status.source}`);
+			for (const [index, relay] of status.relays.entries()) {
+				console.log(`  ${index + 1}. ${relay}`);
+			}
+			console.log('');
+			for (const line of RELAY_USAGE_LINES) {
+				console.log(line);
+			}
+			break;
+		}
+
 		case 'get': {
-			const config = await loadConfig();
+			const config = redactConfig(await loadConfig());
 			if (positionals.length === 0) {
-				// Show all options
 				console.log(JSON.stringify(config, null, 2));
 			} else {
-				// Show specific options
 				for (const key of positionals) {
-					const value = config[key as keyof typeof config];
+					const value = config[key];
 					if (value !== undefined) {
 						console.log(`${key}: ${JSON.stringify(value)}`);
 					} else {
@@ -278,57 +400,62 @@ async function handleConfigureCommand(
 		}
 
 		case 'set': {
-			const ALLOWED_CONFIG_KEYS = new Set(['relays', 'defaultProject', 'defaultEnvironment']);
+			const allowedConfigKeys = new Set(['relays', 'defaultProject', 'defaultEnvironment']);
+			if (positionals.length === 0) throw new Error('configure set requires key=value');
 			const config = await loadConfig();
+			const updates: Array<{ key: string; value: string | string[] }> = [];
 			for (const arg of positionals) {
-				const [key, ...valueParts] = arg.split('=');
-				if (key && valueParts.length > 0) {
-					if (SENSITIVE_KEYS.has(key)) {
-						console.error(`Cannot set '${key}' via configure. Use 'redshift login' instead.`);
-						continue;
-					}
-					if (!ALLOWED_CONFIG_KEYS.has(key)) {
-						console.error(
-							`Unknown config key '${key}'. Allowed: ${[...ALLOWED_CONFIG_KEYS].join(', ')}`,
-						);
-						continue;
-					}
-					const value = valueParts.join('=');
-					// Try to parse as JSON, fall back to string
-					try {
-						(config as Record<string, unknown>)[key] = JSON.parse(value);
-					} catch {
-						(config as Record<string, unknown>)[key] = value;
-					}
-					console.log(`Set ${key}`);
+				const separator = arg.indexOf('=');
+				if (separator <= 0) throw new Error(`Invalid configuration assignment: ${arg}`);
+				const key = arg.slice(0, separator);
+				const value = arg.slice(separator + 1);
+				if (SENSITIVE_KEYS.has(key)) {
+					throw new Error(`Cannot set '${key}' via configure. Use 'redshift login' instead.`);
 				}
+				if (!allowedConfigKeys.has(key)) {
+					throw new Error(
+						`Unknown config key '${key}'. Allowed: ${[...allowedConfigKeys].join(', ')}`,
+					);
+				}
+				updates.push({
+					key,
+					value:
+						key === 'relays'
+							? normalizeRelayUrls(parseRelayConfigValue(value), 'configured relay')
+							: value,
+				});
+			}
+			for (const update of updates) {
+				(config as Record<string, unknown>)[update.key] = update.value;
 			}
 			await saveConfig(config);
+			for (const update of updates) console.log(`Set ${update.key}`);
 			break;
 		}
 
 		case 'unset': {
-			const config = await loadConfig();
+			const allowedConfigKeys = new Set(['relays', 'defaultProject', 'defaultEnvironment']);
+			if (positionals.length === 0) throw new Error('configure unset requires a key');
 			for (const key of positionals) {
 				if (SENSITIVE_KEYS.has(key)) {
-					console.error(`Cannot unset '${key}' via configure. Use 'redshift logout' instead.`);
-					continue;
+					throw new Error(`Cannot unset '${key}' via configure. Use 'redshift logout' instead.`);
 				}
-				delete (config as Record<string, unknown>)[key];
-				console.log(`Unset ${key}`);
+				if (!allowedConfigKeys.has(key)) throw new Error(`Unknown config key '${key}'`);
 			}
-			await saveConfig(config);
+			const config = await loadConfig();
+			const next = Object.fromEntries(
+				Object.entries(config).filter(([key]) => !positionals.includes(key)),
+			);
+			await saveConfig(next);
+			for (const key of positionals) console.log(`Unset ${key}`);
 			break;
 		}
 
 		case 'reset': {
 			if (flags.yes !== true) {
-				console.log('This will reset all CLI configuration.');
-				console.log('Use --yes to confirm.');
-				return;
+				throw new Error('Configuration reset requires --yes confirmation');
 			}
-			const { clearAuth } = await import('./lib/config');
-			await clearAuth();
+			await resetConfig();
 			console.log('Configuration reset.');
 			break;
 		}
@@ -341,8 +468,9 @@ async function handleConfigureCommand(
 			if (flags.all === true) {
 				console.log(`Config directory: ${configDir}`);
 				console.log('');
-				console.log(JSON.stringify(config, null, 2));
+				console.log(JSON.stringify(redactConfig(config), null, 2));
 			} else {
+				const relayStatus = await getRelayConfigStatus();
 				console.log(`Config directory: ${configDir}`);
 				console.log('');
 				// Show key settings
@@ -352,33 +480,47 @@ async function handleConfigureCommand(
 				if (config.defaultProject) {
 					console.log(`Default project: ${config.defaultProject}`);
 				}
-				if (config.relays && config.relays.length > 0) {
-					console.log(`Relays: ${config.relays.join(', ')}`);
-				}
+				console.log(`Relays (${relayStatus.source}): ${relayStatus.relays.join(', ')}`);
+				console.log('Run `redshift configure relays` for relay configuration help.');
 			}
 			break;
 		}
 	}
 }
 
+function parseRelayConfigValue(value: string): string[] {
+	try {
+		const parsed: unknown = JSON.parse(value);
+		if (Array.isArray(parsed) && parsed.every((relay) => typeof relay === 'string')) {
+			return parsed.map((relay) => relay.trim()).filter((relay) => relay.length > 0);
+		}
+	} catch {
+		// Fall through to comma-separated parsing.
+	}
+
+	return value
+		.split(',')
+		.map((relay) => relay.trim())
+		.filter((relay) => relay.length > 0);
+}
+
 /**
  * Handle the me/whoami command
  */
-async function handleMeCommand(globalFlags: { json: boolean; silent: boolean }): Promise<void> {
+async function handleMeCommand(flags: Record<string, string | boolean | undefined>): Promise<void> {
 	const { getAuth } = await import('./lib/config');
 	const { decodeNsec } = await import('./lib/crypto');
 	const { getPublicKey } = await import('nostr-tools/pure');
 	const { npubEncode } = await import('nostr-tools/nip19');
-
 	const auth = await getAuth();
 
 	if (!auth) {
-		if (globalFlags.json) {
-			console.log(JSON.stringify({ authenticated: false }));
-		} else {
-			console.log('Not logged in.');
-			console.log('Run `redshift login` to authenticate.');
-		}
+		console.log(
+			flags.json === true
+				? JSON.stringify({ authenticated: false })
+				: 'Not logged in.\nRun `redshift login` to authenticate.',
+		);
+		process.exitCode = 1;
 		return;
 	}
 
@@ -386,16 +528,9 @@ async function handleMeCommand(globalFlags: { json: boolean; silent: boolean }):
 		const privateKeyBytes = decodeNsec(auth.nsec);
 		const pubkey = getPublicKey(privateKeyBytes);
 		const npub = npubEncode(pubkey);
-
-		if (globalFlags.json) {
+		if (flags.json === true) {
 			console.log(
-				JSON.stringify({
-					authenticated: true,
-					method: 'nsec',
-					npub,
-					pubkey,
-					source: auth.source,
-				}),
+				JSON.stringify({ authenticated: true, method: 'nsec', npub, pubkey, source: auth.source }),
 			);
 		} else {
 			console.log('Authenticated');
@@ -403,8 +538,11 @@ async function handleMeCommand(globalFlags: { json: boolean; silent: boolean }):
 			console.log(`  Public key: ${npub}`);
 			console.log(`  Source: ${auth.source}`);
 		}
-	} else if (auth.method === 'bunker' && auth.bunker) {
-		if (globalFlags.json) {
+		return;
+	}
+
+	if (auth.method === 'bunker' && auth.bunker) {
+		if (flags.json === true) {
 			console.log(
 				JSON.stringify({
 					authenticated: true,
@@ -420,13 +558,15 @@ async function handleMeCommand(globalFlags: { json: boolean; silent: boolean }):
 			console.log(`  Relays: ${auth.bunker.relays.join(', ')}`);
 			console.log(`  Source: ${auth.source}`);
 		}
-	} else {
-		if (globalFlags.json) {
-			console.log(JSON.stringify({ authenticated: false }));
-		} else {
-			console.log('Authentication method not fully configured.');
-		}
+		return;
 	}
+
+	console.log(
+		flags.json === true
+			? JSON.stringify({ authenticated: false })
+			: 'Authentication method not fully configured.',
+	);
+	process.exitCode = 1;
 }
 
 main().catch((error: unknown) => {

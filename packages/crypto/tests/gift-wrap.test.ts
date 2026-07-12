@@ -4,19 +4,72 @@
  * Tests for NIP-59 Gift Wrap implementation with type tag support.
  */
 
-import { describe, expect, it, beforeEach } from 'bun:test';
-import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { nip44 } from 'nostr-tools';
+import { createRumor, createSeal } from 'nostr-tools/nip59';
+import { finalizeEvent, generateSecretKey, getEventHash, getPublicKey } from 'nostr-tools/pure';
 import {
-	wrapSecrets,
-	unwrapSecrets,
-	unwrapGiftWrap,
-	createTombstone,
-	isRedshiftSecretsEvent,
-	getRedshiftSecretsFilter,
+	type NostrEvent,
 	NostrKinds,
 	REDSHIFT_TYPE_TAG,
 	type SecretBundle,
+	compareSecretVersions,
+	createTombstone,
+	getRedshiftSecretsFilter,
+	isRedshiftSecretsEvent,
+	unwrapGiftWrap,
+	unwrapSecrets,
+	wrapSecrets,
 } from '../src/index';
+
+interface CraftedGiftWrapOptions {
+	rumorAuthorKey: Uint8Array;
+	sealAuthorKey?: Uint8Array;
+	recipientPubkey: string;
+	rumorPubkey?: string;
+	rumorCreatedAt?: number;
+	outerTags?: string[][];
+}
+
+function craftGiftWrap(options: CraftedGiftWrapOptions): NostrEvent {
+	const sealAuthorKey = options.sealAuthorKey ?? options.rumorAuthorKey;
+	const customRumor = options.rumorPubkey
+		? {
+				pubkey: options.rumorPubkey,
+				created_at: options.rumorCreatedAt ?? Math.floor(Date.now() / 1000),
+				kind: NostrKinds.SECRET_BUNDLE,
+				tags: [['d', 'proj|env']],
+				content: JSON.stringify({ KEY: 'attacker-controlled' }),
+			}
+		: null;
+	const rumor = customRumor
+		? { ...customRumor, id: getEventHash(customRumor) }
+		: createRumor(
+				{
+					created_at: options.rumorCreatedAt ?? Math.floor(Date.now() / 1000),
+					kind: NostrKinds.SECRET_BUNDLE,
+					tags: [['d', 'proj|env']],
+					content: JSON.stringify({ KEY: 'attacker-controlled' }),
+				},
+				options.rumorAuthorKey,
+			);
+	const seal = createSeal(rumor, sealAuthorKey, options.recipientPubkey);
+	const ephemeralKey = generateSecretKey();
+	const conversationKey = nip44.v2.utils.getConversationKey(ephemeralKey, options.recipientPubkey);
+	const content = nip44.v2.encrypt(JSON.stringify(seal), conversationKey);
+	return finalizeEvent(
+		{
+			kind: NostrKinds.GIFT_WRAP,
+			created_at: Math.floor(Date.now() / 1000),
+			tags: options.outerTags ?? [
+				['p', options.recipientPubkey],
+				['t', REDSHIFT_TYPE_TAG],
+			],
+			content,
+		},
+		ephemeralKey,
+	) as NostrEvent;
+}
 
 describe('NIP-59 Gift Wrap', () => {
 	let privateKey: Uint8Array;
@@ -148,16 +201,97 @@ describe('NIP-59 Gift Wrap', () => {
 			expect(result.pubkey).toBe(publicKey);
 		});
 
-		it('returns null d-tag if rumor has no d-tag', () => {
-			// This is an edge case - in practice all our events have d-tags
-			const secrets: SecretBundle = { KEY: 'value' };
-			const dTag = 'proj|env';
-
-			const { event } = wrapSecrets(secrets, privateKey, dTag);
+		it('includes the outer event ID in version metadata', () => {
+			const { event } = wrapSecrets({ KEY: 'value' }, privateKey, 'proj|env');
 			const result = unwrapGiftWrap(event, privateKey);
 
-			// Our implementation always includes d-tag
-			expect(result.dTag).toBe(dTag);
+			expect(result.eventId).toBe(event.id);
+		});
+
+		it('rejects an attacker-authored bundle addressed to the authenticated owner', () => {
+			const event = craftGiftWrap({
+				rumorAuthorKey: generateSecretKey(),
+				recipientPubkey: publicKey,
+			});
+
+			expect(() => unwrapGiftWrap(event, privateKey)).toThrow('seal author');
+		});
+
+		it('rejects a rumor author that differs from the authenticated owner', () => {
+			const attackerKey = generateSecretKey();
+			const event = craftGiftWrap({
+				rumorAuthorKey: privateKey,
+				sealAuthorKey: privateKey,
+				recipientPubkey: publicKey,
+				rumorPubkey: getPublicKey(attackerKey),
+			});
+
+			expect(() => unwrapGiftWrap(event, privateKey)).toThrow('rumor author');
+		});
+
+		it('rejects missing, duplicate, malformed, or wrong recipient tags', () => {
+			const invalidTags = [
+				[['t', REDSHIFT_TYPE_TAG]],
+				[
+					['p', publicKey],
+					['p', publicKey],
+					['t', REDSHIFT_TYPE_TAG],
+				],
+				[
+					['p', 'not-a-pubkey'],
+					['t', REDSHIFT_TYPE_TAG],
+				],
+				[
+					['p', getPublicKey(generateSecretKey())],
+					['t', REDSHIFT_TYPE_TAG],
+				],
+			];
+
+			for (const outerTags of invalidTags) {
+				const event = craftGiftWrap({
+					rumorAuthorKey: privateKey,
+					recipientPubkey: publicKey,
+					outerTags,
+				});
+				expect(() => unwrapGiftWrap(event, privateKey)).toThrow('recipient');
+			}
+		});
+
+		it('accepts a rumor at the future-skew boundary and rejects one second beyond it', () => {
+			const now = Math.floor(Date.now() / 1000);
+			const accepted = craftGiftWrap({
+				rumorAuthorKey: privateKey,
+				recipientPubkey: publicKey,
+				rumorCreatedAt: now + 300,
+			});
+			const rejected = craftGiftWrap({
+				rumorAuthorKey: privateKey,
+				recipientPubkey: publicKey,
+				rumorCreatedAt: now + 301,
+			});
+
+			expect(unwrapGiftWrap(accepted, privateKey, { now }).createdAt).toBe(now + 300);
+			expect(() => unwrapGiftWrap(rejected, privateKey, { now })).toThrow('future');
+		});
+	});
+
+	describe('compareSecretVersions', () => {
+		it('prefers a newer timestamp', () => {
+			expect(
+				compareSecretVersions(
+					{ createdAt: 11, eventId: 'f'.repeat(64) },
+					{ createdAt: 10, eventId: '0'.repeat(64) },
+				),
+			).toBeGreaterThan(0);
+		});
+
+		it('prefers the lexicographically lowest event ID for equal timestamps', () => {
+			const lower = { createdAt: 10, eventId: '0'.repeat(64) };
+			const higher = { createdAt: 10, eventId: 'f'.repeat(64) };
+
+			expect(compareSecretVersions(lower, higher)).toBeGreaterThan(0);
+			expect(compareSecretVersions(higher, lower)).toBeLessThan(0);
+			expect(compareSecretVersions(lower, lower)).toBe(0);
 		});
 	});
 

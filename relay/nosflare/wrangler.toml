@@ -3,11 +3,16 @@
 name = "redshift-relay"
 compatibility_date = "2025-01-04"
 main = "worker.js"
+routes = [{ pattern = "relay.redshiftapp.com", custom_domain = true }]
 
 # Durable Objects binding
 [[durable_objects.bindings]]
 name = "RELAY_WEBSOCKET"
 class_name = "RelayWebSocket"
+
+[[durable_objects.bindings]]
+name = "PRINCIPAL_QUOTA"
+class_name = "PrincipalQuota"
 
 # D1 Database binding
 [[d1_databases]]
@@ -19,11 +24,15 @@ database_id = "18490fc5-62bd-46e5-8e10-71003e63cd30"
 [triggers]
 crons = ["0 0 * * *"]
 
-# Disable logs
 [observability.logs]
-enabled = false
+enabled = true
+invocation_logs = true
 
 # IMPORTANT: SQLite migration required for free plan
 [[migrations]]
 tag = "v4"
 new_sqlite_classes = ["RelayWebSocket"]
+
+[[migrations]]
+tag = "v5"
+new_sqlite_classes = ["PrincipalQuota"]

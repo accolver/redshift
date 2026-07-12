@@ -1,0 +1,9 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated bundles are reproduced from separately scanned owned source"
+paths = [
+  '''^cli/src/lib/embedded-files\.ts$''',
+  '''^relay/nosflare/worker\.js$''',
+]

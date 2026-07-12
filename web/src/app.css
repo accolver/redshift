@@ -19,7 +19,7 @@
 	--secondary: #3b4261;
 	--secondary-foreground: #c0caf5;
 	--muted: #3b4261;
-	--muted-foreground: #565f89;
+	--muted-foreground: #9aa5ce;
 	--accent: #3b4261;
 	--accent-foreground: #c0caf5;
 	--destructive: #f7768e;
@@ -55,9 +55,9 @@
 	--sidebar-ring: #7aa2f7;
 
 	/* Base Settings */
-	--font-sans: "Space Grotesk", system-ui, sans-serif;
-	--font-serif: "Source Serif 4", serif;
-	--font-mono: "JetBrains Mono", "Fira Code", monospace;
+	--font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	--font-serif: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+	--font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 	--radius: 0.5rem;
 
 	/* Shadows for dark mode */
@@ -278,13 +278,6 @@
 	.scrollbar-hide::-webkit-scrollbar {
 		display: none;
 	}
-}
-
-/* Smooth transitions for theme switching */
-* {
-	transition-property: background-color, border-color;
-	transition-duration: 0.15s;
-	transition-timing-function: ease;
 }
 
 /* Documentation prose styles - Tokyo Night theme for @tailwindcss/typography */

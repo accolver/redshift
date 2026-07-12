@@ -39,7 +39,7 @@ Authenticate with your Nostr identity. Supports multiple methods:
 ```bash
 redshift login                              # Interactive (choose method)
 redshift login --nsec nsec1...              # Direct private key
-redshift login --bunker <bunker-url>        # NIP-46 remote signer
+redshift login --bunker-stdin               # NIP-46 one-time pairing URI (hidden input)
 redshift login --connect                    # Generate NostrConnect QR
 redshift login --overwrite                  # Re-authenticate
 ```
@@ -87,8 +87,7 @@ redshift run -p myapp -c prod -- docker-compose up
 
 Complex values (objects/arrays) are automatically JSON-stringified.
 
-Use `redshift run --help` to see all available options including `--mount`,
-`--fallback`, and `--preserve-env`.
+Use `redshift run --help` to see the supported execution and environment options.
 
 ### `redshift secrets`
 
@@ -116,6 +115,67 @@ redshift secrets delete OLD_KEY
 # Download as .env file
 redshift secrets download > .env
 ```
+
+### `redshift recovery`
+
+Inspect and complete encrypted events that reached only part of the configured relay set.
+Redshift writes the exact signed event before the first network attempt, so retry never creates a
+conflicting logical version.
+
+```bash
+redshift recovery list
+redshift recovery show <event-id>
+redshift recovery retry <event-id>   # Same owner; unavailable relays only
+redshift recovery remove <event-id>  # Removes only the local notice
+```
+
+Recovery records live under `~/.redshift/recovery/` (or `REDSHIFT_CONFIG_DIR`) in
+owner-only files. They contain encrypted relay ciphertext and publication metadata—never the nsec,
+bunker key, passphrase, or decrypted secret. A permanently rejected relay remains visible until the
+record is explicitly removed. Recovery is not a backup and cannot erase ciphertext retained by a
+relay.
+
+### `redshift backup`
+
+Create a versioned, passphrase-encrypted local snapshot of the latest authenticated non-tombstoned state observed from responding configured relays:
+
+```bash
+redshift backup create secrets.redshift
+redshift backup create secrets.redshift --force
+printf '%s\n%s\n' "$PASSPHRASE" "$PASSPHRASE" \
+  | redshift backup create secrets.redshift --passphrase-stdin
+```
+
+Restore requires a separately authenticated target signer. A different signer must be explicitly authorized, and conflicting live bundles require explicit overwrite:
+
+```bash
+redshift backup restore secrets.redshift
+redshift backup restore secrets.redshift --allow-identity-change
+redshift backup restore secrets.redshift --allow-identity-change --overwrite
+printf '%s\n' "$PASSPHRASE" \
+  | redshift backup restore secrets.redshift --passphrase-stdin
+```
+
+Archives are atomic owner-only files and contain encrypted current secret state plus project/environment identifiers and source version evidence. They exclude nsec/bunker/keychain credentials, passphrases, relay configuration, raw events, recovery records, tombstones, and history. Passphrases are never accepted through argv, config, or environment variables.
+
+Default restore preflights all bundles and performs zero writes if live destination values conflict. Identical bundles are no-ops; `--overwrite` replaces a full bundle without merging destination-only keys. Multi-bundle restore is not globally atomic, but every attempted bundle uses normal publication quorum and exact-event recovery.
+
+This is user-initiated local portability—not automatic, managed, offsite, retained, or complete-relay backup; not key/account recovery; and not an RPO/RTO, availability, or SLA guarantee.
+
+### `redshift history`
+
+List bounded owner-authenticated state observed from responding configured relays, compare key metadata without printing values, or restore one exact version:
+
+```bash
+redshift history list --project my-app --config production
+redshift history list --limit 20 --cursor <cursor> --json
+redshift history compare <from-event-id> <to-event-id> --project my-app --config production
+redshift history restore <event-id> --project my-app --config production --yes
+```
+
+Versions use authenticated inner timestamps and deterministic event-ID ties; NIP-59 outer timestamps do not order state. Empty versions are logical tombstones, not cryptographic erasure. Restore republishes the complete selected bundle as a strictly newer owner-authorized event through normal quorum and exact-event recovery. It refreshes current state immediately before publication and aborts on change; `--overwrite-current` is a second explicit authorization, not compare-and-swap. Relay retention may be incomplete, and fixed observation/version limits are reported as truncation.
+
+This command never prints secret values. Decrypted history remains ephemeral in the dashboard and is not an audit log, retained/offline backup, managed history, RPO/RTO, or SLA guarantee.
 
 ### `redshift serve`
 
@@ -170,8 +230,6 @@ These flags work with any command:
 | `--help`       | `-h`  | Show help for command     |
 | `--version`    | `-v`  | Show CLI version          |
 | `--json`       |       | Output JSON format        |
-| `--silent`     |       | Disable info messages     |
-| `--debug`      |       | Show debug output         |
 | `--config-dir` |       | Override config directory |
 
 ## NIP-46 Bunker Authentication
@@ -184,15 +242,16 @@ directly.
 ### Using a Bunker URL
 
 If you have a bunker running (e.g., Amber, nsec.app, or `nak bunker`), it will
-display a `bunker://` URL. Copy that URL and pass it to the login command:
+display a one-time `bunker://` URL. Paste that URL through hidden input so its
+`secret=` value never appears in the process list:
 
 ```bash
-redshift login --bunker "bunker://pubkey?relay=wss://relay.example&secret=xxx"
+redshift login --bunker-stdin
 ```
 
-> **Important**: Always wrap the bunker URL in **quotes**! The `&` and other
-> special characters will be interpreted by your shell otherwise, causing errors
-> like `zsh: no matches found`.
+The `--bunker` flag accepts only secret-free restoration pointers. For
+non-persistent CI authentication, provide `REDSHIFT_BUNKER` to the command that
+needs access.
 
 ### Using NostrConnect (Client-Initiated)
 
@@ -219,8 +278,8 @@ nak serve --port 10547
 nak bunker --sec $TEST_KEY ws://localhost:10547
 # Note the bunker:// URL printed
 
-# Login with the bunker URL
-redshift login --bunker "bunker://..."
+# Login, then paste the bunker URL at the hidden prompt
+redshift login --bunker-stdin
 ```
 
 ## Architecture
@@ -281,27 +340,24 @@ const secrets = await unwrapSecrets(event, privateKey);
 
 ### Global Config (`~/.redshift/config.json`)
 
-For nsec authentication:
+For nsec authentication, config stores only the selected method; the nsec remains in the OS keychain:
 
 ```json
 {
   "authMethod": "nsec",
-  "nsec": "nsec1...",
   "relays": ["wss://relay.damus.io", "wss://nos.lol"],
   "defaultProject": "my-project"
 }
 ```
 
-For bunker authentication:
+For bunker authentication, config stores only the public restoration pointer. The client key remains in the OS keychain and one-time pairing secrets are discarded:
 
 ```json
 {
   "authMethod": "bunker",
   "bunker": {
     "bunkerPubkey": "abc123...",
-    "relays": ["wss://relay.example"],
-    "secret": "optional-secret",
-    "clientSecretKey": "hex-encoded-key"
+    "relays": ["wss://relay.example"]
   },
   "relays": ["wss://relay.damus.io"]
 }
@@ -389,8 +445,8 @@ nak serve --port 10547
 nak bunker --sec $(nak key generate) ws://localhost:10547
 # Copy the bunker:// URL from output
 
-# Terminal 3: Test login
-REDSHIFT_CONFIG_DIR=/tmp/redshift-test bun run dev -- login --bunker "bunker://..."
+# Terminal 3: Test login, then paste the bunker URL at the hidden prompt
+REDSHIFT_CONFIG_DIR=/tmp/redshift-test bun run dev -- login --bunker-stdin
 
 # Verify config was saved
 cat /tmp/redshift-test/config.json

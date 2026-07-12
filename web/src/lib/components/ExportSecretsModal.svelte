@@ -1,4 +1,15 @@
 <script lang="ts">
+import { Button } from '$lib/components/ui/button';
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from '$lib/components/ui/dialog';
+import { Label } from '$lib/components/ui/label';
+import InlineCode from '$lib/components/InlineCode.svelte';
 import {
 	type ExportFormat,
 	exportToCsv,
@@ -7,6 +18,7 @@ import {
 	exportToYaml,
 } from '$lib/models/secrets-export';
 import type { Secret } from '$lib/types/nostr';
+import { Check, Copy, Download } from '@lucide/svelte';
 
 interface Props {
 	open: boolean;
@@ -16,7 +28,7 @@ interface Props {
 	onOpenChange: (open: boolean) => void;
 }
 
-const { open = $bindable(), secrets, projectName, environmentName, onOpenChange }: Props = $props();
+let { open = $bindable(), secrets, projectName, environmentName, onOpenChange }: Props = $props();
 
 let selectedFormat = $state<ExportFormat>('env');
 let copied = $state(false);
@@ -83,9 +95,9 @@ function handleOpenChange(value: boolean) {
 	<DialogContent class="sm:max-w-lg">
 		<DialogHeader>
 			<DialogTitle>Export Secrets</DialogTitle>
-		<DialogDescription>
-			Export {secrets.length} {secrets.length === 1 ? 'secret' : 'secrets'} from {environmentName} to a file.
-		</DialogDescription>
+			<DialogDescription>
+				Export {secrets.length} {secrets.length === 1 ? 'secret' : 'secrets'} from {environmentName} to a file.
+			</DialogDescription>
 		</DialogHeader>
 
 		<p class="text-sm text-muted-foreground">

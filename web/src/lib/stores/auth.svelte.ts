@@ -1,11 +1,13 @@
 import type { AuthState, EventTemplate, ProfileMetadata, SignedEvent } from '$lib/types/nostr';
+import { ResilientSimplePool } from '@redshift/rate-limiter';
 import { getPublicKey, nip19 } from 'nostr-tools';
-import { BunkerSigner, parseBunkerInput } from 'nostr-tools/nip46';
+import { type BunkerPointer, BunkerSigner, parseBunkerInput } from 'nostr-tools/nip46';
 import { SimplePool } from 'nostr-tools/pool';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
 import { DEFAULT_RELAYS } from './nostr.svelte';
 import {
 	isSecureStorageAvailable,
+	secureClearAll,
 	secureRemove,
 	secureRetrieve,
 	secureStore,
@@ -22,16 +24,74 @@ import {
 
 const NSEC_STORAGE_KEY = 'sk';
 const BUNKER_LOCAL_KEY = 'bunker_local_sk';
-const BUNKER_URI_KEY = 'bunker_uri';
+const BUNKER_CONNECTION_KEY = 'bunker_connection';
+const LEGACY_BUNKER_URI_KEY = 'bunker_uri';
+
+export interface StoredBunkerConnection {
+	version: 1;
+	bunkerPubkey: string;
+	relays: string[];
+}
+
+export interface Nip44CapabilityProvider {
+	nip44?: {
+		encrypt?: (pubkey: string, plaintext: string) => Promise<string>;
+		decrypt?: (pubkey: string, ciphertext: string) => Promise<string>;
+	};
+}
+
+export function hasNip44Capabilities(
+	provider: Nip44CapabilityProvider | undefined = typeof window !== 'undefined'
+		? window.nostr
+		: undefined,
+): boolean {
+	return (
+		typeof provider?.nip44?.encrypt === 'function' && typeof provider.nip44.decrypt === 'function'
+	);
+}
+
+export function serializeBunkerConnection(
+	pointer: Pick<BunkerPointer, 'pubkey' | 'relays'> & { secret?: string | null },
+): string {
+	return JSON.stringify({
+		version: 1,
+		bunkerPubkey: pointer.pubkey,
+		relays: [...pointer.relays],
+	} satisfies StoredBunkerConnection);
+}
+
+export function bunkerConnectionToUri(connection: StoredBunkerConnection): string {
+	const params = new URLSearchParams();
+	for (const relay of connection.relays) params.append('relay', relay);
+	return `bunker://${connection.bunkerPubkey}?${params.toString()}`;
+}
+
+function parseStoredBunkerConnection(value: string): StoredBunkerConnection | null {
+	try {
+		const parsed = JSON.parse(value) as Record<string, unknown>;
+		if (
+			parsed.version !== 1 ||
+			typeof parsed.bunkerPubkey !== 'string' ||
+			!Array.isArray(parsed.relays) ||
+			!parsed.relays.every((relay) => typeof relay === 'string')
+		) {
+			return null;
+		}
+		return {
+			version: 1,
+			bunkerPubkey: parsed.bunkerPubkey,
+			relays: parsed.relays as string[],
+		};
+	} catch {
+		return null;
+	}
+}
 
 // Active bunker signer instance (kept in memory, not serializable)
 let activeBunkerSigner: BunkerSigner | null = null;
 
 // Active bunker pool instance (for cleanup on disconnect or error)
-let activeBunkerPool: SimplePool | null = null;
-
-// Relay URLs used by the active bunker pool (needed for proper cleanup)
-let activeBunkerRelays: string[] = [];
+let activeBunkerPool: ResilientSimplePool | null = null;
 
 // Auth state using $state rune
 let authState = $state<AuthState>({
@@ -88,6 +148,11 @@ export async function connectWithNip07(): Promise<boolean> {
 	}
 
 	try {
+		if (!hasNip44Capabilities(window.nostr)) {
+			authState.error =
+				'This extension can sign events but cannot manage secrets. NIP-44 encrypt and decrypt support are required; use a bunker or nsec instead.';
+			return false;
+		}
 		const pubkey = await window.nostr!.getPublicKey();
 		authState = {
 			method: 'nip07',
@@ -202,7 +267,7 @@ export async function connectWithBunker(bunkerUri: string): Promise<boolean> {
 		}
 
 		// Create the bunker signer instance
-		const pool = new SimplePool();
+		const pool = new ResilientSimplePool();
 		let bunker: BunkerSigner;
 		try {
 			bunker = BunkerSigner.fromBunker(localSecretKey, bunkerPointer, { pool });
@@ -213,12 +278,12 @@ export async function connectWithBunker(bunkerUri: string): Promise<boolean> {
 			// Get the user's pubkey from the bunker
 			const pubkey = await bunker.getPublicKey();
 
-			// Store the bunker instance, pool, and URI for later cleanup
+			// Persist only the reusable pointer. Never retain a one-time `secret=` value.
 			activeBunkerSigner = bunker;
 			activeBunkerPool = pool;
-			activeBunkerRelays = bunkerPointer.relays;
 			if (isSecureStorageAvailable()) {
-				await secureStore(BUNKER_URI_KEY, bunkerUri);
+				await secureStore(BUNKER_CONNECTION_KEY, serializeBunkerConnection(bunkerPointer));
+				secureRemove(LEGACY_BUNKER_URI_KEY);
 			}
 
 			authState = {
@@ -236,7 +301,7 @@ export async function connectWithBunker(bunkerUri: string): Promise<boolean> {
 
 			return true;
 		} catch (error) {
-			pool.close(bunkerPointer.relays);
+			pool.destroy();
 			throw error;
 		}
 	} catch (err) {
@@ -263,26 +328,27 @@ export async function disconnect(): Promise<void> {
 	// Clean up bunker pool if active
 	if (activeBunkerPool) {
 		try {
-			activeBunkerPool.close(activeBunkerRelays);
-			activeBunkerRelays = [];
+			activeBunkerPool.destroy();
 		} catch {
 			// Ignore errors during cleanup
 		}
 		activeBunkerPool = null;
 	}
 
-	// Remove stored credentials
-	secureRemove(NSEC_STORAGE_KEY);
-	secureRemove(BUNKER_LOCAL_KEY);
-	secureRemove(BUNKER_URI_KEY);
-
-	authState = {
-		method: 'none',
-		pubkey: null,
-		isConnected: false,
-		error: null,
-		profile: null,
-	};
+	let storageError: string | null = null;
+	try {
+		await secureClearAll();
+	} catch (error) {
+		storageError = error instanceof Error ? error.message : 'Secure storage cleanup failed';
+	} finally {
+		authState = {
+			method: 'none',
+			pubkey: null,
+			isConnected: false,
+			error: storageError,
+			profile: null,
+		};
+	}
 }
 
 /**
@@ -314,10 +380,37 @@ export async function restoreAuth(): Promise<boolean> {
 			return connectWithNsec(storedNsec);
 		}
 
-		// Check for stored bunker URI
-		const storedBunkerUri = await secureRetrieve(BUNKER_URI_KEY);
-		if (storedBunkerUri) {
-			return connectWithBunker(storedBunkerUri);
+		const storedConnection = await secureRetrieve(BUNKER_CONNECTION_KEY);
+		if (storedConnection) {
+			const parsed = parseStoredBunkerConnection(storedConnection);
+			if (!parsed) {
+				secureRemove(BUNKER_CONNECTION_KEY);
+				return false;
+			}
+			return connectWithBunker(bunkerConnectionToUri(parsed));
+		}
+
+		// One-release migration for legacy records. Sanitize before reconnecting.
+		const legacyUri = await secureRetrieve(LEGACY_BUNKER_URI_KEY);
+		if (legacyUri) {
+			secureRemove(LEGACY_BUNKER_URI_KEY);
+			let pointer: BunkerPointer | null;
+			try {
+				pointer = await parseBunkerInput(legacyUri);
+			} catch {
+				return false;
+			}
+			if (!pointer) return false;
+			await secureStore(BUNKER_CONNECTION_KEY, serializeBunkerConnection(pointer));
+			const connected = await connectWithBunker(
+				bunkerConnectionToUri({
+					version: 1,
+					bunkerPubkey: pointer.pubkey,
+					relays: pointer.relays,
+				}),
+			);
+			if (!connected) secureRemove(BUNKER_CONNECTION_KEY);
+			return connected;
 		}
 
 		// If nothing stored, don't auto-connect (require explicit action)
@@ -369,7 +462,7 @@ export function supportsEncryption(): boolean {
 		return true;
 	}
 
-	if (authState.method === 'nip07' && window.nostr?.nip44) {
+	if (authState.method === 'nip07' && hasNip44Capabilities(window.nostr)) {
 		return true;
 	}
 

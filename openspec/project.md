@@ -228,12 +228,14 @@ interface Project {
 - **Release Please** - Automated versioning
 - **Multi-platform binaries** - Linux/macOS x64/arm64
 
-### Planned Integrations (Paid Tiers)
+### Proposed Integrations (Not Implemented)
 
-- **BTCPay Server** - Bitcoin/Lightning payments
-- **nak bunker** - Bunker orchestrator for Teams
-- **OpenMLS** - MLS group encryption for Teams (NIP-EE)
-- **OIDC providers** - Okta, AzureAD, Google for Enterprise SSO
+These are planning baselines, not current product dependencies or availability claims:
+
+- **BTCPay Server** - proposed invoice processor for a $5 USD/month managed-relay hypothesis; no paid offer is live
+- **NIP-46 bunker service** - proposed Teams custody baseline using a bunker-held team key and signer-layer RBAC
+- **OpenMLS/FROSTR** - deferred custody research, not part of the current Teams baseline
+- **OIDC providers** - deferred Enterprise onboarding research; no SSO capability is shipped
 
 ## Telos Framework
 

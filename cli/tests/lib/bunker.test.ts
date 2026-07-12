@@ -5,10 +5,32 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import type { BunkerPointer } from 'nostr-tools/nip46';
-import { formatBunkerPointer, isValidBunkerUrl } from '../../src/lib/bunker';
+import type { EventTemplate, VerifiedEvent } from 'nostr-tools/core';
+import type { BunkerPointer, BunkerSigner } from 'nostr-tools/nip46';
+import {
+	BunkerSecretManager,
+	type BunkerConnection,
+	bunkerAuthToPointer,
+	createNostrConnectUri,
+	decodeClientSecretKey,
+	formatBunkerPointer,
+	isValidBunkerUrl,
+	withBunkerTimeout,
+} from '../../src/lib/bunker';
 
 describe('Bunker Module', () => {
+	describe('withBunkerTimeout', () => {
+		it('rejects when a bunker operation does not complete before the timeout', async () => {
+			const never = new Promise<string>(() => {});
+
+			expect(withBunkerTimeout(never, 5, 'bunker timeout')).rejects.toThrow('bunker timeout');
+		});
+
+		it('returns the operation result when it completes before the timeout', async () => {
+			expect(await withBunkerTimeout(Promise.resolve('connected'), 100)).toBe('connected');
+		});
+	});
+
 	describe('isValidBunkerUrl', () => {
 		it('validates bunker:// URLs', () => {
 			expect(isValidBunkerUrl(`bunker://${'a'.padEnd(64, '0')}?relay=wss://relay.test`)).toBe(true);
@@ -36,6 +58,121 @@ describe('Bunker Module', () => {
 			expect(
 				isValidBunkerUrl('nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5'),
 			).toBe(false);
+		});
+	});
+
+	describe('stored auth helpers', () => {
+		it('converts stored bunker auth into a BunkerPointer without reusing pairing secrets', () => {
+			const auth = {
+				bunkerPubkey: 'ab'.repeat(32),
+				relays: ['wss://relay.test'],
+				secret: 'one-time-secret',
+				clientSecretKey: 'cd'.repeat(32),
+			};
+
+			expect(bunkerAuthToPointer(auth)).toEqual({
+				pubkey: 'ab'.repeat(32),
+				relays: ['wss://relay.test'],
+				secret: null,
+			});
+			expect(bunkerAuthToPointer(auth, true)).toEqual({
+				pubkey: 'ab'.repeat(32),
+				relays: ['wss://relay.test'],
+				secret: 'one-time-secret',
+			});
+		});
+
+		it('decodes a hex-encoded bunker client secret key', () => {
+			const key = decodeClientSecretKey('0f'.repeat(32));
+
+			expect(key).toBeInstanceOf(Uint8Array);
+			expect(key.length).toBe(32);
+			expect(Array.from(key)).toEqual(new Array(32).fill(15));
+		});
+
+		it('rejects malformed bunker client secret keys', () => {
+			expect(() => decodeClientSecretKey('not-hex')).toThrow('Invalid bunker client secret key');
+			expect(() => decodeClientSecretKey('aa')).toThrow('Invalid bunker client secret key');
+		});
+	});
+
+	describe('Nostr Connect URI', () => {
+		it('requests only Redshift runtime permissions without deletion signing by default', async () => {
+			const { uri } = await createNostrConnectUri(['wss://relay.test'], 'Redshift CLI');
+			const parsed = new URL(uri);
+			const perms = parsed.searchParams.get('perms') ?? '';
+
+			expect(perms).toContain('get_public_key');
+			expect(perms).toContain('switch_relays');
+			expect(perms).toContain('sign_event:13');
+			expect(perms).toContain('nip44_encrypt');
+			expect(perms).toContain('nip44_decrypt');
+			expect(perms).not.toContain('sign_event:5');
+		});
+	});
+
+	describe('BunkerSecretManager', () => {
+		it('times out signer-compatible operations that do not return', async () => {
+			const signer = {
+				signEvent: () => new Promise<VerifiedEvent>(() => {}),
+				nip44Encrypt: () => new Promise<string>(() => {}),
+				nip44Decrypt: () => new Promise<string>(() => {}),
+				close: async () => {},
+			} as unknown as BunkerSigner;
+			const connection: BunkerConnection = {
+				signer,
+				userPubkey: 'user-pubkey',
+				bunkerPointer: { pubkey: 'ab'.repeat(32), relays: ['wss://relay.test'], secret: null },
+				clientSecretKey: new Uint8Array(32),
+			};
+			const manager = new BunkerSecretManager(connection, ['wss://relay.test'], 5);
+
+			await expect(manager.nip44Encrypt('peer', 'hello')).rejects.toThrow('Timed out waiting for bunker to encrypt');
+			await expect(manager.nip44Decrypt('peer', 'ciphertext')).rejects.toThrow('Timed out waiting for bunker to decrypt');
+			await expect(manager.signEvent({ kind: 1059, content: '', tags: [], created_at: 1 })).rejects.toThrow(
+				'Timed out waiting for bunker to sign event',
+			);
+		});
+
+		it('exposes signer-compatible NIP-44 methods for SecretManager', async () => {
+			const calls: string[] = [];
+			const signer = {
+				signEvent: async (event: EventTemplate) => {
+					calls.push(`sign:${event.kind}`);
+					return { ...event, id: 'id', pubkey: 'pubkey', sig: 'sig' } as VerifiedEvent;
+				},
+				nip44Encrypt: async (pubkey: string, plaintext: string) => {
+					calls.push(`encrypt:${pubkey}:${plaintext}`);
+					return 'ciphertext';
+				},
+				nip44Decrypt: async (pubkey: string, ciphertext: string) => {
+					calls.push(`decrypt:${pubkey}:${ciphertext}`);
+					return 'plaintext';
+				},
+				close: async () => {
+					calls.push('close');
+				},
+			} as unknown as BunkerSigner;
+			const connection: BunkerConnection = {
+				signer,
+				userPubkey: 'user-pubkey',
+				bunkerPointer: { pubkey: 'ab'.repeat(32), relays: ['wss://relay.test'], secret: null },
+				clientSecretKey: new Uint8Array(32),
+			};
+			const manager = new BunkerSecretManager(connection, ['wss://relay.test']);
+
+			expect(manager.getPublicKey()).toBe('user-pubkey');
+			expect(await manager.nip44Encrypt('peer', 'hello')).toBe('ciphertext');
+			expect(await manager.nip44Decrypt('peer', 'ciphertext')).toBe('plaintext');
+			await manager.signEvent({ kind: 1059, content: '', tags: [], created_at: 1 });
+			await manager.close();
+
+			expect(calls).toEqual([
+				'encrypt:peer:hello',
+				'decrypt:peer:ciphertext',
+				'sign:1059',
+				'close',
+			]);
 		});
 	});
 

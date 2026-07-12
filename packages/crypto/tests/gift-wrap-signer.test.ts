@@ -16,7 +16,7 @@ import {
 	REDSHIFT_TYPE_TAG,
 	type SecretBundle,
 	type SignFn,
-	unwrapGiftWrapWithSigner,
+	unwrapGiftWrapWithSigner as unwrapGiftWrapWithExpectedSigner,
 	wrapSecretsWithSigner,
 } from '../src/index';
 
@@ -59,6 +59,9 @@ describe('NIP-59 Gift Wrap (Signer-based)', () => {
 	let encryptFn: EncryptFn;
 	let decryptFn: DecryptFn;
 	let signFn: SignFn;
+
+	const unwrapGiftWrapWithSigner = (event: NostrEvent, fn: DecryptFn) =>
+		unwrapGiftWrapWithExpectedSigner(event, pubkey, fn);
 
 	beforeEach(() => {
 		secretKey = generateSecretKey();
@@ -160,6 +163,37 @@ describe('NIP-59 Gift Wrap (Signer-based)', () => {
 	});
 
 	describe('unwrapGiftWrapWithSigner', () => {
+		it('rejects a valid attacker-authored bundle addressed to another authenticated owner', async () => {
+			const attackerKey = generateSecretKey();
+			const attacker = createMockSigner(attackerKey);
+			const { event } = await wrapSecretsWithSigner(
+				{ KEY: 'attacker-controlled' },
+				attacker.pubkey,
+				'proj|env',
+				attacker.encryptFn,
+				attacker.signFn,
+			);
+
+			await expect(
+				unwrapGiftWrapWithExpectedSigner(event, pubkey, attacker.decryptFn),
+			).rejects.toThrow('recipient');
+		});
+
+		it('rejects a signer result when the expected owner is different', async () => {
+			const { event } = await wrapSecretsWithSigner(
+				{ KEY: 'value' },
+				pubkey,
+				'proj|env',
+				encryptFn,
+				signFn,
+			);
+			const differentOwner = getPublicKey(generateSecretKey());
+
+			await expect(
+				unwrapGiftWrapWithExpectedSigner(event, differentOwner, decryptFn),
+			).rejects.toThrow('recipient');
+		});
+
 		it('fails to unwrap with wrong key decryptFn', async () => {
 			const secrets: SecretBundle = { SECRET: 'data' };
 			const dTag = 'proj|env';
@@ -280,9 +314,7 @@ describe('NIP-59 Gift Wrap (Signer-based)', () => {
 			const secrets = JSON.parse('{"__proto__": "malicious"}') as SecretBundle;
 			const dTag = 'test|env';
 
-			const { event } = await wrapSecretsWithSigner(secrets, pubkey, dTag, encryptFn, signFn);
-
-			await expect(unwrapGiftWrapWithSigner(event, decryptFn)).rejects.toThrow(
+			await expect(wrapSecretsWithSigner(secrets, pubkey, dTag, encryptFn, signFn)).rejects.toThrow(
 				'forbidden key "__proto__"',
 			);
 		});
@@ -294,17 +326,9 @@ describe('NIP-59 Gift Wrap (Signer-based)', () => {
 			// Using Record cast to bypass TypeScript's built-in constructor property type
 			const secrets: Record<string, string> = { constructor: 'malicious' };
 
-			const { event } = await wrapSecretsWithSigner(
-				secrets as SecretBundle,
-				pubkey,
-				dTag,
-				encryptFn,
-				signFn,
-			);
-
-			await expect(unwrapGiftWrapWithSigner(event, decryptFn)).rejects.toThrow(
-				'forbidden key "constructor"',
-			);
+			await expect(
+				wrapSecretsWithSigner(secrets as SecretBundle, pubkey, dTag, encryptFn, signFn),
+			).rejects.toThrow('forbidden key "constructor"');
 		});
 	});
 
@@ -318,7 +342,7 @@ describe('NIP-59 Gift Wrap (Signer-based)', () => {
 			const result = await unwrapGiftWrapWithSigner(event, decryptFn);
 
 			expect(result.secrets.LARGE_KEY).toBe(largeValue);
-			expect(result.secrets.LARGE_KEY.length).toBe(10_000);
+			expect(result.secrets.LARGE_KEY?.length).toBe(10_000);
 		});
 
 		it('handles many secrets in a bundle', async () => {
