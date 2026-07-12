@@ -71,18 +71,18 @@ import { FileText, Shield, CreditCard, AlertTriangle, Scale } from '@lucide/svel
 				<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 					<Shield class="size-5 shrink-0 text-tokyo-green" />
 					<div>
-						<p class="font-medium leading-5">High Availability</p>
+						<p class="font-medium leading-5">Recipient-scoped access</p>
 						<p class="mt-1 text-sm text-muted-foreground">
-							Reliable infrastructure with monitoring
+							Authenticated reads are limited to the paying recipient
 						</p>
 					</div>
 				</div>
 				<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 					<Shield class="size-5 shrink-0 text-tokyo-cyan" />
 					<div>
-						<p class="font-medium leading-5">Automatic Backups</p>
+						<p class="font-medium leading-5">Open protocol</p>
 						<p class="mt-1 text-sm text-muted-foreground">
-							Encrypted backups to Cloudflare R2
+							Use additional relays and exports for independent redundancy
 						</p>
 					</div>
 				</div>
@@ -102,7 +102,7 @@ import { FileText, Shield, CreditCard, AlertTriangle, Scale } from '@lucide/svel
 			<p>To use this Service, you must:</p>
 			<ul>
 				<li>Be of legal age in your jurisdiction (typically 18 years or older)</li>
-				<li>Have a valid Redshift Cloud subscription ($5/month)</li>
+				<li>Have paid the advertised 12,121-sat one-time managed-relay access price</li>
 				<li>Possess a valid Nostr keypair for NIP-42 authentication</li>
 				<li>Agree to these Terms and our <a href="/relay/privacy-policy">Privacy Policy</a></li>
 			</ul>
@@ -113,8 +113,8 @@ import { FileText, Shield, CreditCard, AlertTriangle, Scale } from '@lucide/svel
 
 			<h3 id="pricing">4.1 Pricing</h3>
 			<p>
-				Access to the Redshift relay requires an active Cloud subscription at $5 USD per
-				month, payable in Bitcoin (Lightning Network or on-chain).
+				Access to the managed relay requires a one-time payment of 12,121 sats. The
+				current relay payment endpoint and pricing page are authoritative for checkout.
 			</p>
 
 			<h3 id="payment-processing">4.2 Payment Processing</h3>
@@ -198,8 +198,8 @@ import { FileText, Shield, CreditCard, AlertTriangle, Scale } from '@lucide/svel
 			<h3 id="content-removal">6.3 Content Removal</h3>
 			<p>
 				Due to the encrypted nature of stored data, we cannot selectively remove
-				specific secrets. If you need to delete content, use your Redshift client to
-				publish deletion events (NIP-09).
+				specific plaintext secrets. Redshift deletion publishes a newer encrypted
+				logical tombstone; older ciphertext may remain until relay retention removes it.
 			</p>
 		</section>
 
@@ -241,39 +241,20 @@ import { FileText, Shield, CreditCard, AlertTriangle, Scale } from '@lucide/svel
 		</section>
 
 		<section>
-			<h2 id="data-backups">8. Data and Backups</h2>
+			<h2 id="data-backups">8. Data Retention and Portability</h2>
 
-			<h3 id="automatic-backups">8.1 Automatic Backups</h3>
+			<h3 id="automatic-backups">8.1 No Backup Guarantee</h3>
 			<p>
-				Encrypted event data is automatically backed up to Cloudflare R2 storage with
-				geographic replication.
+				The managed relay does not currently promise an independent backup, geographic
+				replication, audit-log retention, or recovery SLA. Keep encrypted data on additional
+				relays and maintain exports appropriate to your recovery requirements.
 			</p>
 
 			<h3 id="data-retention">8.2 Data Retention</h3>
-			<div class="not-prose my-6 overflow-x-auto">
-				<table class="w-full text-sm">
-					<thead>
-						<tr class="border-b border-border">
-							<th class="px-4 py-3 text-left font-medium">Status</th>
-							<th class="px-4 py-3 text-left font-medium">Retention</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr class="border-b border-border/50">
-							<td class="px-4 py-3">Active subscribers</td>
-							<td class="px-4 py-3 text-muted-foreground">Indefinitely while subscription is active</td>
-						</tr>
-						<tr class="border-b border-border/50">
-							<td class="px-4 py-3">Lapsed subscriptions</td>
-							<td class="px-4 py-3 text-muted-foreground">30 days after subscription expires</td>
-						</tr>
-						<tr class="border-b border-border/50">
-							<td class="px-4 py-3">Audit logs <span class="ml-1 rounded bg-tokyo-blue/10 px-1.5 py-0.5 text-xs text-tokyo-blue">Cloud only</span></td>
-							<td class="px-4 py-3 text-muted-foreground">7 days rolling window</td>
-						</tr>
-					</tbody>
-				</table>
-			</div>
+			<p>
+				Relay storage may be pruned for capacity or operations. A logical tombstone changes
+				current Redshift state but does not guarantee erasure of historical ciphertext.
+			</p>
 
 			<h3 id="data-portability">8.3 Data Portability</h3>
 			<p>

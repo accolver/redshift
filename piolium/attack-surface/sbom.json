@@ -1,0 +1,47 @@
+{
+  "schema": "redshift-audit-sbom-v1",
+  "generated_at": "2026-07-09T00:00:00Z",
+  "commit": "9b98467",
+  "components": [
+    {"name":"Bun","version":"1.3.14 local; CI uses mutable latest","type":"runtime/build","contexts":["CLI runtime","tests","build","CI"],"security_relevant":true},
+    {"name":"TypeScript","version":"5.9.3","type":"build","contexts":["CLI","web","relay"],"security_relevant":false},
+    {"name":"nostr-tools","version":"2.23.2","type":"library","contexts":["CLI runtime","web runtime","NIP-44/46/59","relay transport"],"security_relevant":true},
+    {"name":"@redshift/crypto","version":"0.1.0 workspace","type":"library","contexts":["CLI runtime","web runtime"],"security_relevant":true},
+    {"name":"@redshift/rate-limiter","version":"0.1.0 workspace","type":"library","contexts":["web relay operations"],"security_relevant":true},
+    {"name":"yaml","version":"2.8.2 locked","type":"library","contexts":["CLI project config parser"],"security_relevant":true,"advisory":"GHSA-48c2-rrv3-qjmp; upgrade >=2.8.3"},
+    {"name":"qrcode-terminal","version":"0.12.0 range","type":"library","contexts":["CLI Nostr Connect display"],"security_relevant":false},
+    {"name":"Svelte","version":"5.53.6 locked","type":"framework","contexts":["web runtime/SSR/static build"],"security_relevant":true},
+    {"name":"@sveltejs/kit","version":"2.53.4 locked","type":"framework","contexts":["web runtime/build"],"security_relevant":true},
+    {"name":"Vite","version":"7.3.1 locked","type":"build/dev server","contexts":["web build/dev"],"security_relevant":true},
+    {"name":"Vitest","version":"4.0.18 locked","type":"test","contexts":["web tests/UI test server"],"security_relevant":false},
+    {"name":"applesauce-core","version":"4.4.2 range","type":"library","contexts":["web EventStore"],"security_relevant":true},
+    {"name":"applesauce-relay","version":"4.4.2 range","type":"library","contexts":["web relay pool"],"security_relevant":true},
+    {"name":"rxjs","version":"7.8.2 range","type":"library","contexts":["web secret models"],"security_relevant":false},
+    {"name":"bits-ui","version":"2.16.2 range","type":"UI library","contexts":["web"],"security_relevant":false},
+    {"name":"PrismJS","version":"1.30.0 range","type":"rendering library","contexts":["web code display"],"security_relevant":true},
+    {"name":"@noble/curves","version":"1.9.7 range (relay); 2.0.1 transitive locally","type":"crypto library","contexts":["relay signature verification","nostr-tools transitive"],"security_relevant":true},
+    {"name":"Cloudflare Workers","version":"compatibility_date 2025-01-04","type":"platform","contexts":["managed relay"],"security_relevant":true},
+    {"name":"Cloudflare Durable Objects","version":"SQLite migration v4","type":"platform","contexts":["relay WebSocket sessions/rate limits"],"security_relevant":true},
+    {"name":"Cloudflare D1","version":"managed","type":"datastore","contexts":["relay events/payments"],"security_relevant":true},
+    {"name":"Cloudflare Pages","version":"managed","type":"platform","contexts":["hosted web dashboard/install script"],"security_relevant":true},
+    {"name":"Wrangler","version":"4.69.0 range; deploy script may install mutable latest","type":"deploy tool","contexts":["relay deployment"],"security_relevant":true},
+    {"name":"esbuild","version":"0.19.12 relay; 0.27.x transitive root","type":"build tool","contexts":["relay/web build"],"security_relevant":true},
+    {"name":"GitHub Actions","version":"actions referenced by mutable major tags","type":"CI/CD","contexts":["test/build/release"],"security_relevant":true},
+    {"name":"GitHub Releases/API","version":"managed","type":"distribution service","contexts":["installer","self-upgrade","binary releases"],"security_relevant":true},
+    {"name":"unpkg nostr-login","version":"@latest","type":"remote script","contexts":["managed relay landing/payment authentication"],"security_relevant":true},
+    {"name":"nak","version":"0.20.0 local; CI pins 0.19.7","type":"external binary","contexts":["NIP-46/local relay E2E"],"security_relevant":true},
+    {"name":"Public/custom Nostr relays","version":"external services","type":"network service","contexts":["encrypted event storage/query/publish"],"security_relevant":true},
+    {"name":"NIP-07 browser extensions","version":"external","type":"signer integration","contexts":["web auth/sign/encrypt/decrypt"],"security_relevant":true},
+    {"name":"NIP-46 remote signers","version":"external","type":"signer integration","contexts":["CLI/web auth/sign/encrypt/decrypt"],"security_relevant":true}
+  ],
+  "audit_summary": {
+    "root_bun_audit": {"total":38,"critical":1,"high":14,"moderate":18,"low":5},
+    "relay_bun_audit": {"total":15,"critical":0,"high":5,"moderate":7,"low":3},
+    "runtime_reachability_notes": [
+      "yaml@2.8.2 is directly reachable from hostile redshift.yaml input.",
+      "Most Vite/Vitest/Rollup/PostCSS advisories are build/dev/test paths, not the shipped CLI runtime.",
+      "Undici/ws advisories may affect outbound WebSocket clients depending on Bun/nostr-tools runtime resolution; upgrade and regression-test rather than assuming exploitability.",
+      "The managed relay executes mutable unpkg nostr-login@latest in a signing-capable origin."
+    ]
+  }
+}

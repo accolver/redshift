@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
+	BackupError,
 	RedshiftError,
 	RelayError,
 	DecryptionError,
@@ -108,6 +109,17 @@ describe('Error Types', () => {
 			expect(error.code).toBe('CONFIG_ERROR');
 			expect(error.configPath).toBe('/path/to/redshift.yaml');
 			expect(error.name).toBe('ConfigError');
+		});
+	});
+
+	describe('BackupError', () => {
+		it('preserves a typed operation without exposing the original error in its message', () => {
+			const original = new Error('secret internal detail');
+			const error = new BackupError('Backup authentication failed', 'decrypt', original);
+			expect(error.code).toBe('BACKUP_ERROR');
+			expect(error.operation).toBe('decrypt');
+			expect(error.originalError).toBe(original);
+			expect(error.message).not.toContain(original.message);
 		});
 	});
 

@@ -176,7 +176,7 @@ describe('isRedshiftSecretsEvent', () => {
 
 describe('getRedshiftSecretsFilter', () => {
 	it('returns correct relay filter', () => {
-		const pubkey = 'abc123';
+		const pubkey = 'ab'.repeat(32);
 		const filter = getRedshiftSecretsFilter(pubkey);
 
 		expect(filter.kinds).toEqual([NostrKinds.GIFT_WRAP]);

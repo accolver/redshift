@@ -10,9 +10,18 @@ import { join } from 'node:path';
 import { DEFAULT_RELAYS } from '@redshift/crypto';
 import { generateSecretKey } from 'nostr-tools/pure';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { validateNsec } from './crypto';
 import { ConfigError } from './errors';
-import { deleteBunkerKeyFromKeychain, deleteNsecFromKeychain, getBunkerKeyFromKeychain, getNsecFromKeychain } from './keychain';
+import {
+	deleteBunkerKeyFromKeychain,
+	deleteNsecFromKeychain,
+	getBunkerKeyFromKeychain,
+	getNsecFromKeychain,
+	storeBunkerKeyInKeychain,
+	storeNsecInKeychain,
+} from './keychain';
 import type { AuthMethod, BunkerAuth, RedshiftConfig } from './types';
+import { validateEnvironment, validateProjectId, validateRelayUrl } from './validation';
 
 /**
  * Global Redshift configuration stored in ~/.redshift/config.json
@@ -20,7 +29,7 @@ import type { AuthMethod, BunkerAuth, RedshiftConfig } from './types';
 export interface Config {
 	/** Authentication method */
 	authMethod?: AuthMethod;
-	/** User's nsec (encrypted at rest in future versions) */
+	/** Legacy plaintext nsec accepted only for one-time keychain migration */
 	nsec?: string;
 	/** Bunker auth info for NIP-46 */
 	bunker?: BunkerAuth;
@@ -28,6 +37,15 @@ export interface Config {
 	relays?: string[];
 	/** Default project ID */
 	defaultProject?: string;
+	/** Default environment slug */
+	defaultEnvironment?: string;
+}
+
+export interface RelayConfigStatus {
+	/** Relay URLs in effect for CLI operations */
+	relays: string[];
+	/** Whether relays came from user config or built-in defaults */
+	source: 'custom' | 'default';
 }
 
 /**
@@ -52,6 +70,63 @@ export interface AuthResult {
 
 const CONFIG_FILE = 'config.json';
 const PROJECT_CONFIG_FILE = 'redshift.yaml';
+const MAX_RELAY_URLS = 16;
+const REDACTED = '[REDACTED]';
+
+export function normalizeRelayUrls(relays: string[], source = 'relay configuration'): string[] {
+	if (relays.length === 0) {
+		throw new ConfigError(`${source} must contain at least one relay URL`);
+	}
+	if (relays.length > MAX_RELAY_URLS) {
+		throw new ConfigError(`${source} cannot contain more than ${MAX_RELAY_URLS} relay URLs`);
+	}
+
+	const normalized = new Set<string>();
+	for (const relay of relays) {
+		const trimmed = relay.trim();
+		const validation = validateRelayUrl(trimmed);
+		if (!validation.valid) {
+			throw new ConfigError(`Invalid ${source} URL "${relay}": ${validation.error}`);
+		}
+		const parsed = new URL(trimmed);
+		if (parsed.username || parsed.password) {
+			throw new ConfigError(`Invalid ${source} URL "${relay}": credentials are not allowed`);
+		}
+		normalized.add(parsed.href);
+	}
+	return [...normalized];
+}
+
+function validateGlobalConfig(config: Config): Config {
+	return {
+		...config,
+		...(config.relays ? { relays: normalizeRelayUrls(config.relays, 'global relay') } : {}),
+		...(config.bunker
+			? {
+					bunker: {
+						...config.bunker,
+						relays: normalizeRelayUrls(config.bunker.relays, 'bunker relay'),
+					},
+				}
+			: {}),
+	};
+}
+
+export function redactConfig(config: Config): Record<string, unknown> {
+	return {
+		...config,
+		...(config.nsec ? { nsec: REDACTED } : {}),
+		...(config.bunker
+			? {
+					bunker: {
+						...config.bunker,
+						...(config.bunker.clientSecretKey ? { clientSecretKey: REDACTED } : {}),
+						...(config.bunker.secret ? { secret: REDACTED } : {}),
+					},
+				}
+			: {}),
+	};
+}
 
 /**
  * Get the Redshift config directory path.
@@ -82,21 +157,28 @@ function ensureConfigDir(): void {
 	chmodSync(configDir, 0o700);
 }
 
-/**
- * Save global config to ~/.redshift/config.json
- *
- * SECURITY: File permissions are set to 0o600 (owner read/write only)
- * because the config file may contain the user's nsec private key in
- * plaintext when the system keychain is unavailable. Without restrictive
- * permissions, other users on the system could read the private key.
- */
-export async function saveConfig(config: Config): Promise<void> {
+/** Persist validated config. This private path also supports one-time legacy sanitization. */
+async function writeConfig(config: Config): Promise<void> {
 	ensureConfigDir();
 	const configPath = join(getConfigDir(), CONFIG_FILE);
-	await Bun.write(configPath, JSON.stringify(config, null, 2));
-	// Set file permissions to owner read/write only (0o600)
-	// This prevents other system users from reading the nsec private key
+	const validated = validateGlobalConfig(config);
+	await Bun.write(configPath, JSON.stringify(validated, null, 2));
 	chmodSync(configPath, 0o600);
+}
+
+function assertNoPlaintextCredentials(config: Config) {
+	if (config.nsec || config.bunker?.clientSecretKey || config.bunker?.secret) {
+		throw new ConfigError(
+			'Plaintext credentials cannot be saved in config; use the system keychain or command-scoped REDSHIFT_NSEC/REDSHIFT_BUNKER.',
+			join(getConfigDir(), CONFIG_FILE),
+		);
+	}
+}
+
+/** Save non-secret global configuration to ~/.redshift/config.json. */
+export async function saveConfig(config: Config): Promise<void> {
+	assertNoPlaintextCredentials(config);
+	await writeConfig(config);
 }
 
 /**
@@ -116,7 +198,7 @@ export async function loadConfig(): Promise<Config> {
 	if (typeof parsed !== 'object' || parsed === null) {
 		throw new ConfigError('Invalid config: expected an object', configPath);
 	}
-	return parsed as Config;
+	return validateGlobalConfig(parsed as Config);
 }
 
 /**
@@ -125,26 +207,49 @@ export async function loadConfig(): Promise<Config> {
  *
  * @returns The nsec and its source, or null if not found
  */
-export async function getPrivateKey(): Promise<PrivateKeyResult | null> {
-	// 1. Check environment variable (CI/CD mode)
-	const envNsec = process.env.REDSHIFT_NSEC;
-	if (envNsec) {
-		return { nsec: envNsec, source: 'env' };
-	}
+function withoutLegacyNsec(config: Config): Config {
+	const { nsec: _nsec, ...sanitized } = config;
+	return sanitized;
+}
 
-	// 2. Check system keychain (most secure)
+function withoutLegacyBunkerSecrets(config: Config): Config {
+	const { nsec: _nsec, ...withoutNsec } = config;
+	if (!config.bunker) return withoutNsec;
+	const { clientSecretKey: _clientSecretKey, secret: _secret, ...pointer } = config.bunker;
+	return { ...withoutNsec, bunker: pointer };
+}
+
+async function resolveStoredNsec(config: Config): Promise<PrivateKeyResult | null> {
 	const keychainNsec = await getNsecFromKeychain();
-	if (keychainNsec) {
+	if (keychainNsec && validateNsec(keychainNsec)) {
+		if (config.nsec) await writeConfig(withoutLegacyNsec(config));
 		return { nsec: keychainNsec, source: 'keychain' };
 	}
-
-	// 3. Fall back to config file
-	const config = await loadConfig();
-	if (config.nsec) {
-		return { nsec: config.nsec, source: 'config' };
+	if (!config.nsec) {
+		return keychainNsec ? { nsec: keychainNsec, source: 'keychain' } : null;
 	}
+	if (!validateNsec(config.nsec)) {
+		throw new ConfigError(
+			'Legacy config contains an invalid nsec. Re-authenticate or use REDSHIFT_NSEC for command-scoped authentication.',
+			join(getConfigDir(), CONFIG_FILE),
+		);
+	}
+	if (!(await storeNsecInKeychain(config.nsec))) {
+		throw new ConfigError(
+			'Legacy plaintext nsec could not be migrated because the system keychain is unavailable. Use REDSHIFT_NSEC for command-scoped authentication.',
+			join(getConfigDir(), CONFIG_FILE),
+		);
+	}
+	const migratedNsec = config.nsec;
+	await writeConfig(withoutLegacyNsec(config));
+	return { nsec: migratedNsec, source: 'keychain' };
+}
 
-	return null;
+/** Resolve an nsec from command scope or secure storage, migrating legacy plaintext once. */
+export async function getPrivateKey(): Promise<PrivateKeyResult | null> {
+	const envNsec = process.env.REDSHIFT_NSEC;
+	if (envNsec) return { nsec: envNsec, source: 'env' };
+	return resolveStoredNsec(await loadConfig());
 }
 
 /**
@@ -152,7 +257,19 @@ export async function getPrivateKey(): Promise<PrivateKeyResult | null> {
  */
 export async function saveProjectConfig(projectDir: string, config: RedshiftConfig): Promise<void> {
 	const configPath = join(projectDir, PROJECT_CONFIG_FILE);
-	const yaml = stringifyYaml(config);
+	const projectValidation = validateProjectId(config.project);
+	if (!projectValidation.valid) {
+		throw new ConfigError(`Invalid project config: ${projectValidation.error}`, configPath);
+	}
+	const environmentValidation = validateEnvironment(config.environment);
+	if (!environmentValidation.valid) {
+		throw new ConfigError(`Invalid environment config: ${environmentValidation.error}`, configPath);
+	}
+	const validated: RedshiftConfig = {
+		...config,
+		...(config.relays ? { relays: normalizeRelayUrls(config.relays, 'project relay') } : {}),
+	};
+	const yaml = stringifyYaml(validated);
 	await Bun.write(configPath, yaml);
 }
 
@@ -186,7 +303,33 @@ export async function loadProjectConfig(projectDir: string): Promise<RedshiftCon
 			configPath,
 		);
 	}
-	return parsed as RedshiftConfig;
+	const projectValidation = validateProjectId(config.project);
+	if (!projectValidation.valid) {
+		throw new ConfigError(`Invalid project config: ${projectValidation.error}`, configPath);
+	}
+	const environmentValidation = validateEnvironment(config.environment);
+	if (!environmentValidation.valid) {
+		throw new ConfigError(`Invalid environment config: ${environmentValidation.error}`, configPath);
+	}
+	const result = parsed as RedshiftConfig;
+	return {
+		...result,
+		...(result.relays ? { relays: normalizeRelayUrls(result.relays, 'project relay') } : {}),
+	};
+}
+
+/**
+ * Get relay configuration status, including the source of the active relay set.
+ */
+export async function getRelayConfigStatus(): Promise<RelayConfigStatus> {
+	const config = await loadConfig();
+
+	if (Array.isArray(config.relays) && config.relays.length > 0) {
+		return { relays: config.relays, source: 'custom' };
+	}
+
+	// Default public relays (from shared @redshift/crypto package)
+	return { relays: [...DEFAULT_RELAYS], source: 'default' };
 }
 
 /**
@@ -194,14 +337,8 @@ export async function loadProjectConfig(projectDir: string): Promise<RedshiftCon
  * Returns config relays or fallback defaults.
  */
 export async function getRelays(): Promise<string[]> {
-	const config = await loadConfig();
-
-	if (config.relays && config.relays.length > 0) {
-		return config.relays;
-	}
-
-	// Default public relays (from shared @redshift/crypto package)
-	return [...DEFAULT_RELAYS];
+	const status = await getRelayConfigStatus();
+	return status.relays;
 }
 
 /**
@@ -224,7 +361,7 @@ export async function getAuth(): Promise<AuthResult | null> {
 		// Format: bunker://<pubkey>?relay=...&secret=...
 		const url = new URL(envBunker);
 		const bunkerPubkey = url.hostname || url.pathname.replace('//', '');
-		const relays = url.searchParams.getAll('relay');
+		const relays = normalizeRelayUrls(url.searchParams.getAll('relay'), 'bunker relay');
 		const secret = url.searchParams.get('secret');
 
 		const bunkerAuth: BunkerAuth = {
@@ -243,47 +380,63 @@ export async function getAuth(): Promise<AuthResult | null> {
 		};
 	}
 
-	// 3. Check system keychain (most secure for nsec)
-	const keychainNsec = await getNsecFromKeychain();
-	if (keychainNsec) {
-		return { method: 'nsec', nsec: keychainNsec, source: 'keychain' };
-	}
-
-	// 4. Check config file
+	// 3. Check config for explicit bunker auth before falling back to keychain nsec.
+	// This prevents a previous local nsec from silently overriding a bunker login.
 	const config = await loadConfig();
 
-	// Prefer bunker if configured
 	if (config.authMethod === 'bunker' && config.bunker) {
-		// Try to retrieve client key from keychain if not in config
-		if (!config.bunker.clientSecretKey) {
-			const keychainKey = await getBunkerKeyFromKeychain();
-			if (keychainKey) {
-				return {
-					method: 'bunker',
-					bunker: { ...config.bunker, clientSecretKey: keychainKey },
-					source: 'keychain',
-				};
+		let clientSecretKey = await getBunkerKeyFromKeychain();
+		if (clientSecretKey && /^[0-9a-f]{64}$/i.test(clientSecretKey)) {
+			if (config.bunker.clientSecretKey || config.bunker.secret) {
+				await writeConfig(withoutLegacyBunkerSecrets(config));
 			}
+		} else if (config.bunker.clientSecretKey) {
+			if (!/^[0-9a-f]{64}$/i.test(config.bunker.clientSecretKey)) {
+				throw new ConfigError(
+					'Legacy config contains an invalid bunker client key. Re-authenticate with `redshift login --force --bunker-stdin`.',
+					join(getConfigDir(), CONFIG_FILE),
+				);
+			}
+			if (!(await storeBunkerKeyInKeychain(config.bunker.clientSecretKey))) {
+				throw new ConfigError(
+					'Legacy plaintext bunker client key could not be migrated because the system keychain is unavailable. Re-authenticate with `redshift login --force --bunker-stdin` or use REDSHIFT_BUNKER for command-scoped authentication.',
+					join(getConfigDir(), CONFIG_FILE),
+				);
+			}
+			clientSecretKey = config.bunker.clientSecretKey;
+			await writeConfig(withoutLegacyBunkerSecrets(config));
 		}
-		return { method: 'bunker', bunker: config.bunker, source: 'config' };
+		if (!clientSecretKey || !/^[0-9a-f]{64}$/i.test(clientSecretKey)) {
+			throw new ConfigError(
+				'Bunker client key is missing. Run `redshift login --force --bunker-stdin` or use REDSHIFT_BUNKER for command-scoped authentication.',
+				join(getConfigDir(), CONFIG_FILE),
+			);
+		}
+		const sanitized = withoutLegacyBunkerSecrets(config);
+		return {
+			method: 'bunker',
+			bunker: { ...sanitized.bunker!, clientSecretKey },
+			source: 'keychain',
+		};
 	}
 
-	// Fall back to nsec in config file
-	if (config.nsec) {
-		return { method: 'nsec', nsec: config.nsec, source: 'config' };
-	}
-
-	return null;
+	const storedNsec = await resolveStoredNsec(config);
+	return storedNsec ? { method: 'nsec', ...storedNsec } : null;
 }
 
 /**
  * Save bunker auth to config
  */
 export async function saveBunkerAuth(bunker: BunkerAuth): Promise<void> {
+	if (bunker.clientSecretKey || bunker.secret) {
+		throw new ConfigError('Bunker credentials cannot be persisted in config.');
+	}
 	const config = await loadConfig();
 	config.authMethod = 'bunker';
-	config.bunker = bunker;
-	// Clear nsec when switching to bunker
+	config.bunker = {
+		bunkerPubkey: bunker.bunkerPubkey,
+		relays: bunker.relays,
+	};
 	delete config.nsec;
 	await saveConfig(config);
 }
@@ -291,6 +444,12 @@ export async function saveBunkerAuth(bunker: BunkerAuth): Promise<void> {
 /**
  * Clear all auth from config and keychain
  */
+export async function resetConfig(): Promise<void> {
+	await deleteNsecFromKeychain();
+	await deleteBunkerKeyFromKeychain();
+	await saveConfig({});
+}
+
 export async function clearAuth(): Promise<void> {
 	// Clear from keychain (ignore errors - may not be available)
 	await deleteNsecFromKeychain();

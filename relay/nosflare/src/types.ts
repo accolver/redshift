@@ -111,6 +111,7 @@ export interface QueryResult {
 export interface Env {
 	RELAY_DATABASE: D1Database;
 	RELAY_WEBSOCKET: DurableObjectNamespace;
+	PRINCIPAL_QUOTA: DurableObjectNamespace;
 }
 
 // Durable Object types
@@ -127,9 +128,10 @@ export interface WebSocketSession {
 	reqRateLimiter: RateLimiter;
 	bookmark: string;
 	host: string;
-	// NIP-42 Authentication
+	relayUrl: string;
+	// NIP-42 Authentication. A socket is permanently bound to one principal.
 	challenge?: string;
-	authenticatedPubkeys: Set<string>;
+	authenticatedPubkey?: string;
 }
 
 export class RateLimiter {

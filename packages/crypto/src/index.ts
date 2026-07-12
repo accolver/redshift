@@ -31,11 +31,42 @@
  * ```
  */
 
+// Encrypted backup format
+export {
+	BACKUP_LIMITS,
+	BACKUP_V1_HEADER_BYTES,
+	encodeBackupPayload,
+	decodeBackupPayload,
+	encryptBackup,
+	decryptBackup,
+	validateBackupPayload,
+	type BackupEntryV1,
+	type BackupPayloadV1,
+	type BackupEncryptionOptions,
+	type BackupDecryptionOptions,
+} from './backup.js';
+
+// Authenticated secret history
+export {
+	HISTORY_LIMITS,
+	createSecretHistoryObservation,
+	compareSecretHistoryVersions,
+	createHistoryCursor,
+	decodeHistoryCursor,
+	paginateSecretHistory,
+	type SecretHistoryVersion,
+	type SecretHistoryObservation,
+	type SecretHistoryDiff,
+	type SecretHistoryPage,
+	type HistoryCursor,
+} from './history.js';
+
 // Gift Wrap functions
 export {
 	wrapSecrets,
 	unwrapSecrets,
 	unwrapGiftWrap,
+	validateGiftWrapEnvelope,
 	createTombstone,
 	isRedshiftSecretsEvent,
 	getRedshiftSecretsFilter,
@@ -43,10 +74,21 @@ export {
 	// Signer-based functions (for NIP-07/NIP-46)
 	wrapSecretsWithSigner,
 	unwrapGiftWrapWithSigner,
+	compareSecretVersions,
+	validateNip44CiphertextStructure,
+	MAX_NIP44_CIPHERTEXT_LENGTH,
+	MAX_RUMOR_FUTURE_SKEW_SECONDS,
 } from './gift-wrap.js';
 
-// Signer-based types
-export type { EncryptFn, DecryptFn, SignFn, AsyncGiftWrapResult } from './gift-wrap.js';
+// Signer-based and validation types
+export type {
+	EncryptFn,
+	DecryptFn,
+	SignFn,
+	AsyncGiftWrapResult,
+	WrapOptions,
+	UnwrapOptions,
+} from './gift-wrap.js';
 
 // Utility functions
 export {
@@ -64,6 +106,7 @@ export type {
 	UnsignedEvent,
 	SecretBundle,
 	GiftWrapResult,
+	SecretVersion,
 	UnwrapResult,
 } from './types.js';
 
@@ -74,4 +117,11 @@ export { validateSlug, normalizeSlug, type ValidationResult } from './validation
 export { NostrKinds, REDSHIFT_TYPE_TAG, DEFAULT_RELAYS } from './types.js';
 
 // .env parsing and formatting
-export { parseEnvFile, parseEnvValue, formatEnvLine } from './env-parser.js';
+export {
+	parseEnvFile,
+	parseEnvFileDetailed,
+	parseEnvValue,
+	formatEnvLine,
+	type EnvParseIssue,
+	type EnvParseResult,
+} from './env-parser.js';

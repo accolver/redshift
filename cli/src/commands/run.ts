@@ -1,203 +1,183 @@
 /**
- * Run Command - Execute commands with secrets injected
- *
- * L5: Journey-Validator - Secret injection workflow
+ * Run Command - execute an exact argv or explicit shell command with secrets.
  */
 
 import { spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
+import { constants as osConstants } from 'node:os';
 import { getRelays, loadProjectConfig } from '../lib/config';
+import { ValidationError } from '../lib/errors';
 import { SecretManager, injectSecrets } from '../lib/secret-manager';
 import { redactValue } from '../lib/validation';
 import { requireAuth } from './login';
 
+const ENVIRONMENT_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const FORWARDED_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+
 export interface RunOptions {
-	/** Command and arguments to execute */
+	/** Exact executable and arguments supplied after `run --`. */
 	command: string[];
-	/** Override project ID */
+	/** Explicit shell program supplied through `run --command`. */
+	shellCommand?: string;
+	/** Override project ID. */
 	project?: string;
-	/** Override environment */
+	/** Override environment. */
 	environment?: string;
-	/** Preserve color output */
-	preserveColor?: boolean;
+	/** Existing environment names that take precedence over fetched secrets. */
+	preserveEnv?: string[];
 }
 
-/**
- * Parse command tokens from an array of strings, handling quoted substrings.
- *
- * When the user passes a single string like `"echo 'hello world'"`, we need to
- * split it into `["echo", "hello world"]` rather than `["echo", "'hello", "world'"]`.
- * Multiple tokens are joined first, then re-split respecting single and double quotes.
- */
-function parseCommandTokens(parts: string[]): string[] {
-	const input = parts.join(' ');
-	const tokens: string[] = [];
-	let current = '';
-	let inSingle = false;
-	let inDouble = false;
-	let escaped = false;
-
-	for (let i = 0; i < input.length; i++) {
-		const ch = input[i];
-
-		if (escaped) {
-			current += ch;
-			escaped = false;
-			continue;
-		}
-
-		if (ch === '\\' && !inSingle) {
-			escaped = true;
-			continue;
-		}
-
-		if (ch === "'" && !inDouble) {
-			inSingle = !inSingle;
-			continue;
-		}
-
-		if (ch === '"' && !inSingle) {
-			inDouble = !inDouble;
-			continue;
-		}
-
-		if (ch === ' ' && !inSingle && !inDouble) {
-			if (current.length > 0) {
-				tokens.push(current);
-				current = '';
-			}
-			continue;
-		}
-
-		current += ch;
-	}
-
-	if (current.length > 0) {
-		tokens.push(current);
-	}
-
-	return tokens;
+export interface ResolvedChildCommand {
+	executable: string;
+	args: string[];
 }
 
-/**
- * Execute a command with secrets injected into the environment.
- */
-export async function runCommand(options: RunOptions): Promise<void> {
-	if (options.command.length === 0) {
-		console.error('Error: No command specified.');
-		console.error('Usage: redshift run -- <command> [args...]');
-		process.exit(1);
+export function resolveChildCommand(
+	options: Pick<RunOptions, 'command' | 'shellCommand'>,
+	platform: NodeJS.Platform = process.platform,
+): ResolvedChildCommand {
+	if (options.shellCommand !== undefined) {
+		if (options.shellCommand.length === 0) {
+			throw new ValidationError('No command specified for --command.');
+		}
+		if (options.command.length > 0) {
+			throw new ValidationError('Use either --command or positional argv after --, not both.');
+		}
+		if (platform === 'win32') {
+			return {
+				executable: process.env.ComSpec || 'cmd.exe',
+				args: ['/d', '/s', '/c', options.shellCommand],
+			};
+		}
+		return { executable: '/bin/sh', args: ['-c', options.shellCommand] };
 	}
 
-	// Load project config
+	const [executable, ...args] = options.command;
+	if (!executable) {
+		throw new ValidationError('No command specified after --.');
+	}
+	return { executable, args };
+}
+
+export function applyPreserveEnvironment(
+	baseEnv: Record<string, string | undefined>,
+	injectedEnv: Record<string, string>,
+	preserveNames: string[],
+): Record<string, string> {
+	const result = { ...injectedEnv };
+	for (const name of preserveNames) {
+		if (!ENVIRONMENT_NAME.test(name)) {
+			throw new ValidationError(`Invalid --preserve-env name: ${name}`);
+		}
+		const existing = baseEnv[name];
+		if (existing !== undefined) {
+			result[name] = existing;
+		}
+	}
+	return result;
+}
+
+function signalExitCode(signal: NodeJS.Signals | null) {
+	if (!signal) return 1;
+	return 128 + (osConstants.signals[signal] ?? 1);
+}
+
+async function waitForChild(child: ChildProcess) {
+	const forwarders = new Map<NodeJS.Signals, () => void>();
+	for (const signal of FORWARDED_SIGNALS) {
+		const forward = () => {
+			if (!child.killed) child.kill(signal);
+		};
+		forwarders.set(signal, forward);
+		process.on(signal, forward);
+	}
+
+	const cleanup = () => {
+		for (const [signal, forward] of forwarders) {
+			process.off(signal, forward);
+		}
+	};
+
+	try {
+		return await new Promise<number>((resolve, reject) => {
+			child.once('error', (error) => {
+				reject(new Error(`Failed to start command: ${error.message}`, { cause: error }));
+			});
+			child.once('close', (code, signal) => {
+				resolve(code ?? signalExitCode(signal));
+			});
+		});
+	} finally {
+		cleanup();
+	}
+}
+
+/** Execute a command with secrets injected into a hardened child environment. */
+export async function runCommand(options: RunOptions): Promise<number> {
+	const childCommand = resolveChildCommand(options);
 	const cwd = process.cwd();
 	const projectConfig = await loadProjectConfig(cwd);
-
 	const projectId = options.project || projectConfig?.project;
 	const environment = options.environment || projectConfig?.environment;
 
 	if (!projectId || !environment) {
-		console.error('Error: No project configured.');
-		console.error('Run `redshift setup` first or specify --project and --environment.');
-		process.exit(1);
+		throw new ValidationError(
+			'No project configured. Run `redshift setup` or specify --project and --environment.',
+		);
 	}
 
-	// Require authentication
 	const auth = await requireAuth();
-
-	// Connect to relays
 	const relays = projectConfig?.relays || (await getRelays());
-	const manager = new SecretManager(auth.privateKey);
+	const manager = new SecretManager(auth.privateKey ?? auth.signer!);
 	manager.connect(relays);
 
 	try {
 		console.error(`Fetching secrets for ${projectId}/${environment}...`);
-
-		// Fetch secrets
 		const secrets = await manager.fetchSecrets(projectId, environment);
-
 		if (!secrets) {
 			console.error(`Warning: No secrets found for ${projectId}/${environment}`);
 			console.error('Running command without secrets...\n');
 		}
 
-		// Inject secrets into environment
-		const env = injectSecrets(process.env as Record<string, string>, secrets || {});
+		const injectedEnv = injectSecrets(
+			process.env as Record<string, string | undefined>,
+			secrets || {},
+		);
+		const env = applyPreserveEnvironment(process.env, injectedEnv, options.preserveEnv ?? []);
+		console.error(`Running: ${childCommand.executable} ${childCommand.args.join(' ')}\n`);
 
-		// Execute the command
-		// Parse command tokens, respecting quoted strings to avoid shell injection
-		const tokens = parseCommandTokens(options.command);
-		const [cmd, ...args] = tokens;
-
-		if (!cmd) {
-			console.error('Error: No command specified.');
-			process.exit(1);
-		}
-
-		console.error(`Running: ${options.command.join(' ')}\n`);
-
-		const child = spawn(cmd, args, {
+		const child = spawn(childCommand.executable, childCommand.args, {
 			env,
 			stdio: 'inherit',
-			// Only use shell on Windows where it's needed for .cmd/.bat resolution
-			shell: process.platform === 'win32',
+			shell: false,
 		});
-
-		// Wrap the child process in a Promise so we can await its completion
-		// before disconnecting from relays. Without this, manager.disconnect()
-		// in the finally block would fire while the child is still running.
-		const exitCode = await new Promise<number>((resolve, reject) => {
-			child.on('error', (err) => {
-				reject(new Error(`Failed to start command: ${err.message}`));
-			});
-
-			child.on('close', (code) => {
-				resolve(code ?? 0);
-			});
-		});
-
-		manager.disconnect();
-		process.exit(exitCode);
-	} catch (error) {
-		manager.disconnect();
-		if (error instanceof Error && error.message.startsWith('Failed to start command:')) {
-			console.error(error.message);
-		} else {
-			console.error('Error fetching secrets:', error);
-		}
-		process.exit(1);
+		return await waitForChild(child);
+	} finally {
+		await manager.close();
 	}
 }
 
-/**
- * Dry run - show what would be injected without executing.
- */
+/** Dry run - show what would be injected without executing. */
 export async function runDryCommand(options: RunOptions): Promise<void> {
-	// Load project config
+	resolveChildCommand(options);
 	const cwd = process.cwd();
 	const projectConfig = await loadProjectConfig(cwd);
-
 	const projectId = options.project || projectConfig?.project;
 	const environment = options.environment || projectConfig?.environment;
 
 	if (!projectId || !environment) {
-		console.error('Error: No project configured.');
-		process.exit(1);
+		throw new ValidationError('No project configured.');
 	}
 
-	// Require authentication
 	const auth = await requireAuth();
-
-	// Connect to relays
 	const relays = projectConfig?.relays || (await getRelays());
-	const manager = new SecretManager(auth.privateKey);
+	const manager = new SecretManager(auth.privateKey ?? auth.signer!);
 	manager.connect(relays);
 
 	try {
 		const secrets = await manager.fetchSecrets(projectId, environment);
-
 		console.log(`Secrets for ${projectId}/${environment}:`);
 		console.log('');
-
 		if (!secrets || Object.keys(secrets).length === 0) {
 			console.log('  (no secrets configured)');
 		} else {
@@ -205,12 +185,12 @@ export async function runDryCommand(options: RunOptions): Promise<void> {
 				console.log(`  ${key} = ${redactValue(value)}`);
 			}
 		}
-
 		console.log('');
 		console.log("Values redacted for security. Use 'secrets list' to view.");
 		console.log('');
-		console.log(`Would execute: ${options.command.join(' ')}`);
+		const childCommand = resolveChildCommand(options);
+		console.log(`Would execute: ${childCommand.executable} ${childCommand.args.join(' ')}`);
 	} finally {
-		manager.disconnect();
+		await manager.close();
 	}
 }

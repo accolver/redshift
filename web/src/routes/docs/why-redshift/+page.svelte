@@ -111,7 +111,7 @@ import { CircleCheck, CircleX, Minus } from '@lucide/svelte';
 						<td class="px-2 py-3 text-center sm:px-4"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
 					</tr>
 					<tr>
-						<td class="px-2 py-3 sm:px-4">Doppler-compatible CLI</td>
+						<td class="px-2 py-3 sm:px-4">Doppler-inspired CLI</td>
 						<td class="px-2 py-3 text-center sm:px-4"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
 						<td class="px-2 py-3 text-center sm:px-4"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
 						<td class="px-2 py-3 text-center sm:px-4"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
@@ -161,7 +161,7 @@ import { CircleCheck, CircleX, Minus } from '@lucide/svelte';
 
 		<ProseHeading level={2} id="migrating-from-doppler">Migrating from Doppler</ProseHeading>
 		<p>
-			Redshift's CLI is designed to be Doppler-compatible, making migration straightforward:
+			Redshift's CLI keeps the core setup, secret, and run workflows familiar, while exposing its own strict documented command contract:
 		</p>
 
 		<div class="not-prose my-6 overflow-x-auto">

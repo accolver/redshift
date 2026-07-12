@@ -8,9 +8,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { addSecurityHeaders } from '../../src/commands/serve';
-import type { ServeOptions } from '../../src/commands/serve';
 import { DEFAULT_RELAYS } from '@redshift/crypto';
+import {
+	addSecurityHeaders,
+	injectRuntimeConfig,
+	injectScriptNonce,
+	removeEmbeddedCspMeta,
+} from '../../src/commands/serve';
+import type { ServeOptions } from '../../src/commands/serve';
 
 // Store original env
 const originalEnv = { ...process.env };
@@ -265,6 +270,20 @@ describe('serve command', () => {
 	});
 
 	describe('addSecurityHeaders', () => {
+		it('authorizes the exact response nonce without script unsafe-inline', () => {
+			const headers = new Headers();
+			addSecurityHeaders(headers, false, 'test-nonce');
+			const csp = headers.get('Content-Security-Policy')!;
+			expect(csp).toContain("script-src 'self' 'nonce-test-nonce'");
+			expect(csp).not.toContain("script-src 'self' 'unsafe-inline'");
+		});
+
+		it('injects a nonce into every script tag in compiled HTML', () => {
+			const html = '<script>boot()</script><script src="/app.js"></script>';
+			const result = injectScriptNonce(html, 'test-nonce');
+			expect(result.match(/nonce="test-nonce"/g)).toHaveLength(2);
+		});
+
 		it('CSP connect-src contains no wildcard patterns', () => {
 			const headers = new Headers();
 			addSecurityHeaders(headers, false);
@@ -279,6 +298,26 @@ describe('serve command', () => {
 			for (const relay of DEFAULT_RELAYS) {
 				expect(csp).toContain(relay);
 			}
+		});
+
+		it('removes static CSP metadata before applying the authoritative runtime nonce policy', () => {
+			const html =
+				'<head><meta http-equiv="content-security-policy" content="script-src \'self\' \'sha256-old\'"><script>boot()</script></head>';
+			const stripped = removeEmbeddedCspMeta(html);
+			expect(stripped).not.toContain('http-equiv="content-security-policy"');
+			expect(stripped).toContain('<script>boot()</script>');
+		});
+
+		it('includes validated custom runtime relays in CSP and nonce-protected config', () => {
+			const customRelays = ['wss://custom.example/', 'ws://127.0.0.1:4777/'];
+			const headers = new Headers();
+			addSecurityHeaders(headers, false, 'runtime-nonce', customRelays);
+			const csp = headers.get('Content-Security-Policy')!;
+			for (const relay of customRelays) expect(csp).toContain(relay);
+			const html = injectRuntimeConfig('<head></head>', 'runtime-nonce', customRelays);
+			expect(html).toContain('nonce="runtime-nonce"');
+			expect(html).toContain('__REDSHIFT_RUNTIME_CONFIG__');
+			expect(html).toContain('wss://custom.example/');
 		});
 
 		it('CSP connect-src includes managed relay', () => {

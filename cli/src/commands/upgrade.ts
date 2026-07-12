@@ -6,13 +6,23 @@
  * L5: Journey-Validator - Seamless upgrade experience
  */
 
-import { chmodSync, copyFileSync, renameSync, unlinkSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { chmodSync, copyFileSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { VERSION } from '../version';
 
 const REPO = 'accolver/redshift';
 const BINARY_NAME = 'redshift';
+const RELEASE_WORKFLOW = `${REPO}/.github/workflows/release.yml`;
+
+function githubApiBase() {
+	if (
+		process.env.REDSHIFT_ENABLE_TEST_OVERRIDES === '1' &&
+		process.env.REDSHIFT_TEST_GITHUB_API_BASE
+	) {
+		return process.env.REDSHIFT_TEST_GITHUB_API_BASE.replace(/\/$/, '');
+	}
+	return 'https://api.github.com';
+}
 
 export interface UpgradeOptions {
 	force?: boolean;
@@ -55,16 +65,16 @@ function getCurrentBinaryPath(): string {
 /**
  * Detect the current OS.
  */
-export function detectOS(): string {
-	switch (process.platform) {
+export function detectOS(platform: NodeJS.Platform = process.platform): string {
+	switch (platform) {
 		case 'darwin':
 			return 'darwin';
 		case 'linux':
 			return 'linux';
 		case 'win32':
-			return 'windows';
+			throw new Error('Windows binaries are not currently published');
 		default:
-			throw new Error(`Unsupported operating system: ${process.platform}`);
+			throw new Error(`Unsupported operating system: ${platform}`);
 	}
 }
 
@@ -86,7 +96,7 @@ export function detectArch(): string {
  * Fetch the latest release info from GitHub.
  */
 async function fetchLatestRelease(): Promise<GitHubRelease> {
-	const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
+	const response = await fetch(`${githubApiBase()}/repos/${REPO}/releases/latest`);
 
 	if (!response.ok) {
 		throw new Error(`Failed to fetch latest release: ${response.statusText}`);
@@ -99,13 +109,27 @@ async function fetchLatestRelease(): Promise<GitHubRelease> {
  * Fetch a specific release by tag.
  */
 async function fetchReleaseByTag(tag: string): Promise<GitHubRelease> {
-	const response = await fetch(`https://api.github.com/repos/${REPO}/releases/tags/${tag}`);
+	const response = await fetch(`${githubApiBase()}/repos/${REPO}/releases/tags/${tag}`);
 
 	if (!response.ok) {
 		throw new Error(`Failed to fetch release ${tag}: ${response.statusText}`);
 	}
 
 	return response.json() as Promise<GitHubRelease>;
+}
+
+async function fetchReleaseSourceDigest(tag: string) {
+	const response = await fetch(
+		`${githubApiBase()}/repos/${REPO}/commits/${encodeURIComponent(tag)}`,
+	);
+	if (!response.ok) {
+		throw new Error(`Failed to resolve source digest for release ${tag}: ${response.statusText}`);
+	}
+	const commit = (await response.json()) as { sha?: unknown };
+	if (typeof commit.sha !== 'string' || !/^[0-9a-f]{40}([0-9a-f]{24})?$/.test(commit.sha)) {
+		throw new Error(`Invalid source digest for release ${tag}`);
+	}
+	return commit.sha;
 }
 
 /**
@@ -120,6 +144,106 @@ async function downloadFile(url: string, destPath: string): Promise<void> {
 
 	const buffer = await response.arrayBuffer();
 	await Bun.write(destPath, buffer);
+}
+
+interface AttestationCommandResult {
+	exitCode: number;
+	stderr: { toString(): string };
+}
+
+type AttestationCommandRunner = (command: string[]) => AttestationCommandResult;
+
+export function verifyArtifactAttestation(
+	artifactPath: string,
+	sourceDigest: string,
+	run: AttestationCommandRunner = (command) => Bun.spawnSync(command),
+): void {
+	if (!/^[0-9a-f]{40}([0-9a-f]{24})?$/.test(sourceDigest)) {
+		throw new Error('Invalid release source digest');
+	}
+	const result = run([
+		'gh',
+		'attestation',
+		'verify',
+		artifactPath,
+		'--repo',
+		REPO,
+		'--signer-workflow',
+		RELEASE_WORKFLOW,
+		'--source-digest',
+		sourceDigest,
+		'--deny-self-hosted-runners',
+	]);
+	if (result.exitCode !== 0) {
+		const detail = result.stderr.toString().trim();
+		throw new Error(
+			`Artifact attestation verification failed${detail ? `: ${detail}` : ''}. Install a current GitHub CLI and retry.`,
+		);
+	}
+}
+
+export function smokeTestDownloadedBinary(
+	artifactPath: string,
+	run: AttestationCommandRunner = (command) => Bun.spawnSync(command),
+): void {
+	const result = run([artifactPath, '--version']);
+	if (result.exitCode !== 0) {
+		const detail = result.stderr.toString().trim();
+		throw new Error(`Downloaded binary smoke test failed${detail ? `: ${detail}` : ''}`);
+	}
+}
+
+export interface AtomicReplacementOperations {
+	copyFile(source: string, destination: string): void;
+	rename(source: string, destination: string): void;
+	unlink(path: string): void;
+}
+
+const atomicReplacementOperations: AtomicReplacementOperations = {
+	copyFile: copyFileSync,
+	rename: renameSync,
+	unlink: unlinkSync,
+};
+
+function isMissingFileError(error: unknown) {
+	return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
+export function replaceBinaryAtomically(
+	candidatePath: string,
+	binaryPath: string,
+	operations: AtomicReplacementOperations = atomicReplacementOperations,
+) {
+	const backupPath = `${binaryPath}.backup`;
+	let hasBackup = false;
+	try {
+		operations.copyFile(binaryPath, backupPath);
+		hasBackup = true;
+	} catch (error) {
+		if (!isMissingFileError(error)) throw error;
+	}
+
+	try {
+		operations.rename(candidatePath, binaryPath);
+	} catch (error) {
+		if (hasBackup) {
+			operations.rename(backupPath, binaryPath);
+		}
+		try {
+			operations.unlink(candidatePath);
+		} catch {
+			// Candidate may already be absent after a failed filesystem operation.
+		}
+		throw error;
+	}
+
+	if (hasBackup) {
+		try {
+			operations.unlink(backupPath);
+		} catch {
+			// The installed binary is valid; a stale backup can be removed manually.
+		}
+	}
 }
 
 /**
@@ -142,11 +266,29 @@ export function extractVersion(tagName: string): string {
 	return tagName.replace(/^v/, '');
 }
 
+export function parseTrustedChecksum(manifest: string, assetName: string) {
+	const matchingHashes: string[] = [];
+	for (const line of manifest.split('\n')) {
+		if (!line.trim()) continue;
+		const match = line.match(/^(\S+)\s+\*?(\S+)$/);
+		if (match?.[2] === assetName && match[1]) matchingHashes.push(match[1]);
+	}
+	if (matchingHashes.length !== 1) {
+		throw new Error(`Trusted manifest must contain exactly one checksum for ${assetName}`);
+	}
+	const hash = matchingHashes[0];
+	if (!hash || !/^[0-9a-f]{64}$/.test(hash)) {
+		throw new Error(`Trusted manifest checksum for ${assetName} is not canonical SHA-256`);
+	}
+	return hash;
+}
+
 /**
  * Execute the upgrade command.
  */
 export async function upgradeCommand(options: UpgradeOptions): Promise<void> {
 	const currentVersion = getCurrentVersion();
+	const temporaryPaths = new Set<string>();
 
 	console.log('Redshift CLI Upgrade');
 	console.log('====================\n');
@@ -179,100 +321,83 @@ export async function upgradeCommand(options: UpgradeOptions): Promise<void> {
 		// Find the right asset for this platform
 		const os = detectOS();
 		const arch = detectArch();
-		const assetName =
-			os === 'windows' ? `${BINARY_NAME}-${os}-${arch}.exe` : `${BINARY_NAME}-${os}-${arch}`;
+		const assetName = `${BINARY_NAME}-${os}-${arch}`;
 
-		const asset = release.assets.find((a) => a.name === assetName);
-		if (!asset) {
-			console.error(`\nNo binary available for ${os}/${arch}`);
-			console.error('Available assets:', release.assets.map((a) => a.name).join(', '));
-			process.exit(1);
+		const matchingAssets = release.assets.filter((asset) => asset.name === assetName);
+		if (matchingAssets.length !== 1) {
+			throw new Error(
+				matchingAssets.length === 0
+					? `No binary available for ${os}/${arch}`
+					: `Release contains duplicate ${assetName} assets`,
+			);
 		}
+		const asset = matchingAssets[0];
+		if (!asset) throw new Error(`No binary available for ${os}/${arch}`);
 
-		// Download to temp location (use crypto.randomUUID to prevent TOCTOU race)
-		const tempPath = join(tmpdir(), `${BINARY_NAME}-${latestVersion}-${crypto.randomUUID()}`);
+		const sourceDigest = await fetchReleaseSourceDigest(release.tag_name);
+		const binaryPath = getCurrentBinaryPath();
+		const installDirectory = dirname(binaryPath);
+		mkdirSync(installDirectory, { recursive: true, mode: 0o700 });
+		// Keep the candidate on the destination filesystem so rename remains atomic.
+		const tempPath = join(
+			installDirectory,
+			`.${BINARY_NAME}-${latestVersion}-${crypto.randomUUID()}`,
+		);
+		temporaryPaths.add(tempPath);
 		console.log(`\nDownloading v${latestVersion}...`);
 		await downloadFile(asset.browser_download_url, tempPath);
 
-		// Verify checksum if checksums.txt is available in the release
-		const checksumsAsset = release.assets.find((a) => a.name === 'checksums.txt');
-		if (checksumsAsset) {
-			const checksumsResponse = await fetch(checksumsAsset.browser_download_url);
-			if (checksumsResponse.ok) {
-				const checksumsText = await checksumsResponse.text();
-				// Parse checksums file (format: "sha256  filename")
-				const expectedHash = checksumsText
-					.split('\n')
-					.find((line) => line.includes(assetName))
-					?.split(/\s+/)[0];
-
-				if (expectedHash) {
-					// Verify the downloaded file
-					const fileBuffer = await Bun.file(tempPath).arrayBuffer();
-					const hashBuffer = new Bun.CryptoHasher('sha256').update(fileBuffer).digest('hex');
-					if (hashBuffer !== expectedHash) {
-						unlinkSync(tempPath);
-						throw new Error(
-							`Checksum verification failed. Expected: ${expectedHash}, Got: ${hashBuffer}`,
-						);
-					}
-					console.log('Checksum verified.');
-				} else {
-					console.log('Warning: No checksum found for this binary. Skipping verification.');
-				}
-			}
-		} else {
-			console.log('Warning: No checksums.txt in release. Skipping verification.');
+		try {
+			verifyArtifactAttestation(tempPath, sourceDigest);
+			console.log('GitHub artifact attestation verified.');
+		} catch (error) {
+			unlinkSync(tempPath);
+			throw error;
 		}
+
+		const checksumAssets = release.assets.filter((asset) => asset.name === 'checksums.txt');
+		if (checksumAssets.length !== 1 || !checksumAssets[0]) {
+			throw new Error('Release must contain exactly one checksums.txt asset');
+		}
+		const manifestPath = `${tempPath}.checksums.txt`;
+		temporaryPaths.add(manifestPath);
+		await downloadFile(checksumAssets[0].browser_download_url, manifestPath);
+		verifyArtifactAttestation(manifestPath, sourceDigest);
+		const expectedHash = parseTrustedChecksum(await Bun.file(manifestPath).text(), assetName);
+		const fileBuffer = await Bun.file(tempPath).arrayBuffer();
+		const actualHash = new Bun.CryptoHasher('sha256').update(fileBuffer).digest('hex');
+		if (actualHash !== expectedHash) {
+			throw new Error(
+				`Checksum verification failed. Expected: ${expectedHash}, Got: ${actualHash}`,
+			);
+		}
+		unlinkSync(manifestPath);
+		temporaryPaths.delete(manifestPath);
+		console.log('Checksum verified.');
 
 		// Make executable
-		if (os !== 'windows') {
-			chmodSync(tempPath, 0o755);
-		}
-
-		// Replace the current binary
-		const binaryPath = getCurrentBinaryPath();
-		const backupPath = `${binaryPath}.backup`;
-
-		console.log(`Installing to ${binaryPath}...`);
-
+		chmodSync(tempPath, 0o755);
 		try {
-			// Backup current binary
-			try {
-				copyFileSync(binaryPath, backupPath);
-			} catch {
-				// No existing binary to backup
-			}
-
-			// Replace with new binary
-			renameSync(tempPath, binaryPath);
-
-			// Remove backup on success
-			try {
-				unlinkSync(backupPath);
-			} catch {
-				// Ignore
-			}
-
-			console.log(`\n✓ Successfully upgraded to v${latestVersion}`);
-		} catch (err) {
-			// Try to restore backup
-			try {
-				renameSync(backupPath, binaryPath);
-			} catch {
-				// Ignore
-			}
-
-			// Clean up temp file
-			try {
-				unlinkSync(tempPath);
-			} catch {
-				// Ignore
-			}
-
-			throw err;
+			smokeTestDownloadedBinary(tempPath);
+			console.log('Downloaded binary smoke test passed.');
+		} catch (error) {
+			unlinkSync(tempPath);
+			throw error;
 		}
+
+		// Replace the current binary only after every verification succeeds.
+		console.log(`Installing to ${binaryPath}...`);
+		replaceBinaryAtomically(tempPath, binaryPath);
+		temporaryPaths.delete(tempPath);
+		console.log(`\n✓ Successfully upgraded to v${latestVersion}`);
 	} catch (error) {
+		for (const temporaryPath of temporaryPaths) {
+			try {
+				unlinkSync(temporaryPath);
+			} catch {
+				// Candidate was already moved or removed.
+			}
+		}
 		console.error('\nUpgrade failed:', error instanceof Error ? error.message : error);
 		console.error('\nYou can manually upgrade by running:');
 		console.error('  curl -fsSL https://redshiftapp.com/install | sh');

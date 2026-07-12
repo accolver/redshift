@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.14.0](https://github.com/accolver/redshift/compare/v0.13.0...v0.14.0) (2026-07-12)
+
+
+### Features
+
+* **history:** add authenticated compare and restore ([#46](https://github.com/accolver/redshift/issues/46)) ([144c043](https://github.com/accolver/redshift/commit/144c043ce863c3e47b502c666ce26b67198511b3))
+
+## [0.13.0](https://github.com/accolver/redshift/compare/v0.12.0...v0.13.0) (2026-07-11)
+
+
+### Features
+
+* **backup:** add encrypted local backup and restore ([#43](https://github.com/accolver/redshift/issues/43)) ([db1ec0b](https://github.com/accolver/redshift/commit/db1ec0b2aa5ffd3856bd71c9980c4eddf7367925))
+
+## [0.12.0](https://github.com/accolver/redshift/compare/v0.11.1...v0.12.0) (2026-07-11)
+
+
+### Features
+
+* **resilience:** add relay publication recovery ([#41](https://github.com/accolver/redshift/issues/41)) ([a1c0378](https://github.com/accolver/redshift/commit/a1c03789f3e72266fdd3ebb7dcae0d6705110ed2))
+
+## [0.11.1](https://github.com/accolver/redshift/compare/v0.11.0...v0.11.1) (2026-07-11)
+
+
+### Bug Fixes
+
+* **release:** certify draft artifacts before publication ([#38](https://github.com/accolver/redshift/issues/38)) ([187aa63](https://github.com/accolver/redshift/commit/187aa63b1d5cfa601505b990e6b84633e37f2e19))
+
+## [0.11.0](https://github.com/accolver/redshift/compare/v0.10.5...v0.11.0) (2026-07-11)
+
+
+### Features
+
+* **cli:** show QR code for Nostr Connect login ([254e237](https://github.com/accolver/redshift/commit/254e23738e2a01f7ca1fd4950303034409d627ec))
+
+
+### Bug Fixes
+
+* complete production readiness follow-up ([#35](https://github.com/accolver/redshift/issues/35)) ([28a6299](https://github.com/accolver/redshift/commit/28a6299abb68cdcee3241abc9326518b70c9547a))
+* harden production readiness ([13c6942](https://github.com/accolver/redshift/commit/13c69424f9d3992c87fb0af3d0650de4f02e13e6))
+* **web:** align homepage CLI login preview ([ba2e559](https://github.com/accolver/redshift/commit/ba2e559667149f40fde6c6f1715c29d5cb261462))
+
 ## [0.10.0](https://github.com/accolver/redshift/compare/v0.9.0...v0.10.0) (2025-12-09)
 
 

@@ -155,9 +155,10 @@ function shouldHighlight(tier: typeof tiers[number]) {
 			<div class="rounded-lg border border-border/50 bg-card/50 p-6">
 				<h3 class="mb-2 font-semibold">What's coming in paid tiers?</h3>
 				<p class="text-sm text-muted-foreground">
-					Cloud adds managed relays and backups. Teams adds MLS group encryption, 
-					Bunker Orchestrator for key custody, and SAML SSO. Enterprise adds 
-					OIDC→Nostr SSO Bridge, SCIM provisioning, and SOC2 compliance.
+					A future Cloud tier may add paid managed-relay access after deployment and
+					operational verification; no backup or uptime SLA is currently offered. Teams and
+					Enterprise remain research directions whose custody, revocation, identity, and
+					compliance designs require approval before implementation.
 				</p>
 			</div>
 			<div class="rounded-lg border border-border/50 bg-card/50 p-6">

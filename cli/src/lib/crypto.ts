@@ -4,17 +4,35 @@
  * Re-exports from @redshift/crypto shared package with CLI-specific additions.
  *
  * L2: Function-Author - Core cryptographic functions
- * L4: Integration-Contractor - NIP-59, NIP-09 protocol compliance
+ * L4: Integration-Contractor - NIP-59 protocol compliance
  */
-
-import { finalizeEvent } from 'nostr-tools/pure';
 
 // Re-export everything from shared crypto package
 export {
+	BACKUP_LIMITS,
+	BACKUP_V1_HEADER_BYTES,
+	encodeBackupPayload,
+	decodeBackupPayload,
+	encryptBackup,
+	decryptBackup,
+	validateBackupPayload,
+	HISTORY_LIMITS,
+	createSecretHistoryObservation,
+	compareSecretHistoryVersions,
+	createHistoryCursor,
+	decodeHistoryCursor,
+	paginateSecretHistory,
 	wrapSecrets,
 	unwrapSecrets,
 	unwrapGiftWrap,
+	validateGiftWrapEnvelope,
 	createTombstone,
+	wrapSecretsWithSigner,
+	unwrapGiftWrapWithSigner,
+	compareSecretVersions,
+	validateNip44CiphertextStructure,
+	MAX_NIP44_CIPHERTEXT_LENGTH,
+	MAX_RUMOR_FUTURE_SKEW_SECONDS,
 	isRedshiftSecretsEvent,
 	getRedshiftSecretsFilter,
 	toNostrEvent,
@@ -29,47 +47,22 @@ export {
 } from '@redshift/crypto';
 
 export type {
+	BackupEntryV1,
+	BackupPayloadV1,
+	BackupEncryptionOptions,
+	BackupDecryptionOptions,
+	SecretHistoryVersion,
+	SecretHistoryObservation,
+	SecretHistoryDiff,
+	SecretHistoryPage,
+	HistoryCursor,
 	NostrEvent,
 	UnsignedEvent,
 	SecretBundle,
 	GiftWrapResult,
+	SecretVersion,
 	UnwrapResult,
+	AsyncGiftWrapResult,
+	WrapOptions,
+	UnwrapOptions,
 } from '@redshift/crypto';
-
-// Import for local use
-import { NostrKinds, toNostrEvent } from '@redshift/crypto';
-import type { NostrEvent } from '@redshift/crypto';
-
-/**
- * Create a NIP-09 deletion event for Gift Wrap events.
- *
- * Note: This function is CLI-specific and not in the shared package
- * because deletion events are typically signed by the user's real key,
- * not an ephemeral key.
- *
- * @param eventIds - IDs of Gift Wrap events to delete
- * @param privateKey - The owner's private key
- * @param reason - Optional reason for deletion
- * @returns The signed deletion event
- */
-export function createDeletionEvent(
-	eventIds: string[],
-	privateKey: Uint8Array,
-	reason?: string,
-): NostrEvent {
-	// Create tags with 'e' for each event ID to delete
-	const tags: string[][] = eventIds.map((id) => ['e', id]);
-
-	// Create and sign the deletion event (kind 5)
-	const event = finalizeEvent(
-		{
-			kind: NostrKinds.DELETION,
-			content: reason ?? '',
-			tags,
-			created_at: Math.floor(Date.now() / 1000),
-		},
-		privateKey,
-	);
-
-	return toNostrEvent(event);
-}

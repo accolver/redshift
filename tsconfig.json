@@ -38,8 +38,8 @@
 
 		// Type checking
 		"skipLibCheck": true,
-		"types": ["bun-types"]
+		"types": ["bun"]
 	},
-	"include": ["cli/**/*"],
+	"include": ["cli/**/*", "tests/helpers/**/*.ts"],
 	"exclude": ["node_modules", "web", "packages"]
 }
