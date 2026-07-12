@@ -21,7 +21,9 @@ self-hosting.
 | Bitcoin-native payments | One-time Lightning payment via NWC zaps            |
 
 **Security Model**: We only store NIP-59 Gift Wrapped events (encrypted blobs).
-We cannot access secret names, values, or metadata.
+We cannot access secret names or values. See the [Redshift security and threat
+model](SECURITY.md) for metadata leakage, relay trust, key custody, recovery
+limits, and practical mitigations.
 
 ## Infrastructure Decisions (Dec 2025)
 
