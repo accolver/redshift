@@ -15,15 +15,15 @@ become a prerequisite for reading, writing, or exporting a user's secrets.
 
 | Surface | Current capability |
 | --- | --- |
-| CLI | `login`, `logout`, `setup`, `run`, `serve`, `configure`, and singular secret set/get/list/delete/upload/download workflows |
+| CLI | `login`, `logout`, `setup`, `run`, `serve`, `configure`, singular secret workflows, encrypted backup/restore, exact-event publication recovery, and authenticated history commands under the current release candidate |
 | Authentication | Local nsec, NIP-07 with NIP-44 capability gating, and NIP-46 remote signers |
 | Secret protocol | NIP-59 Gift Wraps containing owner-authored Kind 30078 rumors, strict author/recipient validation, deterministic version selection, and logical tombstones |
-| Relay resilience | Rate limiting, retry, majority publication quorum, deterministic read conflict handling, and typed quorum failures |
+| Relay resilience | Rate limiting, retry, majority publication quorum, classified per-relay outcomes, durable exact-event recovery, deterministic read conflict handling, and typed quorum failures |
 | Web dashboard | Individual project/environment management, encrypted secret editing, import/export, and full logout storage clearing |
 | Embedded dashboard | The compiled `redshift serve` binary serves the hydrated SvelteKit dashboard under a nonce-based CSP |
 | Managed relay code | NIP-42 principal binding, recipient-scoped Gift Wrap writes/reads, strict event verification, payment checks, and identity-scoped in-object quotas |
 | Verification | Crypto/CLI/web/relay tests, real local-relay CLI journeys, compiled-binary tests, and standalone/embedded Chromium E2E |
-| Release workflow (next release) | Locked installs, native-platform smoke tests, checksums, SPDX SBOM, and GitHub build-provenance attestations are implemented in source but not retroactive for `v0.10.0` |
+| Release workflow | Certified v0.13.0 native artifacts include locked installs, checksums, SPDX SBOM, GitHub attestations, public fresh-install/upgrade journeys, publication recovery, and encrypted local backup/restore evidence |
 
 ## Security semantics and known limits
 
@@ -43,9 +43,8 @@ become a prerequisite for reading, writing, or exporting a user's secrets.
 6. Plaintext output requires an explicit `--raw` acknowledgement. Operators
    must keep plaintext stdout out of logs and shell history.
 7. The hardened installer and self-updater require GitHub CLI attestation
-   verification and are prepared for the next release. Public `v0.10.0`
-   predates these controls. Linux and macOS x64/arm64 are the intended binary
-   targets; Windows is not currently published.
+   verification. Certified v0.13.0 artifacts cover Linux and macOS x64/arm64;
+   Windows is not currently published.
 8. The managed relay's custom domain and deployment workflow are declared in
    source, but uptime, geographic redundancy, backup retention, and SLA claims
    require independently verified production operations before they may be
@@ -64,17 +63,15 @@ become a prerequisite for reading, writing, or exporting a user's secrets.
 
 ### P1 — complete the next resilience tranche
 
-The detailed non-shipped plan is in
-[`docs/resilience-next.md`](docs/resilience-next.md). Priorities are:
+The ordered plan and claim boundaries are in
+[`docs/resilience-next.md`](docs/resilience-next.md):
 
-- per-relay health, degraded-redundancy reporting, and safe partial-publication recovery;
-- passphrase-encrypted backup plus fresh-machine restore drills;
-- authenticated history, compare, and restore with explicit tombstone semantics;
-- production monitoring, incident response, credential rotation, and recovery exercises;
-- scheduled native/container release and installer canaries.
+- classified per-relay recovery shipped with certified v0.12.0 evidence;
+- user-initiated encrypted local backup/restore shipped with certified v0.13.0 evidence;
+- authenticated bounded history, key-only compare, and restore is the current development candidate;
+- production monitoring, incident response, credential rotation, managed retention drills, and sustained release canaries remain future work.
 
-Each guarantee remains unavailable until its listed tests and operational drills
-pass.
+A candidate remains unavailable as a shipped guarantee until its listed tests, public artifact certification, and operational drills pass.
 
 ### P2 — operationalize the managed relay
 
@@ -86,10 +83,7 @@ pass.
 
 ### P3 — trustworthy history and recovery
 
-History, compare, and restore may be added only after authorization and version
-ordering are stable. The UI and CLI must distinguish current logical state from
-historical ciphertext and must never describe a tombstone as cryptographic
-erasure.
+Authenticated bounded history, metadata-only compare, and restore are implemented in the current development candidate under `add-authenticated-secret-history`. They are not a published-release guarantee until public artifact certification passes. The UI and CLI distinguish current logical state from relay-observed versions, report truncation, require explicit full-bundle/tombstone restore consent, and never describe a tombstone as cryptographic erasure or relay history as complete.
 
 ### P4 — collaboration research
 

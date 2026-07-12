@@ -52,6 +52,7 @@ describe('GitHub Actions policy', () => {
 				'tests/integration/nak-bunker-e2e.test.ts',
 				'tests/integration/relay-publication-recovery.test.ts',
 				'tests/integration/encrypted-backup-restore.test.ts',
+				'tests/integration/authenticated-secret-history.test.ts',
 			]) {
 				expect(workflow).toContain(testPath);
 			}

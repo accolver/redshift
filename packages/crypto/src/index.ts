@@ -46,6 +46,21 @@ export {
 	type BackupDecryptionOptions,
 } from './backup.js';
 
+// Authenticated secret history
+export {
+	HISTORY_LIMITS,
+	createSecretHistoryObservation,
+	compareSecretHistoryVersions,
+	createHistoryCursor,
+	decodeHistoryCursor,
+	paginateSecretHistory,
+	type SecretHistoryVersion,
+	type SecretHistoryObservation,
+	type SecretHistoryDiff,
+	type SecretHistoryPage,
+	type HistoryCursor,
+} from './history.js';
+
 // Gift Wrap functions
 export {
 	wrapSecrets,
@@ -60,6 +75,8 @@ export {
 	wrapSecretsWithSigner,
 	unwrapGiftWrapWithSigner,
 	compareSecretVersions,
+	validateNip44CiphertextStructure,
+	MAX_NIP44_CIPHERTEXT_LENGTH,
 	MAX_RUMOR_FUTURE_SKEW_SECONDS,
 } from './gift-wrap.js';
 

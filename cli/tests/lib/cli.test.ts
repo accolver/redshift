@@ -194,6 +194,65 @@ describe('CLI Framework', () => {
 		});
 	});
 
+	describe('parse() - history command', () => {
+		it('parses list, compare, and explicitly confirmed restore flags', () => {
+			const list = cli.parse([
+				'history',
+				'list',
+				'--project',
+				'app',
+				'--config',
+				'prod',
+				'--limit',
+				'25',
+				'--cursor',
+				`v1.1.${'a'.repeat(64)}`,
+				'--json',
+			]);
+			expect(list.flags).toMatchObject({
+				project: 'app',
+				config: 'prod',
+				limit: '25',
+				cursor: `v1.1.${'a'.repeat(64)}`,
+				json: true,
+			});
+
+			const compare = cli.parse(['history', 'compare', 'a'.repeat(64), 'b'.repeat(64)]);
+			expect(compare.positionals).toEqual(['a'.repeat(64), 'b'.repeat(64)]);
+
+			const restore = cli.parse([
+				'history',
+				'restore',
+				'a'.repeat(64),
+				'--yes',
+				'--overwrite-current',
+			]);
+			expect(restore.flags.yes).toBe(true);
+			expect(restore.flags['overwrite-current']).toBe(true);
+		});
+
+		it('requires exact positional counts and isolates subcommand safety flags', () => {
+			expect(() => cli.parse(['history', 'list', 'extra'])).toThrow('Unexpected positional');
+			expect(() => cli.parse(['history', 'compare', 'a'.repeat(64)])).toThrow(
+				'Missing required positional',
+			);
+			expect(() =>
+				cli.parse(['history', 'compare', 'a'.repeat(64), 'b'.repeat(64), 'extra']),
+			).toThrow('Too many positional');
+			expect(() => cli.parse(['history', 'restore'])).toThrow('Missing required positional');
+			expect(() => cli.parse(['history', 'restore', 'a'.repeat(64), 'extra'])).toThrow(
+				'Too many positional',
+			);
+			expect(() => cli.parse(['history', 'list', '--overwrite-current'])).toThrow('Unknown option');
+			expect(() =>
+				cli.parse(['history', 'compare', 'a'.repeat(64), 'b'.repeat(64), '--yes']),
+			).toThrow('Unknown option');
+			expect(() => cli.parse(['history', 'restore', 'a'.repeat(64), '--limit', '2'])).toThrow(
+				'Unknown option',
+			);
+		});
+	});
+
 	describe('parse() - recovery command', () => {
 		it('parses list and exact-event operations', () => {
 			expect(cli.parse(['recovery', 'list']).subcommand).toBe('list');

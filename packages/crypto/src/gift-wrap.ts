@@ -29,6 +29,31 @@ const TWO_DAYS_SECONDS = 2 * 24 * 60 * 60;
 export const MAX_RUMOR_FUTURE_SKEW_SECONDS = 300;
 const CANONICAL_PUBKEY = /^[0-9a-f]{64}$/;
 
+export const MAX_NIP44_CIPHERTEXT_LENGTH = 2 * 1024 * 1024;
+
+/** Reject structurally malformed or excessive NIP-44 v2 payloads before calling a remote signer. */
+export function validateNip44CiphertextStructure(payload: string) {
+	if (
+		typeof payload !== 'string' ||
+		payload.length < 132 ||
+		payload.length > MAX_NIP44_CIPHERTEXT_LENGTH ||
+		payload.length % 4 !== 0 ||
+		!/^[A-Za-z0-9+/]+={0,2}$/.test(payload)
+	) {
+		throw new Error('Invalid NIP-44 ciphertext structure');
+	}
+	const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
+	const decodedLength = (payload.length / 4) * 3 - padding;
+	if (decodedLength < 99) throw new Error('Invalid NIP-44 ciphertext structure');
+	let prefix: string;
+	try {
+		prefix = atob(payload.slice(0, 4));
+	} catch {
+		throw new Error('Invalid NIP-44 ciphertext structure');
+	}
+	if (prefix.charCodeAt(0) !== 2) throw new Error('Invalid NIP-44 ciphertext version');
+}
+
 /** Keys that must not appear in parsed secret bundles. */
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -478,8 +503,10 @@ export async function unwrapGiftWrapWithSigner(
 	options?: UnwrapOptions,
 ): Promise<UnwrapResult> {
 	validateGiftWrapEnvelope(giftWrap, expectedAuthor);
+	validateNip44CiphertextStructure(giftWrap.content);
 	const sealJson = await decryptFn(giftWrap.pubkey, giftWrap.content);
 	const seal = parseAndValidateSeal(sealJson, expectedAuthor);
+	validateNip44CiphertextStructure(seal.content);
 	const rumorJson = await decryptFn(seal.pubkey, seal.content);
 	const { rumor, secrets, dTag } = parseAndValidateRumor(
 		rumorJson,

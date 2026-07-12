@@ -1,5 +1,5 @@
 import { REDSHIFT_KIND } from '$lib/constants';
-import { getRedshiftSecretsFilter } from '$lib/crypto';
+import { HISTORY_LIMITS, getRedshiftSecretsFilter } from '$lib/crypto';
 import { clearDecryptionCache } from '$lib/models/gift-wrap-secrets';
 import {
 	type QuorumReport,
@@ -15,7 +15,18 @@ import { DEFAULT_RELAYS as CRYPTO_DEFAULT_RELAYS } from '@redshift/crypto';
 import { EventStore } from 'applesauce-core';
 import { RelayPool, onlyEvents } from 'applesauce-relay';
 import type { EventTemplate, NostrEvent } from 'nostr-tools';
-import { firstValueFrom, take, timeout } from 'rxjs';
+import {
+	firstValueFrom,
+	last,
+	scan,
+	startWith,
+	take,
+	takeUntil,
+	takeWhile,
+	tap,
+	timer,
+	timeout,
+} from 'rxjs';
 import type { Subscription } from 'rxjs';
 import {
 	clearPublicationRecovery,
@@ -39,6 +50,7 @@ export { REDSHIFT_KIND, getProjectDTag } from '$lib/constants';
  * - Minimum 100ms between requests
  */
 const rateLimiter = new RateLimiter(10, 1000, 100);
+const HISTORY_TEXT_ENCODER = new TextEncoder();
 
 /**
  * Shared Nostr infrastructure for the entire app
@@ -300,7 +312,10 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 		);
 	}
 
-	const secretsFilter = getRedshiftSecretsFilter(pubkey);
+	const secretsFilter = {
+		...getRedshiftSecretsFilter(pubkey),
+		limit: HISTORY_LIMITS.maxObservedEvents,
+	};
 
 	// Build filters, adding `since` for incremental sync on reconnection
 	// Subtract 60 seconds as safety margin against clock skew between relays
@@ -412,6 +427,64 @@ export async function withPublishTimeout<T>(
 /**
  * Publish an event to relays with rate limiting and exponential backoff
  */
+export async function refreshRedshiftEvents(pubkey: string) {
+	if (!/^[0-9a-f]{64}$/.test(pubkey)) throw new Error('Invalid Redshift history owner');
+	const targets = normalizePublicationRelayUrls(
+		relayState.relays.length > 0 ? relayState.relays : DEFAULT_RELAYS,
+	);
+	await rateLimiter.waitForSlot();
+	const initial = {
+		events: [] as NostrEvent[],
+		ciphertextBytes: 0,
+		truncated: false,
+	};
+	let deadlineReached = false;
+	const deadline = timer(10_000).pipe(
+		tap(() => {
+			deadlineReached = true;
+		}),
+	);
+	const collected = await firstValueFrom(
+		relayPool
+			.request(targets, [
+				{ ...getRedshiftSecretsFilter(pubkey), limit: HISTORY_LIMITS.maxObservedEvents + 1 },
+			])
+			.pipe(
+				takeUntil(deadline),
+				scan((state, event) => {
+					const eventBytes = HISTORY_TEXT_ENCODER.encode(event.content).length;
+					if (
+						state.events.length >= HISTORY_LIMITS.maxObservedEvents ||
+						state.ciphertextBytes + eventBytes > HISTORY_LIMITS.maxCiphertextBytes
+					) {
+						state.truncated = true;
+						return state;
+					}
+					state.events.push(event);
+					state.ciphertextBytes += eventBytes;
+					return state;
+				}, initial),
+				takeWhile((state) => !state.truncated, true),
+				startWith(initial),
+				last(),
+			),
+	);
+	if (deadlineReached) throw new Error('Relay history refresh timed out before completion');
+	const unique = new Map(collected.events.map((event) => [event.id, event]));
+	const ordered = [...unique.values()].sort((left, right) => {
+		if (left.created_at !== right.created_at) return right.created_at - left.created_at;
+		return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+	});
+	for (const event of ordered.slice(0, HISTORY_LIMITS.maxObservedEvents)) eventStore.add(event);
+	return {
+		observedEvents: ordered.length,
+		truncated:
+			collected.truncated ||
+			collected.events.length >= HISTORY_LIMITS.maxObservedEvents ||
+			ordered.length >= HISTORY_LIMITS.maxObservedEvents,
+	};
+}
+
 export async function publishEvent(
 	event: NostrEvent,
 	relays?: string[],

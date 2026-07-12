@@ -15,6 +15,7 @@ import type { PublishReport, RelayPool } from '../../src/lib/relay';
 import type { RecoveryRecord } from '../../src/lib/publication-recovery';
 import {
 	SecretManager,
+	boundHistoryGiftWraps,
 	extractProjects,
 	getNextSecretTimestamp,
 	injectSecrets,
@@ -201,7 +202,7 @@ describe('SecretManager', () => {
 				...createFakeSigner(privateKey),
 				nip44Decrypt: async () => {
 					decryptCalls += 1;
-					throw new Error('Timed out waiting for bunker to decrypt');
+					throw new Error('Invalid payload request from bunker transport');
 				},
 			};
 			const pool: RelayPool = {
@@ -222,6 +223,134 @@ describe('SecretManager', () => {
 			connected.connect(pool.relays);
 			await expect(connected.fetchAllSecretStates()).rejects.toThrow('could not decrypt');
 			await expect(connected.fetchAllSecretStates()).rejects.toThrow('could not decrypt');
+			expect(decryptCalls).toBe(2);
+			await local.close();
+			await connected.close();
+		});
+
+		it('applies one deterministic global cap after multi-relay aggregation', () => {
+			const events = Array.from({ length: 1_005 }, (_, index) => ({
+				id: index.toString(16).padStart(64, '0'),
+				pubkey: 'a'.repeat(64),
+				created_at: index,
+				kind: 1059,
+				tags: [],
+				content: 'encrypted',
+				sig: 'b'.repeat(128),
+			}));
+			const bounded = boundHistoryGiftWraps([...events.slice().reverse(), events[1]!]);
+			expect(bounded.observedEvents).toBe(1_005);
+			expect(bounded.events).toHaveLength(1_000);
+			expect(bounded.events[0]?.created_at).toBe(1_004);
+			expect(bounded.events.at(-1)?.created_at).toBe(5);
+			expect(bounded.truncated).toBe(true);
+
+			const oneMiB = 'x'.repeat(1024 * 1024);
+			const aggregate = boundHistoryGiftWraps(
+				Array.from({ length: 17 }, (_, index) => ({
+					...events[index]!,
+					id: `f${index.toString(16).padStart(63, '0')}`,
+					content: oneMiB,
+				})),
+			);
+			expect(aggregate.events).toHaveLength(16);
+			expect(aggregate.truncated).toBe(true);
+		});
+
+		it('observes bounded authenticated history for one exact d-tag', async () => {
+			const privateKey = generateSecretKey();
+			const local = new SecretManager(privateKey);
+			const older = await local.wrapSecrets({ API_KEY: 'old' }, 'alpha|dev', { createdAt: 100 });
+			const tiedHigh = await local.wrapSecrets({ API_KEY: 'high' }, 'alpha|dev', {
+				createdAt: 101,
+			});
+			const tiedLow = await local.wrapSecrets({}, 'alpha|dev', { createdAt: 101 });
+			const other = await local.wrapSecrets({ TOKEN: 'other' }, 'beta|dev', { createdAt: 102 });
+			const invalid = { ...older.event, id: 'f'.repeat(64), sig: '0'.repeat(128) };
+			let observedFilter: Record<string, unknown> | undefined;
+			const events = [
+				older.event,
+				tiedHigh.event,
+				tiedLow.event,
+				tiedLow.event,
+				other.event,
+				invalid,
+			];
+			const pool: RelayPool = {
+				relays: ['wss://relay.test/'],
+				pool: {} as RelayPool['pool'],
+				subscribe: () => ({ close: () => {} }),
+				publish: async () => {
+					throw new Error('not used');
+				},
+				publishTo: async () => {
+					throw new Error('not used');
+				},
+				query: async (filter) => {
+					observedFilter = filter as Record<string, unknown>;
+					return events;
+				},
+				close: () => {},
+				resetRateLimiter: () => {},
+			};
+			const connected = new SecretManager(privateKey, { createPool: () => pool });
+			connected.connect(pool.relays);
+
+			const history = await connected.fetchSecretHistory('alpha', 'dev');
+			const expectedTieOrder = [tiedHigh.event.id, tiedLow.event.id].sort();
+			expect(history.versions.map(({ eventId }) => eventId)).toEqual([
+				...expectedTieOrder,
+				older.event.id,
+			]);
+			expect(history.versions[0]?.current).toBe(true);
+			expect(history.versions.find(({ eventId }) => eventId === tiedLow.event.id)?.tombstone).toBe(
+				true,
+			);
+			expect(history.observedEvents).toBe(5);
+			expect(history.truncated).toBe(false);
+			expect(observedFilter?.limit).toBe(1_000);
+			history.versions[0]!.secrets.API_KEY = 'mutated';
+			expect(
+				(await connected.fetchSecretHistory('alpha', 'dev')).versions[0]?.secrets.API_KEY,
+			).not.toBe('mutated');
+			await local.close();
+			await connected.close();
+		});
+
+		it('aborts history on remote signer uncertainty without caching the omission', async () => {
+			const privateKey = generateSecretKey();
+			const local = new SecretManager(privateKey);
+			const wrapped = await local.wrapSecrets({ API_KEY: 'secret' }, 'alpha|dev');
+			let decryptCalls = 0;
+			const signer = {
+				...createFakeSigner(privateKey),
+				nip44Decrypt: async () => {
+					decryptCalls += 1;
+					throw new Error('Bunker transport disconnected');
+				},
+			};
+			const pool: RelayPool = {
+				relays: ['wss://relay.test/'],
+				pool: {} as RelayPool['pool'],
+				subscribe: () => ({ close: () => {} }),
+				publish: async () => {
+					throw new Error('not used');
+				},
+				publishTo: async () => {
+					throw new Error('not used');
+				},
+				query: async () => [wrapped.event],
+				close: () => {},
+				resetRateLimiter: () => {},
+			};
+			const connected = new SecretManager(signer, { createPool: () => pool });
+			connected.connect(pool.relays);
+			await expect(connected.fetchSecretHistory('alpha', 'dev')).rejects.toThrow(
+				'could not decrypt',
+			);
+			await expect(connected.fetchSecretHistory('alpha', 'dev')).rejects.toThrow(
+				'could not decrypt',
+			);
 			expect(decryptCalls).toBe(2);
 			await local.close();
 			await connected.close();

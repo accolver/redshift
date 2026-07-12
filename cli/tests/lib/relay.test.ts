@@ -12,6 +12,7 @@ import {
 	createRelayPool,
 	getUnavailableRelays,
 	mergePublishReports,
+	filterGiftWrapHistory,
 	filterGiftWraps,
 	getLatestByDTag,
 	publishWithQuorum,
@@ -256,6 +257,20 @@ describe('Relay Module', () => {
 			const filter = filterGiftWraps(pubkey, since);
 
 			expect(filter.since).toBe(since);
+			expect(filter.limit).toBeUndefined();
+		});
+
+		it('creates a separately bounded history filter without changing current-state queries', () => {
+			const pubkey = 'abc123';
+			const filter = filterGiftWrapHistory(pubkey);
+
+			expect(filter).toEqual({
+				kinds: [1059],
+				'#p': [pubkey],
+				'#t': ['redshift-secrets'],
+				limit: 1_000,
+			});
+			expect(filterGiftWraps(pubkey).limit).toBeUndefined();
 		});
 	});
 

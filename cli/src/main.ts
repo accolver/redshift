@@ -15,6 +15,7 @@ import { VERSION } from './version';
 // Import command handlers
 import { backupCommand } from './commands/backup';
 import { bunkerCommand } from './commands/bunker';
+import { historyCommand } from './commands/history';
 import { loginCommand, logoutCommand } from './commands/login';
 import { recoveryCommand } from './commands/recovery';
 import { runCommand } from './commands/run';
@@ -101,6 +102,8 @@ async function executeCommand(parsed: ParsedArgs): Promise<void> {
 			return handleRunCommand(parsed);
 		case 'secrets':
 			return handleSecretsCommand(parsed);
+		case 'history':
+			return handleHistoryCommand(parsed);
 		case 'backup': {
 			const file = parsed.positionals[0];
 			if (!file) throw new Error('Backup file path is required');
@@ -266,6 +269,53 @@ async function handleSecretsCommand(parsed: ParsedArgs): Promise<void> {
 	}
 
 	await secretsCommand(secretsOpts);
+}
+
+/** Handle bounded authenticated history commands. */
+async function handleHistoryCommand(parsed: ParsedArgs): Promise<void> {
+	const project = typeof parsed.flags.project === 'string' ? parsed.flags.project : undefined;
+	const environment = typeof parsed.flags.config === 'string' ? parsed.flags.config : undefined;
+	const limitValue = typeof parsed.flags.limit === 'string' ? parsed.flags.limit : undefined;
+	let limit: number | undefined;
+	if (limitValue !== undefined) {
+		if (!/^[1-9][0-9]{0,2}$/.test(limitValue)) {
+			throw new Error('History page limit must be a decimal integer between 1 and 100');
+		}
+		limit = Number(limitValue);
+	}
+	const common = {
+		...(project ? { project } : {}),
+		...(environment ? { environment } : {}),
+		json: parsed.flags.json === true,
+	};
+	if (!parsed.subcommand || parsed.subcommand === 'list') {
+		return historyCommand({
+			subcommand: 'list',
+			...common,
+			...(limit === undefined ? {} : { limit }),
+			...(typeof parsed.flags.cursor === 'string' ? { cursor: parsed.flags.cursor } : {}),
+		});
+	}
+	if (parsed.subcommand === 'compare') {
+		const fromEventId = parsed.positionals[0];
+		const toEventId = parsed.positionals[1];
+		if (!fromEventId || !toEventId) throw new Error('Two history event IDs are required');
+		return historyCommand({
+			subcommand: 'compare',
+			...common,
+			fromEventId,
+			toEventId,
+		});
+	}
+	const eventId = parsed.positionals[0];
+	if (!eventId) throw new Error('History event ID is required');
+	return historyCommand({
+		subcommand: 'restore',
+		...common,
+		eventId,
+		yes: parsed.flags.yes === true,
+		overwriteCurrent: parsed.flags['overwrite-current'] === true,
+	});
 }
 
 /**

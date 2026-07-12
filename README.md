@@ -82,6 +82,16 @@ redshift backup restore secrets.redshift --allow-identity-change
 
 Passphrases are entered through hidden prompts or explicit `--passphrase-stdin`; they are never accepted through argv, config, or an environment variable. Archives exclude signer credentials, relay configuration, history, tombstones, and publication-recovery files. Default restore performs no writes on a conflicting destination; use `--overwrite` only after reviewing the conflict.
 
+Inspect bounded owner-authenticated versions, compare key metadata without values, and explicitly restore a complete historical bundle or logical tombstone as a new event:
+
+```bash
+redshift history list --project my-app --config production
+redshift history compare <from-event-id> <to-event-id> --project my-app --config production
+redshift history restore <event-id> --project my-app --config production --yes
+```
+
+History is observed from responding configured relays and may be incomplete or truncated. Restore refreshes current state and aborts if it changed unless `--overwrite-current` is also explicitly supplied; Nostr still provides no compare-and-swap guarantee.
+
 ### Project Setup
 
 The `redshift setup` command creates a `redshift.yaml` file in your project
@@ -140,9 +150,7 @@ When creating a project in the web UI, you'll set:
   their stdout out of CI logs, shell history, and captured terminals.
 - Encrypted local backup is a user-initiated snapshot, not automatic/offsite retention or key recovery. Restore publishes new target-authorized state and may be partially complete across multiple bundles; each publication keeps normal quorum and recovery behavior.
 
-The individual CLI and dashboard are the supported product surfaces. Teams,
-shared-secret history/restore, managed backup/retention guarantees, and enterprise
-controls remain roadmap work and are not production claims.
+The individual CLI and dashboard are the supported product surfaces. Authenticated history/compare/restore is a development candidate until its public release evidence passes. Teams, shared-secret collaboration, managed backup/retention guarantees, and enterprise controls remain roadmap work and are not production claims.
 
 ## Development
 

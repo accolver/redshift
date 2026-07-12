@@ -1,7 +1,7 @@
 # local-backup Specification
 
 ## Purpose
-TBD - created by archiving change add-encrypted-local-backup. Update Purpose after archive.
+Define Redshift's versioned, passphrase-encrypted, user-controlled snapshot and explicit restore contract for current authenticated secret state, including strict archive bounds, credential exclusions, conflict handling, publication recovery, and truthful non-managed backup limits.
 ## Requirements
 ### Requirement: Versioned Authenticated Backup Envelope
 The CLI SHALL create and consume a bounded binary v1 archive using fixed memory-hard scrypt parameters, AES-256-GCM, exact authenticated header bytes, canonical encrypted payload bytes, cryptographically random salt/nonce values, and no algorithm or plaintext fallback.

@@ -10,7 +10,9 @@
  */
 
 import {
+	MAX_RUMOR_FUTURE_SKEW_SECONDS,
 	type NostrEvent,
+	type SecretHistoryObservation,
 	compareSecretVersions,
 	createDTag,
 	getRedshiftSecretsFilter,
@@ -22,7 +24,9 @@ import {
 import {
 	AllGiftWrapSecretsModel,
 	type Decryptor,
+	GiftWrapHistoryModel,
 	GiftWrapSecretsModel,
+	boundRedshiftHistoryEvents,
 	clearDecryptionCache,
 	createSharedDecryptionPipeline,
 } from '$lib/models/gift-wrap-secrets';
@@ -43,7 +47,7 @@ import {
 	supportsEncryption,
 } from './auth.svelte';
 // signEvent is used in wrapSecretsForPublish to sign the NIP-59 seal
-import { eventStore, publishEvent } from './nostr.svelte';
+import { eventStore, publishEvent, refreshRedshiftEvents } from './nostr.svelte';
 
 /**
  * Secrets state using $state rune
@@ -72,6 +76,24 @@ let missingSecretsState = $state<{
  */
 let allEnvSecretsState = $state<Map<string, Secret[]>>(new Map());
 
+export interface SecretHistoryState {
+	observation: SecretHistoryObservation;
+	isLoading: boolean;
+	isRestoring: boolean;
+	error: string | null;
+	restoreError: string | null;
+	conflict: { expectedEventId: string | null; observedEventId: string | null } | null;
+}
+
+const secretHistoryState = $state<SecretHistoryState>({
+	observation: { versions: [], observedEvents: 0, truncated: false },
+	isLoading: false,
+	isRestoring: false,
+	error: null,
+	restoreError: null,
+	conflict: null,
+});
+
 /**
  * Current context
  * Note: projectSlug is the immutable project identifier used in d-tags (e.g., "keyfate")
@@ -96,6 +118,23 @@ let cachedPrivateKey: Uint8Array | null = null;
  */
 let cachedAuthPubkey: string | null = null;
 let cachedAuthMethod: string | null = null;
+
+class RemoteSignerObservationError extends Error {
+	constructor(readonly originalError: unknown) {
+		super('Remote signer decryption failed while observing current secret state');
+		this.name = 'RemoteSignerObservationError';
+	}
+}
+
+export class SecretHistoryConflictError extends Error {
+	constructor(
+		readonly expectedEventId: string | null,
+		readonly observedEventId: string | null,
+	) {
+		super('Authenticated current changed during history restore preflight');
+		this.name = 'SecretHistoryConflictError';
+	}
+}
 
 /**
  * Check if cached credentials are stale (auth changed since caching).
@@ -122,6 +161,7 @@ function invalidateStaleCachedCredentials(): void {
  * Track active subscriptions
  */
 let subscription: Subscription | null = null;
+let historySubscription: Subscription | null = null;
 let allEnvSubscription: Subscription | null = null;
 
 /**
@@ -153,6 +193,10 @@ export function getMissingSecretsState(): { missing: MissingSecret[]; isLoading:
  */
 export function getAllEnvSecretsState(): Map<string, Secret[]> {
 	return allEnvSecretsState;
+}
+
+export function getSecretHistoryState(): SecretHistoryState {
+	return secretHistoryState;
 }
 
 /**
@@ -204,14 +248,20 @@ function switchEnvironmentFromCache(
 	currentEnvironmentSlug = environmentSlug;
 
 	// Still need to update the single-env subscription for reactivity to new events
-	if (subscription) {
-		subscription.unsubscribe();
-	}
+	if (subscription) subscription.unsubscribe();
+	if (historySubscription) historySubscription.unsubscribe();
+	secretHistoryState.observation = { versions: [], observedEvents: 0, truncated: false };
+	secretHistoryState.isLoading = true;
+	secretHistoryState.error = null;
+	secretHistoryState.restoreError = null;
+	secretHistoryState.conflict = null;
+	const sharedPipeline = createSharedDecryptionPipeline(eventStore, decryptor);
 	subscription = GiftWrapSecretsModel(
 		eventStore,
 		decryptor,
 		projectSlug,
 		environmentSlug,
+		sharedPipeline,
 	).subscribe({
 		next: (secrets) => {
 			secretsState.secrets = secrets;
@@ -226,6 +276,24 @@ function switchEnvironmentFromCache(
 		error: (err) => {
 			secretsState.error = err instanceof Error ? err.message : 'Failed to load secrets';
 			secretsState.isLoading = false;
+		},
+	});
+	historySubscription = GiftWrapHistoryModel(
+		eventStore,
+		decryptor,
+		projectSlug,
+		environmentSlug,
+		sharedPipeline,
+	).subscribe({
+		next: (observation) => {
+			secretHistoryState.observation = observation;
+			secretHistoryState.isLoading = false;
+			secretHistoryState.error = null;
+		},
+		error: (error) => {
+			secretHistoryState.error =
+				error instanceof Error ? error.message : 'Failed to load authenticated history';
+			secretHistoryState.isLoading = false;
 		},
 	});
 }
@@ -251,6 +319,10 @@ function setupFreshSubscriptions(
 		allEnvSubscription.unsubscribe();
 		allEnvSubscription = null;
 	}
+	if (historySubscription) {
+		historySubscription.unsubscribe();
+		historySubscription = null;
+	}
 
 	// Update context
 	currentProjectSlug = projectSlug;
@@ -260,6 +332,11 @@ function setupFreshSubscriptions(
 	// Only show loading if we don't have cached data
 	secretsState.isLoading = !hasCachedEnvData;
 	secretsState.error = null;
+	secretHistoryState.observation = { versions: [], observedEvents: 0, truncated: false };
+	secretHistoryState.isLoading = true;
+	secretHistoryState.error = null;
+	secretHistoryState.restoreError = null;
+	secretHistoryState.conflict = null;
 
 	// If we have cached data for this env (but switching projects), use it immediately
 	if (hasCachedEnvData && allEnvSecretsState.has(environmentSlug)) {
@@ -294,6 +371,25 @@ function setupFreshSubscriptions(
 		},
 	});
 
+	historySubscription = GiftWrapHistoryModel(
+		eventStore,
+		decryptor,
+		projectSlug,
+		environmentSlug,
+		sharedPipeline,
+	).subscribe({
+		next: (observation) => {
+			secretHistoryState.observation = observation;
+			secretHistoryState.isLoading = false;
+			secretHistoryState.error = null;
+		},
+		error: (error) => {
+			secretHistoryState.error =
+				error instanceof Error ? error.message : 'Failed to load authenticated history';
+			secretHistoryState.isLoading = false;
+		},
+	});
+
 	// Subscribe to all environments for missing secrets calculation
 	if (currentEnvironmentSlugs.length > 1) {
 		missingSecretsState.isLoading = !hasCachedEnvData;
@@ -320,6 +416,15 @@ function setupFreshSubscriptions(
 	}
 }
 
+function resetUnavailableHistory(error: string) {
+	secretHistoryState.observation = { versions: [], observedEvents: 0, truncated: false };
+	secretHistoryState.isLoading = false;
+	secretHistoryState.isRestoring = false;
+	secretHistoryState.error = error;
+	secretHistoryState.restoreError = null;
+	secretHistoryState.conflict = null;
+}
+
 /**
  * Subscribe to secrets for a specific project/environment.
  * Uses NIP-59 Gift Wrap for encrypted storage.
@@ -341,6 +446,7 @@ export async function subscribeToSecrets(
 	if (!auth.isConnected || !auth.pubkey) {
 		secretsState.secrets = [];
 		secretsState.error = 'Not authenticated';
+		resetUnavailableHistory('Not authenticated');
 		return;
 	}
 
@@ -349,6 +455,7 @@ export async function subscribeToSecrets(
 		secretsState.secrets = [];
 		secretsState.error =
 			'Secrets management requires NIP-44 encryption support. Please use nsec login, a NIP-07 extension with NIP-44 support (like Alby), or a NIP-46 bunker.';
+		resetUnavailableHistory(secretsState.error);
 		return;
 	}
 
@@ -358,6 +465,7 @@ export async function subscribeToSecrets(
 	if (!decryptor) {
 		secretsState.secrets = [];
 		secretsState.error = 'Could not initialize encryption. Please re-authenticate.';
+		resetUnavailableHistory(secretsState.error);
 		return;
 	}
 
@@ -410,6 +518,16 @@ export function unsubscribeFromSecrets(): void {
 		allEnvSubscription.unsubscribe();
 		allEnvSubscription = null;
 	}
+	if (historySubscription) {
+		historySubscription.unsubscribe();
+		historySubscription = null;
+	}
+	secretHistoryState.observation = { versions: [], observedEvents: 0, truncated: false };
+	secretHistoryState.isLoading = false;
+	secretHistoryState.isRestoring = false;
+	secretHistoryState.error = null;
+	secretHistoryState.restoreError = null;
+	secretHistoryState.conflict = null;
 	currentProjectSlug = null;
 	currentEnvironmentSlug = null;
 	currentEnvironmentSlugs = [];
@@ -439,35 +557,54 @@ async function ensurePublishCredentials(): Promise<void> {
 	cachedAuthMethod = auth.method;
 }
 
-async function nextRumorTimestamp(dTag: string): Promise<number> {
+async function observeLatestSecretVersion(dTag: string) {
 	await ensurePublishCredentials();
 	const auth = getAuthState();
 	if (!auth.pubkey) throw new Error('Not authenticated');
 	const candidates = eventStore.database.getByFilters([getRedshiftSecretsFilter(auth.pubkey)]);
+	const bounded = boundRedshiftHistoryEvents(candidates);
+	if (bounded.truncated) {
+		throw new Error('Observed secret state exceeds the fixed safety bound; publication is blocked');
+	}
 	let latest: { createdAt: number; eventId: string } | null = null;
-	for (const candidate of candidates) {
+	for (const candidate of bounded.events) {
 		try {
 			const result = cachedPrivateKey
 				? unwrapGiftWrap(candidate, cachedPrivateKey)
-				: cachedEncryptFn
-					? await unwrapGiftWrapWithSigner(candidate, auth.pubkey, (pubkey, ciphertext) => {
-							const decrypt = getDecryptFn();
-							if (!decrypt) throw new Error('Decryption unavailable');
-							return decrypt(pubkey, ciphertext);
-						})
-					: null;
-			if (result?.dTag === dTag && (!latest || compareSecretVersions(result, latest) > 0)) {
+				: await unwrapGiftWrapWithSigner(candidate, auth.pubkey, async (pubkey, ciphertext) => {
+						const decrypt = getDecryptFn();
+						if (!decrypt) throw new RemoteSignerObservationError('Decryption unavailable');
+						try {
+							return await decrypt(pubkey, ciphertext);
+						} catch (error) {
+							// Every remote exception is uncertain. Shared crypto rejects malformed
+							// payload structure before invoking this callback.
+							throw new RemoteSignerObservationError(error);
+						}
+					});
+			if (result.dTag === dTag && (!latest || compareSecretVersions(result, latest) > 0)) {
 				latest = result;
 			}
-		} catch {
-			// Ignore ciphertext that is invalid or belongs to another identity.
+		} catch (error) {
+			if (error instanceof RemoteSignerObservationError) throw error;
+			// Ignore only cryptographically invalid or unrelated ciphertext.
 		}
 	}
+	return latest;
+}
+
+function getNextBrowserSecretTimestamp(observedCreatedAt: number | undefined) {
 	const now = Math.floor(Date.now() / 1000);
-	if (latest && latest.createdAt >= now + 300) {
+	const next = Math.max(now, observedCreatedAt === undefined ? now : observedCreatedAt + 1);
+	if (next > now + MAX_RUMOR_FUTURE_SKEW_SECONDS) {
 		throw new Error('Cannot create a newer secret version until the local clock catches up');
 	}
-	return Math.max(now, (latest?.createdAt ?? -1) + 1);
+	return next;
+}
+
+async function nextRumorTimestamp(dTag: string): Promise<number> {
+	const latest = await observeLatestSecretVersion(dTag);
+	return getNextBrowserSecretTimestamp(latest?.createdAt);
 }
 
 async function wrapSecretsForPublish(
@@ -529,6 +666,69 @@ export async function publishSecretTombstone(
 	const event = await wrapSecretsForPublish({}, dTag);
 	await publishEvent(event, undefined, publicationContext(projectSlug, environmentSlug));
 	return event;
+}
+
+/**
+ * Restore an authenticated observed version as a new owner-authorized event.
+ * The immediate relay refresh reduces accidental overwrite but Nostr has no CAS.
+ */
+export async function restoreSecretHistoryVersion(
+	eventId: string,
+	expectedCurrentEventId: string | null,
+	overwriteCurrent = false,
+): Promise<NostrEvent | null> {
+	if (!/^[0-9a-f]{64}$/.test(eventId)) throw new Error('Invalid history event ID');
+	if (expectedCurrentEventId !== null && !/^[0-9a-f]{64}$/.test(expectedCurrentEventId)) {
+		throw new Error('Invalid expected current history event ID');
+	}
+	if (!currentProjectSlug || !currentEnvironmentSlug) {
+		throw new Error('No project/environment selected');
+	}
+	const selected = secretHistoryState.observation.versions.find(
+		(version) => version.eventId === eventId,
+	);
+	if (!selected) throw new Error('Selected version is outside the bounded authenticated history');
+
+	secretHistoryState.isRestoring = true;
+	secretHistoryState.restoreError = null;
+	secretHistoryState.conflict = null;
+	try {
+		const auth = getAuthState();
+		if (!auth.pubkey) throw new Error('Not authenticated');
+		const refreshed = await refreshRedshiftEvents(auth.pubkey);
+		if (refreshed.truncated) {
+			throw new Error('Relay history refresh reached the fixed safety bound; restore is blocked');
+		}
+		const dTag = createDTag(currentProjectSlug, currentEnvironmentSlug);
+		const observedCurrent = await observeLatestSecretVersion(dTag);
+		if ((observedCurrent?.eventId ?? null) !== expectedCurrentEventId && !overwriteCurrent) {
+			secretHistoryState.conflict = {
+				expectedEventId: expectedCurrentEventId,
+				observedEventId: observedCurrent?.eventId ?? null,
+			};
+			throw new SecretHistoryConflictError(
+				expectedCurrentEventId,
+				observedCurrent?.eventId ?? null,
+			);
+		}
+		if (observedCurrent?.eventId === selected.eventId) return null;
+		const createdAt = getNextBrowserSecretTimestamp(
+			Math.max(selected.createdAt, observedCurrent?.createdAt ?? 0),
+		);
+		const event = await wrapSecretsForPublish({ ...selected.secrets }, dTag, createdAt);
+		await publishEvent(
+			event,
+			undefined,
+			publicationContext(currentProjectSlug, currentEnvironmentSlug),
+		);
+		return event;
+	} catch (error) {
+		secretHistoryState.restoreError =
+			error instanceof Error ? error.message : 'Failed to restore authenticated history';
+		throw error;
+	} finally {
+		secretHistoryState.isRestoring = false;
+	}
 }
 
 /**

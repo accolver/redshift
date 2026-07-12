@@ -1,6 +1,6 @@
 ---
 name: redshift
-description: Manages application secrets with the Redshift CLI — decentralized, encrypted secret management built on Nostr. Use when setting, getting, deleting, listing, uploading, downloading, backing up, or restoring secrets; recovering partial relay publications; injecting secrets into commands; configuring projects/environments; or authenticating with Nostr keys. Covers redshift login, setup, secrets, backup, recovery, run, configure, serve, and upgrade.
+description: Manages application secrets with the Redshift CLI — decentralized, encrypted secret management built on Nostr. Use when setting, getting, deleting, listing, uploading, downloading, backing up, inspecting authenticated history, comparing versions, or restoring secrets; recovering partial relay publications; injecting secrets into commands; configuring projects/environments; or authenticating with Nostr keys. Covers redshift login, setup, secrets, history, backup, recovery, run, configure, serve, and upgrade.
 ---
 
 # Redshift CLI
@@ -107,6 +107,16 @@ redshift backup restore secrets.redshift --allow-identity-change --overwrite
 ```
 
 The archive contains current logical state observed from responding configured relays. It excludes signer credentials, relay config, history/tombstones, and recovery files. Default restore performs no writes on conflicts; identical state is a no-op. Each restored bundle uses normal quorum and exact-event recovery, but the multi-bundle operation is not globally atomic.
+
+## Authenticated history
+
+```bash
+redshift history list --project my-app --config production
+redshift history compare <from-event-id> <to-event-id> --project my-app --config production
+redshift history restore <event-id> --project my-app --config production --yes
+```
+
+History output contains event/timestamp/tombstone/key metadata only, never values. Results are bounded state observed from responding relays, not a complete audit log. Restore publishes the selected complete bundle or tombstone as a newer event and aborts if refreshed current state changed; `--overwrite-current` is an explicit override but cannot provide Nostr compare-and-swap.
 
 Never claim this is automatic/managed/offsite retention, complete relay history, key recovery, RPO/RTO, availability, or an SLA.
 

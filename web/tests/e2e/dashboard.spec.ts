@@ -367,10 +367,23 @@ test('browser exposes degraded relay state and retries only the unavailable rela
 	}
 });
 
-test('embedded browser and compiled CLI share a custom local relay journey', async ({ page }) => {
-	test.setTimeout(60_000);
+test('embedded browser and compiled CLI share local relay history, conflict, restore, and tombstone journeys', async ({
+	page,
+}) => {
+	test.setTimeout(120_000);
 	expect(existsSync(compiledBinary), `Compiled binary required at ${compiledBinary}`).toBe(true);
 	const root = mkdtempSync(join(tmpdir(), 'redshift-browser-e2e-'));
+	const browserConsole: string[] = [];
+	const requestUrls: string[] = [];
+	const websocketFrames: string[] = [];
+	const pageErrors: string[] = [];
+	page.on('console', (message) => browserConsole.push(message.text()));
+	page.on('request', (request) => requestUrls.push(request.url()));
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+	page.on('websocket', (socket) => {
+		socket.on('framesent', (event) => websocketFrames.push(String(event.payload)));
+		socket.on('framereceived', (event) => websocketFrames.push(String(event.payload)));
+	});
 	let relay: ChildProcess | undefined;
 	let server: ChildProcess | undefined;
 	try {
@@ -438,50 +451,116 @@ test('embedded browser and compiled CLI share a custom local relay journey', asy
 		await page.reload({ waitUntil: 'networkidle' });
 		await expect(page.locator('[data-secret-key="E2E_SECRET"]')).toBeVisible();
 
+		const cliEnv = { ...process.env, REDSHIFT_NSEC: nsec };
+		const runProjectCli = (args: string[]) =>
+			runCli(
+				['--config-dir', configDir, ...args, '--project', 'browser-project', '--config', 'dev'],
+				cliEnv,
+				root,
+			);
+		for (const [key, value] of [
+			['E2E_SECRET', 'browser-current-value'],
+			['EXTRA_SECRET', 'browser-extra-value'],
+		] as const) {
+			const result = await runProjectCli(['secrets', 'set', key, value]);
+			expect(result.exitCode, result.stderr).toBe(0);
+		}
+		await expect(page.locator('[data-secret-key="EXTRA_SECRET"]')).toBeVisible({ timeout: 20_000 });
+
+		const historyResult = await runProjectCli(['history', 'list', '--json']);
+		expect(historyResult.exitCode, historyResult.stderr).toBe(0);
+		const history = JSON.parse(historyResult.stdout) as {
+			versions: Array<{ eventId: string; current: boolean }>;
+		};
+		expect(history.versions).toHaveLength(3);
+		const currentEventId = history.versions[0]!.eventId;
+		const initialEventId = history.versions[2]!.eventId;
+
+		await page.getByRole('button', { name: 'History' }).click();
+		const historyDialog = page.getByRole('dialog');
+		await expect(historyDialog).toContainText('Authenticated secret history');
+		for (const value of ['browser-secret-value', 'browser-current-value', 'browser-extra-value']) {
+			await expect(historyDialog).not.toContainText(value);
+		}
+		await page.getByRole('button', { name: `Compare from ${initialEventId}` }).click();
+		await page.getByRole('button', { name: `Compare to ${currentEventId}` }).click();
+		await expect(historyDialog).toContainText('Added: EXTRA_SECRET');
+		await expect(historyDialog).toContainText('Changed: E2E_SECRET');
+
+		await page.getByRole('button', { name: `Restore ${initialEventId}` }).click();
+		await expect(historyDialog).toContainText('replace the complete current bundle');
+		const concurrent = await runProjectCli([
+			'secrets',
+			'set',
+			'CONCURRENT_SECRET',
+			'browser-concurrent-value',
+		]);
+		expect(concurrent.exitCode, concurrent.stderr).toBe(0);
+		await page.getByRole('button', { name: 'Confirm restore' }).click();
+		await expect(historyDialog).toContainText('A newer current version was observed', {
+			timeout: 20_000,
+		});
+		await page.getByRole('button', { name: 'Overwrite newer current' }).click();
+		await expect(historyDialog.getByRole('button', { name: 'Confirm restore' })).toHaveCount(0, {
+			timeout: 20_000,
+		});
+		await page.keyboard.press('Escape');
+		await expect(page.locator('[data-secret-key="E2E_SECRET"]')).toBeVisible();
+		await expect(page.locator('[data-secret-key="EXTRA_SECRET"]')).toBeHidden();
+		await expect(page.locator('[data-secret-key="CONCURRENT_SECRET"]')).toBeHidden();
+
 		const runtimeRelays = await page.evaluate(() => window.__REDSHIFT_RUNTIME_CONFIG__?.relays);
 		expect(runtimeRelays).toEqual([`${relayUrl}/`]);
-		const cli = await runCli(
-			[
-				'--config-dir',
-				configDir,
-				'secrets',
-				'get',
-				'E2E_SECRET',
-				'--raw',
-				'--project',
-				'browser-project',
-				'--config',
-				'dev',
-			],
-			{ ...process.env, REDSHIFT_NSEC: nsec },
-			root,
-		);
-		expect(cli.exitCode, cli.stderr).toBe(0);
-		expect(cli.stdout).toBe('browser-secret-value');
+		const restoredCli = await runProjectCli(['secrets', 'get', 'E2E_SECRET', '--raw']);
+		expect(restoredCli.exitCode, restoredCli.stderr).toBe(0);
+		expect(restoredCli.stdout).toBe('browser-secret-value');
 
 		page.once('dialog', (dialog) => dialog.accept());
 		const secretRow = page.locator('[data-secret-key="E2E_SECRET"]');
 		await secretRow.getByRole('button').last().click();
 		await page.getByRole('menuitem', { name: 'Delete' }).click();
 		await expect(secretRow).toBeHidden();
-		const deleted = await runCli(
-			[
-				'--config-dir',
-				configDir,
-				'secrets',
-				'get',
-				'E2E_SECRET',
-				'--raw',
-				'--project',
-				'browser-project',
-				'--config',
-				'dev',
-			],
-			{ ...process.env, REDSHIFT_NSEC: nsec },
-			root,
-		);
+		const tombstoneHistoryResult = await runProjectCli(['history', 'list', '--json']);
+		expect(tombstoneHistoryResult.exitCode, tombstoneHistoryResult.stderr).toBe(0);
+		const tombstoneHistory = JSON.parse(tombstoneHistoryResult.stdout) as {
+			versions: Array<{ eventId: string; tombstone: boolean }>;
+		};
+		const tombstoneEventId = tombstoneHistory.versions[0]!.eventId;
+		expect(tombstoneHistory.versions[0]!.tombstone).toBe(true);
+
+		await page.getByRole('button', { name: 'History' }).click();
+		await page.getByRole('button', { name: `Restore ${initialEventId}` }).click();
+		await page.getByRole('button', { name: 'Confirm restore' }).click();
+		await expect(secretRow).toBeVisible({ timeout: 20_000 });
+		await page.getByRole('button', { name: `Restore ${tombstoneEventId}` }).click();
+		await expect(page.getByRole('dialog')).toContainText('publish a newer logical tombstone');
+		await page.getByRole('button', { name: 'Confirm restore' }).click();
+		await expect(secretRow).toBeHidden({ timeout: 20_000 });
+		await page.keyboard.press('Escape');
+
+		const deleted = await runProjectCli(['secrets', 'get', 'E2E_SECRET', '--raw']);
 		expect(deleted.exitCode).toBe(1);
 		expect(deleted.stderr).toContain("Secret 'E2E_SECRET' not found");
+
+		const persistedBrowserText = await page.evaluate(() => {
+			const session = Object.entries(sessionStorage);
+			const local = Object.entries(localStorage);
+			return JSON.stringify({ session, local, url: location.href });
+		});
+		const renderedBrowserText = `${await page.locator('body').innerText()}\n${await page.content()}`;
+		for (const value of [
+			'browser-secret-value',
+			'browser-current-value',
+			'browser-extra-value',
+			'browser-concurrent-value',
+		]) {
+			expect(browserConsole.join('\n')).not.toContain(value);
+			expect(requestUrls.join('\n')).not.toContain(value);
+			expect(websocketFrames.join('\n')).not.toContain(value);
+			expect(persistedBrowserText).not.toContain(value);
+			expect(renderedBrowserText).not.toContain(value);
+		}
+		expect(pageErrors).toEqual([]);
 
 		expect(
 			await page.evaluate(() =>

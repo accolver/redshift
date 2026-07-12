@@ -12,7 +12,7 @@ import { verifyEvent } from 'nostr-tools/pure';
 import type { Filter } from 'nostr-tools/filter';
 import { SimplePool } from 'nostr-tools/pool';
 import { normalizeRelayUrls } from './config';
-import { compareSecretVersions } from './crypto';
+import { HISTORY_LIMITS, compareSecretVersions } from './crypto';
 import { RelayError } from './errors';
 import {
 	QuorumError,
@@ -318,6 +318,13 @@ export function createRelayPool(relayUrls: string[], options: RelayPoolOptions =
  * - p-tag: recipient pubkey
  * - t-tag: "redshift-secrets" (to only get Redshift events, not DMs, etc.)
  */
+export function filterGiftWrapHistory(pubkey: string): Filter {
+	return {
+		...filterGiftWraps(pubkey),
+		limit: HISTORY_LIMITS.maxObservedEvents,
+	};
+}
+
 export function filterGiftWraps(pubkey: string, since?: number): Filter {
 	const filter: Filter = {
 		kinds: [NostrKinds.GIFT_WRAP],

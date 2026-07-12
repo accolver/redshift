@@ -11,10 +11,13 @@
 
 import {
 	type DecryptFn,
+	HISTORY_LIMITS,
 	NostrKinds,
+	type SecretHistoryObservation,
 	type SecretVersion,
 	type UnwrapResult,
 	compareSecretVersions,
+	createSecretHistoryObservation,
 	isRedshiftSecretsEvent,
 	parseDTag,
 	unwrapGiftWrap,
@@ -25,6 +28,12 @@ import type { EventStore } from 'applesauce-core';
 import type { NostrEvent } from 'nostr-tools';
 import { type Observable, from, of } from 'rxjs';
 import { map, shareReplay, switchMap } from 'rxjs/operators';
+
+export interface SharedDecryptionBatch {
+	events: Array<{ event: NostrEvent; result: UnwrapResult }>;
+	observedEvents: number;
+	truncated: boolean;
+}
 
 /**
  * Decryptor can be either a private key (for nsec) or a decrypt function (for NIP-07/bunker)
@@ -39,6 +48,14 @@ export type Decryptor =
  * events that belong to other users or are corrupted).
  */
 const decryptionCache = new Map<string, UnwrapResult | null>();
+const HISTORY_TEXT_ENCODER = new TextEncoder();
+
+class RemoteSignerDecryptionError extends Error {
+	constructor(readonly originalError: unknown) {
+		super('Remote signer decryption failed');
+		this.name = 'RemoteSignerDecryptionError';
+	}
+}
 
 /**
  * Clear the decryption cache.
@@ -87,13 +104,30 @@ async function unwrapEvents(
 			if (decryptor.type === 'privateKey') {
 				result = unwrapGiftWrap(event, decryptor.key);
 			} else {
-				result = await unwrapGiftWrapWithSigner(event, decryptor.expectedAuthor, decryptor.fn);
+				result = await unwrapGiftWrapWithSigner(
+					event,
+					decryptor.expectedAuthor,
+					async (pubkey, ciphertext) => {
+						try {
+							return await decryptor.fn(pubkey, ciphertext);
+						} catch (error) {
+							// Every remote exception is uncertain. Shared crypto rejects malformed
+							// payload structure before invoking this callback.
+							throw new RemoteSignerDecryptionError(error);
+						}
+					},
+				);
 			}
 			// Cache successful decryption
 			decryptionCache.set(event.id, result);
 			results.push({ event, result });
-		} catch {
-			// Cache the failure so we don't re-attempt (event not for us or corrupted)
+		} catch (error) {
+			if (error instanceof RemoteSignerDecryptionError) {
+				throw new Error('The remote signer could not decrypt observed secret state', {
+					cause: error.originalError,
+				});
+			}
+			// Cache cryptographically invalid or unrelated events, but never signer uncertainty.
 			decryptionCache.set(event.id, null);
 		}
 	}
@@ -116,6 +150,14 @@ function isNewerVersion(candidate: SecretVersion, current: SecretVersion | null)
 	return current === null || compareSecretVersions(candidate, current) > 0;
 }
 
+function assertCompleteCurrentBatch(batch: SharedDecryptionBatch) {
+	if (batch.truncated) {
+		throw new Error(
+			'Observed secret state reached the fixed safety bound; current selection is blocked',
+		);
+	}
+}
+
 /**
  * Create a shared decryption pipeline that can be consumed by multiple
  * subscribers without duplicating decryption work.
@@ -131,21 +173,53 @@ function isNewerVersion(candidate: SecretVersion, current: SecretVersion | null)
 export function createSharedDecryptionPipeline(
 	eventStore: EventStore,
 	decryptor: Decryptor,
-): Observable<Array<{ event: NostrEvent; result: UnwrapResult }>> {
+): Observable<SharedDecryptionBatch> {
 	return eventStore
 		.timeline({
 			kinds: [NostrKinds.GIFT_WRAP],
 		})
 		.pipe(
 			switchMap((events) => {
-				const redshiftEvents = events.filter((e) =>
-					isRedshiftSecretsEvent(e as NostrEvent),
+				const redshiftEvents = events.filter((event) =>
+					isRedshiftSecretsEvent(event as NostrEvent),
 				) as NostrEvent[];
-
-				return from(unwrapEvents(redshiftEvents, decryptor));
+				const bounded = boundRedshiftHistoryEvents(redshiftEvents);
+				return from(unwrapEvents(bounded.events, decryptor)).pipe(
+					map((unwrapped) => ({
+						events: unwrapped,
+						observedEvents: bounded.observedEvents,
+						truncated: bounded.truncated,
+					})),
+				);
 			}),
-			shareReplay(1),
+			shareReplay({ bufferSize: 1, refCount: true }),
 		);
+}
+
+export function boundRedshiftHistoryEvents(events: NostrEvent[]) {
+	const unique = new Map<string, NostrEvent>();
+	for (const event of events) {
+		if (!unique.has(event.id)) unique.set(event.id, event);
+	}
+	const ordered = [...unique.values()].sort((left, right) => {
+		if (left.created_at !== right.created_at) return right.created_at - left.created_at;
+		return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+	});
+	const retained: NostrEvent[] = [];
+	let ciphertextBytes = 0;
+	for (const event of ordered) {
+		if (retained.length >= HISTORY_LIMITS.maxObservedEvents) break;
+		const eventBytes = HISTORY_TEXT_ENCODER.encode(event.content).length;
+		if (ciphertextBytes + eventBytes > HISTORY_LIMITS.maxCiphertextBytes) break;
+		retained.push(event);
+		ciphertextBytes += eventBytes;
+	}
+	return {
+		events: retained,
+		observedEvents: ordered.length,
+		truncated:
+			ordered.length >= HISTORY_LIMITS.maxObservedEvents || retained.length < ordered.length,
+	};
 }
 
 /**
@@ -163,7 +237,7 @@ export function GiftWrapSecretsModel(
 	decryptor: Decryptor,
 	projectName: string,
 	environmentSlug: string,
-	sharedPipeline?: Observable<Array<{ event: NostrEvent; result: UnwrapResult }>>,
+	sharedPipeline?: Observable<SharedDecryptionBatch>,
 ): Observable<Secret[]> {
 	const targetDTag = `${projectName}|${environmentSlug}`;
 
@@ -171,14 +245,38 @@ export function GiftWrapSecretsModel(
 	const source$ = sharedPipeline ?? createSharedDecryptionPipeline(eventStore, decryptor);
 
 	return source$.pipe(
-		map((unwrappedEvents) => {
+		map((batch) => {
+			assertCompleteCurrentBatch(batch);
 			let latest: UnwrapResult | null = null;
-			for (const { result } of unwrappedEvents) {
+			for (const { result } of batch.events) {
 				if (result.dTag === targetDTag && isNewerVersion(result, latest)) {
 					latest = result;
 				}
 			}
 			return latest ? bundleToSecrets(latest.secrets) : [];
+		}),
+	);
+}
+
+/**
+ * GiftWrapHistoryModel - Returns bounded authenticated observed history for one d-tag.
+ * Relay retention is not complete or durable history.
+ */
+export function GiftWrapHistoryModel(
+	eventStore: EventStore,
+	decryptor: Decryptor,
+	projectName: string,
+	environmentSlug: string,
+	sharedPipeline?: Observable<SharedDecryptionBatch>,
+): Observable<SecretHistoryObservation> {
+	const targetDTag = `${projectName}|${environmentSlug}`;
+	const source$ = sharedPipeline ?? createSharedDecryptionPipeline(eventStore, decryptor);
+	return source$.pipe(
+		map((batch) => {
+			const versions = batch.events
+				.map(({ result }) => result)
+				.filter((result) => result.dTag === targetDTag);
+			return createSecretHistoryObservation(versions, batch.observedEvents, batch.truncated);
 		}),
 	);
 }
@@ -197,7 +295,7 @@ export function AllGiftWrapSecretsModel(
 	decryptor: Decryptor,
 	projectName: string,
 	environmentSlugs: string[],
-	sharedPipeline?: Observable<Array<{ event: NostrEvent; result: UnwrapResult }>>,
+	sharedPipeline?: Observable<SharedDecryptionBatch>,
 ): Observable<Map<string, Secret[]>> {
 	if (environmentSlugs.length === 0) {
 		return of(new Map());
@@ -210,10 +308,11 @@ export function AllGiftWrapSecretsModel(
 	const source$ = sharedPipeline ?? createSharedDecryptionPipeline(eventStore, decryptor);
 
 	return source$.pipe(
-		map((unwrappedEvents) => {
+		map((batch) => {
+			assertCompleteCurrentBatch(batch);
 			const latestByEnv = new Map<string, UnwrapResult>();
 
-			for (const { result } of unwrappedEvents) {
+			for (const { result } of batch.events) {
 				if (!targetDTags.has(result.dTag)) continue;
 				const parsed = parseDTag(result.dTag);
 				if (!parsed?.environment) continue;
@@ -250,14 +349,15 @@ export function AllGiftWrapSecretsModel(
 export function ListGiftWrapProjectsModel(
 	eventStore: EventStore,
 	decryptor: Decryptor,
-	sharedPipeline?: Observable<Array<{ event: NostrEvent; result: UnwrapResult }>>,
+	sharedPipeline?: Observable<SharedDecryptionBatch>,
 ): Observable<string[]> {
 	const source$ = sharedPipeline ?? createSharedDecryptionPipeline(eventStore, decryptor);
 
 	return source$.pipe(
-		map((unwrappedEvents) => {
+		map((batch) => {
+			assertCompleteCurrentBatch(batch);
 			const projects = new Set<string>();
-			for (const result of selectLatestByDTag(unwrappedEvents).values()) {
+			for (const result of selectLatestByDTag(batch.events).values()) {
 				if (Object.keys(result.secrets).length === 0) continue;
 				const parsed = parseDTag(result.dTag);
 				if (parsed?.projectId) projects.add(parsed.projectId);
@@ -279,14 +379,15 @@ export function ListGiftWrapEnvironmentsModel(
 	eventStore: EventStore,
 	decryptor: Decryptor,
 	projectName: string,
-	sharedPipeline?: Observable<Array<{ event: NostrEvent; result: UnwrapResult }>>,
+	sharedPipeline?: Observable<SharedDecryptionBatch>,
 ): Observable<string[]> {
 	const source$ = sharedPipeline ?? createSharedDecryptionPipeline(eventStore, decryptor);
 
 	return source$.pipe(
-		map((unwrappedEvents) => {
+		map((batch) => {
+			assertCompleteCurrentBatch(batch);
 			const environments = new Set<string>();
-			for (const result of selectLatestByDTag(unwrappedEvents).values()) {
+			for (const result of selectLatestByDTag(batch.events).values()) {
 				if (Object.keys(result.secrets).length === 0) continue;
 				const parsed = parseDTag(result.dTag);
 				if (parsed?.projectId === projectName && parsed.environment) {

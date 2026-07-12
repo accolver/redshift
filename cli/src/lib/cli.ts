@@ -655,6 +655,7 @@ export function createCLI(version: string): CLI {
 	cli.registerCommand(createRunCommand());
 	cli.registerCommand(createSecretsCommand());
 	cli.registerCommand(createBackupCommand());
+	cli.registerCommand(createHistoryCommand());
 	cli.registerCommand(createRecoveryCommand());
 	cli.registerCommand(createServeCommand());
 	cli.registerCommand(createBunkerCommand());
@@ -916,6 +917,92 @@ function createBackupCommand(): CommandDef {
 						description: 'authorize migration to a different authenticated signer',
 					},
 					'passphrase-stdin': passphraseStdin,
+				},
+			},
+		},
+	};
+}
+
+function createHistoryCommand(): CommandDef {
+	const commonFlags: Record<string, FlagDef> = {
+		project: {
+			type: 'string',
+			short: 'p',
+			description: 'project (e.g. backend)',
+			placeholder: 'name',
+		},
+		config: {
+			type: 'string',
+			short: 'c',
+			description: 'config/environment (e.g. dev)',
+			placeholder: 'name',
+		},
+		environment: {
+			type: 'string',
+			short: 'e',
+			description: 'alias for --config',
+			placeholder: 'name',
+			aliasOf: 'config',
+			hidden: true,
+		},
+		json: {
+			type: 'boolean',
+			description: 'output machine-readable metadata without secret values',
+		},
+	};
+	const eventIdPosition = {
+		name: 'event-id',
+		description: '64-character authenticated outer event ID',
+		required: true,
+	};
+	return {
+		name: 'history',
+		description: 'Inspect, compare, and restore bounded authenticated secret history',
+		examples: [
+			'redshift history list --project backend --config prod',
+			'redshift history compare <from-event-id> <to-event-id>',
+			'redshift history restore <event-id> --yes',
+		],
+		flags: commonFlags,
+		subcommands: {
+			list: {
+				name: 'list',
+				description: 'List metadata for bounded owner-authenticated observed versions',
+				flags: {
+					limit: {
+						type: 'string',
+						description: 'versions per page (1-100)',
+						placeholder: 'count',
+					},
+					cursor: {
+						type: 'string',
+						description: 'exact opaque cursor from a previous page',
+						placeholder: 'cursor',
+					},
+				},
+				positionals: [],
+			},
+			compare: {
+				name: 'compare',
+				description: 'Compare key metadata for two authenticated versions',
+				positionals: [
+					{ ...eventIdPosition, name: 'from-event-id' },
+					{ ...eventIdPosition, name: 'to-event-id' },
+				],
+			},
+			restore: {
+				name: 'restore',
+				description: 'Publish a selected historical bundle as a new authorized version',
+				positionals: [eventIdPosition],
+				flags: {
+					yes: {
+						type: 'boolean',
+						description: 'confirm complete-bundle replacement or logical deletion',
+					},
+					'overwrite-current': {
+						type: 'boolean',
+						description: 'proceed if current changed during immediate restore preflight',
+					},
 				},
 			},
 		},
