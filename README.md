@@ -11,6 +11,11 @@ Decentralized, censorship-resistant secret management built on
 - **Doppler-inspired CLI** - Familiar workflows such as `redshift run`, with Redshift's documented command contract
 - **Censorship-resistant** - Distributed across Nostr relays
 
+## Public Roadmap
+
+- [Grant roadmap and project brief](docs/grants/README.md)
+- [Technical roadmap](ROADMAP.md)
+
 ## Installation
 
 The hardened release installer targets Linux and macOS and requires a current
