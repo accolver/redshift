@@ -8,9 +8,11 @@
 import type { EventTemplate, VerifiedEvent } from 'nostr-tools/core';
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 import {
+	HISTORY_LIMITS,
 	MAX_RUMOR_FUTURE_SKEW_SECONDS,
 	compareSecretVersions,
 	createDTag,
+	createSecretHistoryObservation,
 	parseDTag,
 	unwrapGiftWrap,
 	unwrapGiftWrapWithSigner,
@@ -18,7 +20,13 @@ import {
 	wrapSecrets as wrapSecretsToEvent,
 	wrapSecretsWithSigner,
 } from './crypto';
-import type { AsyncGiftWrapResult, GiftWrapResult, UnwrapResult, WrapOptions } from './crypto';
+import type {
+	AsyncGiftWrapResult,
+	GiftWrapResult,
+	SecretHistoryObservation,
+	UnwrapResult,
+	WrapOptions,
+} from './crypto';
 import { NotConnectedError, RecoveryError, ValidationError } from './errors';
 import {
 	createProvisionalRecoveryRecord,
@@ -28,7 +36,12 @@ import {
 } from './publication-recovery';
 import type { RecoveryRecord } from './publication-recovery';
 import type { PublishReport, RelayPool } from './relay';
-import { PublishQuorumError, createRelayPool, filterGiftWraps } from './relay';
+import {
+	PublishQuorumError,
+	createRelayPool,
+	filterGiftWrapHistory,
+	filterGiftWraps,
+} from './relay';
 import type { NostrEvent, SecretBundle } from './types';
 
 /**
@@ -72,6 +85,7 @@ interface DecryptionCacheEntry {
 	secrets: SecretBundle;
 	createdAt: number;
 	eventId: string;
+	pubkey: string;
 }
 
 /**
@@ -94,6 +108,7 @@ interface FetchAllCache {
 
 /** Cache TTL for fetchAllSecrets deduplication (5 seconds) */
 const FETCH_ALL_CACHE_TTL_MS = 5000;
+const HISTORY_TEXT_ENCODER = new TextEncoder();
 
 /**
  * SecretManager handles all secret-related operations including
@@ -243,7 +258,8 @@ export class SecretManager {
 			try {
 				return await this.signer!.nip44Decrypt(pubkey, ciphertext);
 			} catch (error) {
-				if (isInvalidNip44CiphertextError(error)) throw error;
+				// Every remote exception is uncertain. Structural ciphertext errors are rejected
+				// inside unwrapGiftWrapWithSigner before this callback is invoked.
 				throw new SignerDecryptionError(error);
 			}
 		});
@@ -303,6 +319,28 @@ export class SecretManager {
 		);
 	}
 
+	/**
+	 * Observe bounded authenticated history for one exact project/environment.
+	 * Relay retention is not complete history; a result at either cap is marked truncated.
+	 */
+	async fetchSecretHistory(
+		projectId: string,
+		environment: string,
+	): Promise<SecretHistoryObservation> {
+		if (!this.pool) throw new NotConnectedError();
+		const targetDTag = createDTag(projectId, environment);
+		const queriedGiftWraps = await this.pool.query(filterGiftWrapHistory(this.publicKey));
+		const bounded = boundHistoryGiftWraps(queriedGiftWraps);
+		const versions: UnwrapResult[] = [];
+		for (const giftWrap of bounded.events) {
+			const entry = await this.getDecryptionEntry(giftWrap);
+			if (entry?.dTag === targetDTag) {
+				versions.push({ ...entry, secrets: { ...entry.secrets } });
+			}
+		}
+		return createSecretHistoryObservation(versions, bounded.observedEvents, bounded.truncated);
+	}
+
 	private async _fetchAllSecretsInternal(): Promise<Map<string, SecretBundle>> {
 		const states = await this._fetchAllSecretStatesInternal();
 		const secretsMap = new Map<string, SecretBundle>();
@@ -326,45 +364,46 @@ export class SecretManager {
 		// Unwrap all events and track latest by d-tag
 		const latestByDTag = new Map<string, SecretStateSnapshot>();
 
-		for (const gw of giftWraps) {
-			// Check decryption cache first
-			if (this.decryptionCache.has(gw.id)) {
-				const cached = this.decryptionCache.get(gw.id);
-				if (cached) {
-					const existing = latestByDTag.get(cached.dTag);
-					if (!existing || compareSecretVersions(cached, existing) > 0) {
-						latestByDTag.set(cached.dTag, cached);
-					}
-				}
-				continue; // Skip decryption (cached null means it failed before)
-			}
-
-			try {
-				const result = await this.unwrapWithMetadata(gw);
-
-				// Cache the successful decryption
-				const entry: DecryptionCacheEntry = {
-					dTag: result.dTag,
-					secrets: result.secrets,
-					createdAt: result.createdAt,
-					eventId: result.eventId,
-				};
-				this.decryptionCache.set(gw.id, entry);
-
-				const existing = latestByDTag.get(result.dTag);
-				if (!existing || compareSecretVersions(entry, existing) > 0) {
-					latestByDTag.set(result.dTag, entry);
-				}
-			} catch (error) {
-				if (error instanceof SignerDecryptionError) {
-					throw new ValidationError('Remote signer could not decrypt the observed secret state');
-				}
-				// Cache cryptographically invalid or unrelated events, but never transient signer failures.
-				this.decryptionCache.set(gw.id, null);
+		for (const giftWrap of giftWraps) {
+			const entry = await this.getDecryptionEntry(giftWrap);
+			if (!entry) continue;
+			const existing = latestByDTag.get(entry.dTag);
+			if (!existing || compareSecretVersions(entry, existing) > 0) {
+				latestByDTag.set(entry.dTag, {
+					dTag: entry.dTag,
+					secrets: entry.secrets,
+					createdAt: entry.createdAt,
+					eventId: entry.eventId,
+				});
 			}
 		}
 
 		return latestByDTag;
+	}
+
+	private async getDecryptionEntry(giftWrap: NostrEvent): Promise<DecryptionCacheEntry | null> {
+		if (this.decryptionCache.has(giftWrap.id)) {
+			return this.decryptionCache.get(giftWrap.id) ?? null;
+		}
+		try {
+			const result = await this.unwrapWithMetadata(giftWrap);
+			const entry: DecryptionCacheEntry = {
+				dTag: result.dTag,
+				secrets: { ...result.secrets },
+				createdAt: result.createdAt,
+				eventId: result.eventId,
+				pubkey: result.pubkey,
+			};
+			this.decryptionCache.set(giftWrap.id, entry);
+			return entry;
+		} catch (error) {
+			if (error instanceof SignerDecryptionError) {
+				throw new ValidationError('Remote signer could not decrypt the observed secret state');
+			}
+			// Cache cryptographically invalid or unrelated events, but never transient signer failures.
+			this.decryptionCache.set(giftWrap.id, null);
+			return null;
+		}
 	}
 
 	/**
@@ -564,20 +603,6 @@ export function injectSecrets(
 	return result;
 }
 
-function isInvalidNip44CiphertextError(error: unknown) {
-	if (!(error instanceof Error)) return false;
-	const message = error.message.toLowerCase();
-	return [
-		'invalid mac',
-		'invalid padding',
-		'invalid payload',
-		'invalid payload length',
-		'invalid data length',
-		'invalid base64',
-		'unknown encryption version',
-	].some((marker) => message.includes(marker));
-}
-
 function validatePublishTimestamp(createdAt?: number) {
 	if (createdAt === undefined) return;
 	const now = Math.floor(Date.now() / 1000);
@@ -604,6 +629,36 @@ export function getNextSecretTimestamp(
 		throw new ValidationError('Cannot create a strictly newer secret within the future-skew bound');
 	}
 	return next;
+}
+
+/**
+ * Apply one deterministic global bound after multi-relay query aggregation.
+ * Relay filter limits are per relay and therefore cannot enforce this alone.
+ */
+export function boundHistoryGiftWraps(events: NostrEvent[]) {
+	const unique = new Map<string, NostrEvent>();
+	for (const event of events) {
+		if (!unique.has(event.id)) unique.set(event.id, event);
+	}
+	const ordered = [...unique.values()].sort((left, right) => {
+		if (left.created_at !== right.created_at) return right.created_at - left.created_at;
+		return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+	});
+	const retained: NostrEvent[] = [];
+	let ciphertextBytes = 0;
+	for (const event of ordered) {
+		if (retained.length >= HISTORY_LIMITS.maxObservedEvents) break;
+		const eventBytes = HISTORY_TEXT_ENCODER.encode(event.content).length;
+		if (ciphertextBytes + eventBytes > HISTORY_LIMITS.maxCiphertextBytes) break;
+		retained.push(event);
+		ciphertextBytes += eventBytes;
+	}
+	return {
+		events: retained,
+		observedEvents: ordered.length,
+		truncated:
+			ordered.length >= HISTORY_LIMITS.maxObservedEvents || retained.length < ordered.length,
+	};
 }
 
 /**

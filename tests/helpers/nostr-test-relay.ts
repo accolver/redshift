@@ -2,12 +2,20 @@ import type { NostrEvent } from 'nostr-tools';
 
 export type TestRelayBehavior = 'accept' | 'reject';
 
+export type NostrTestRelayRequestHook = (
+	filters: Array<Record<string, unknown>>,
+	requestCount: number,
+	seedEvent: (event: NostrEvent) => void,
+) => void;
+
 export interface NostrTestRelay {
 	url: string;
 	port: number;
 	publishCount: number;
 	publishedEvents: NostrEvent[];
 	getEvent(id: string): NostrEvent | undefined;
+	seedEvent(event: NostrEvent): void;
+	setRequestHook(hook: NostrTestRelayRequestHook | null): void;
 	stop(): Promise<void>;
 }
 
@@ -25,6 +33,9 @@ export async function startNostrTestRelay(
 	const events = new Map<string, NostrEvent>();
 	const publishedEvents: NostrEvent[] = [];
 	let publishCount = 0;
+	let requestCount = 0;
+	let requestHook: NostrTestRelayRequestHook | null = null;
+	const seedEvent = (event: NostrEvent) => events.set(event.id, structuredClone(event));
 	const behavior = options.behavior ?? 'accept';
 	const rejectionReason = options.rejectionReason ?? 'restricted: deterministic test policy';
 	const server = Bun.serve<SocketData>({
@@ -64,6 +75,8 @@ export async function startNostrTestRelay(
 				if (frame[0] === 'REQ' && typeof frame[1] === 'string') {
 					const subscriptionId = frame[1];
 					const filters = frame.slice(2).filter(isFilter);
+					requestCount += 1;
+					requestHook?.(filters, requestCount, seedEvent);
 					for (const event of events.values()) {
 						if (filters.length === 0 || filters.some((filter) => matchesFilter(event, filter))) {
 							socket.send(JSON.stringify(['EVENT', subscriptionId, event]));
@@ -85,6 +98,10 @@ export async function startNostrTestRelay(
 		},
 		publishedEvents,
 		getEvent: (id) => events.get(id),
+		seedEvent,
+		setRequestHook(hook) {
+			requestHook = hook;
+		},
 		async stop() {
 			await server.stop(true);
 		},

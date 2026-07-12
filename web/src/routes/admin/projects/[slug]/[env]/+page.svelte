@@ -34,6 +34,7 @@ import CreateProjectModal from '$lib/components/CreateProjectModal.svelte';
 import ExportSecretsModal from '$lib/components/ExportSecretsModal.svelte';
 import ImportSecretsModal from '$lib/components/ImportSecretsModal.svelte';
 import MultiEnvSaveModal from '$lib/components/MultiEnvSaveModal.svelte';
+import SecretHistoryPanel from '$lib/components/SecretHistoryPanel.svelte';
 import { Button } from '$lib/components/ui/button';
 import {
 	Dialog,
@@ -766,6 +767,7 @@ async function handleDeleteEnvironment() {
 				</div>
 
 				<div class="flex shrink-0 items-center gap-2">
+					<SecretHistoryPanel />
 					<Button 
 						variant={hasUnsavedChanges ? "default" : "outline"} 
 						size="sm"

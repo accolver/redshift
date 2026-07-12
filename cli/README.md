@@ -162,6 +162,21 @@ Default restore preflights all bundles and performs zero writes if live destinat
 
 This is user-initiated local portability—not automatic, managed, offsite, retained, or complete-relay backup; not key/account recovery; and not an RPO/RTO, availability, or SLA guarantee.
 
+### `redshift history`
+
+List bounded owner-authenticated state observed from responding configured relays, compare key metadata without printing values, or restore one exact version:
+
+```bash
+redshift history list --project my-app --config production
+redshift history list --limit 20 --cursor <cursor> --json
+redshift history compare <from-event-id> <to-event-id> --project my-app --config production
+redshift history restore <event-id> --project my-app --config production --yes
+```
+
+Versions use authenticated inner timestamps and deterministic event-ID ties; NIP-59 outer timestamps do not order state. Empty versions are logical tombstones, not cryptographic erasure. Restore republishes the complete selected bundle as a strictly newer owner-authorized event through normal quorum and exact-event recovery. It refreshes current state immediately before publication and aborts on change; `--overwrite-current` is a second explicit authorization, not compare-and-swap. Relay retention may be incomplete, and fixed observation/version limits are reported as truncation.
+
+This command never prints secret values. Decrypted history remains ephemeral in the dashboard and is not an audit log, retained/offline backup, managed history, RPO/RTO, or SLA guarantee.
+
 ### `redshift serve`
 
 Start the web administration UI.

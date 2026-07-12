@@ -75,6 +75,27 @@ redshift $GLOBAL_ARGS secrets --project release-container --config production | 
 RAW=$(redshift $GLOBAL_ARGS secrets get API_KEY --raw --project release-container --config production)
 [ "$RAW" = release-container-secret ]
 
+INITIAL_EVENT_ID=$(redshift $GLOBAL_ARGS history list --project release-container --config production | awk 'NR == 1 { print $2 }')
+printf '%s' "$INITIAL_EVENT_ID" | grep -E '^[0-9a-f]{64}$' >/dev/null
+if redshift $GLOBAL_ARGS history restore "$INITIAL_EVENT_ID" --project release-container --config production >/dev/null 2>&1; then
+  echo 'history restore without explicit consent unexpectedly succeeded' >&2
+  exit 1
+fi
+AFTER_UNCONFIRMED_ID=$(redshift $GLOBAL_ARGS history list --project release-container --config production | awk 'NR == 1 { print $2 }')
+[ "$AFTER_UNCONFIRMED_ID" = "$INITIAL_EVENT_ID" ]
+# shellcheck disable=SC2086
+redshift $GLOBAL_ARGS secrets set API_KEY release-container-updated --project release-container --config production
+CURRENT_EVENT_ID=$(redshift $GLOBAL_ARGS history list --project release-container --config production | awk 'NR == 1 { print $2 }')
+HISTORY_DIFF=$(redshift $GLOBAL_ARGS history compare "$INITIAL_EVENT_ID" "$CURRENT_EVENT_ID" --project release-container --config production)
+printf '%s' "$HISTORY_DIFF" | grep -F 'changed: API_KEY' >/dev/null
+if printf '%s' "$HISTORY_DIFF" | grep -F 'release-container-secret' >/dev/null; then
+  echo 'plaintext secret appeared in history comparison' >&2
+  exit 1
+fi
+redshift $GLOBAL_ARGS history restore "$INITIAL_EVENT_ID" --project release-container --config production --yes
+RESTORED_HISTORY=$(redshift $GLOBAL_ARGS secrets get API_KEY --raw --project release-container --config production)
+[ "$RESTORED_HISTORY" = release-container-secret ]
+
 cat >"$ROOT/inspect.sh" <<'SCRIPT'
 #!/bin/sh
 printf '%s|%s' "$API_KEY" "${REDSHIFT_NSEC-unset}"

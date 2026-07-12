@@ -3,10 +3,12 @@
 import type { NostrEvent } from 'nostr-tools';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { wrapSecrets } from '@redshift/crypto';
+import { concat, NEVER, of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockPublish, mockEvents } = vi.hoisted(() => ({
+const { mockPublish, mockRequest, mockEvents } = vi.hoisted(() => ({
 	mockPublish: vi.fn(),
+	mockRequest: vi.fn(),
 	mockEvents: [] as NostrEvent[],
 }));
 
@@ -22,7 +24,7 @@ vi.mock('applesauce-core', () => ({
 vi.mock('applesauce-relay', () => ({
 	RelayPool: class MockRelayPool {
 		publish = mockPublish;
-		request = vi.fn();
+		request = mockRequest;
 		subscription = vi.fn().mockReturnValue({
 			pipe: vi
 				.fn()
@@ -47,7 +49,12 @@ vi.mock('$lib/rate-limiter', async (importOriginal) => {
 	};
 });
 
-import { disconnect, publishEvent, retryPublication } from '$lib/stores/nostr.svelte';
+import {
+	disconnect,
+	publishEvent,
+	refreshRedshiftEvents,
+	retryPublication,
+} from '$lib/stores/nostr.svelte';
 import {
 	clearPublicationRecovery,
 	getPublicationRecoveryRecord,
@@ -69,6 +76,7 @@ function signedEvent() {
 
 beforeEach(() => {
 	mockEvents.length = 0;
+	mockRequest.mockReset();
 	mockPublish.mockReset().mockImplementation(async ([relay]: string[]) => {
 		if (relay === 'wss://rejected.test/')
 			return [{ ok: false, from: relay, message: 'restricted: policy' }];
@@ -81,10 +89,22 @@ beforeEach(() => {
 
 afterEach(() => {
 	disconnect();
+	vi.useRealTimers();
 	vi.clearAllMocks();
 });
 
 describe('Nostr publication recovery', () => {
+	it('aborts a bounded history refresh at a total deadline when EOSE never arrives', async () => {
+		vi.useFakeTimers();
+		const event = signedEvent();
+		mockRequest.mockReturnValue(concat(of(event), NEVER));
+		const pending = refreshRedshiftEvents(ownerPubkey);
+		const assertion = expect(pending).rejects.toThrow('timed out before completion');
+		await vi.advanceTimersByTimeAsync(10_001);
+		await assertion;
+		expect(mockEvents).toEqual([]);
+	});
+
 	it('records five classified relay outcomes after degraded quorum success', async () => {
 		const event = signedEvent();
 		const report = await publishEvent(event, relays, { ownerPubkey, project: 'project' });

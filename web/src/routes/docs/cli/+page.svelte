@@ -162,6 +162,30 @@ redshift backup restore secrets.redshift --allow-identity-change --overwrite`} /
 
 	<hr />
 
+	<ProseHeading level={2} id="history">redshift history</ProseHeading>
+	<p>
+		Inspect bounded owner-authenticated versions observed from responding configured relays, compare
+		key metadata without exposing values, and restore one complete bundle or logical tombstone as a
+		new event.
+	</p>
+	<CodeBlock language="bash" code={`redshift history list --project my-app --config production
+redshift history list --limit 20 --cursor <cursor> --json
+redshift history compare <from-event-id> <to-event-id> --project my-app --config production
+redshift history restore <event-id> --project my-app --config production --yes`} />
+	<p>
+		Ordering uses authenticated inner timestamps and deterministic event-ID ties, not randomized NIP-59
+		outer timestamps. Restore refreshes current state and aborts if it changed unless
+		<InlineCode>--overwrite-current</InlineCode> is explicitly supplied. That check reduces accidental
+		overwrite but is not relay-wide compare-and-swap.
+	</p>
+	<p>
+		Observed history can be incomplete or truncated and is not an audit log, retained backup,
+		cryptographic erasure, RPO/RTO, availability, or an SLA. The dashboard keeps decrypted history only
+		in ephemeral client memory.
+	</p>
+
+	<hr />
+
 	<ProseHeading level={2} id="configure">redshift configure</ProseHeading>
 	<p>Inspect or atomically modify non-secret CLI configuration.</p>
 	<CodeBlock language="bash" code={`redshift configure
