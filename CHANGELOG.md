@@ -5,10 +5,8 @@
 
 ### Bug Fixes
 
-* **ci:** install relay test dependency in preflight ([f002bf5](https://github.com/accolver/redshift/commit/f002bf5253394b06c9d59f08d189778f96ef1a4d))
-* **ci:** install relay test dependency in preflight ([02cfb1a](https://github.com/accolver/redshift/commit/02cfb1a382840549260db7b5b2e02381ca6de50b))
-* **security:** harden production gates and product truth ([b02b03e](https://github.com/accolver/redshift/commit/b02b03e2a89d6b3fea8e9ce94a965875ca080929))
-* **security:** harden production gates and product truth ([510dc43](https://github.com/accolver/redshift/commit/510dc43ea6adb8b3100d2883561024b499c184c2))
+* **ci:** install relay test dependency in preflight ([#51](https://github.com/accolver/redshift/pull/51)) ([02cfb1a](https://github.com/accolver/redshift/commit/02cfb1a382840549260db7b5b2e02381ca6de50b))
+* **security:** harden production gates and product truth ([#50](https://github.com/accolver/redshift/pull/50)) ([510dc43](https://github.com/accolver/redshift/commit/510dc43ea6adb8b3100d2883561024b499c184c2))
 
 ## [0.14.0](https://github.com/accolver/redshift/compare/v0.13.0...v0.14.0) (2026-07-12)
 
