@@ -125,10 +125,10 @@ function isTagAllowed(tag) {
 }
 __name(isTagAllowed, "isTagAllowed");
 
-// node_modules/@noble/hashes/esm/crypto.js
+// node_modules/@noble/curves/node_modules/@noble/hashes/esm/crypto.js
 var crypto2 = typeof globalThis === "object" && "crypto" in globalThis ? globalThis.crypto : void 0;
 
-// node_modules/@noble/hashes/esm/utils.js
+// node_modules/@noble/curves/node_modules/@noble/hashes/esm/utils.js
 function isBytes(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array";
 }
@@ -283,7 +283,7 @@ function randomBytes(bytesLength = 32) {
 }
 __name(randomBytes, "randomBytes");
 
-// node_modules/@noble/hashes/esm/_md.js
+// node_modules/@noble/curves/node_modules/@noble/hashes/esm/_md.js
 function setBigUint64(view, byteOffset, value, isLE) {
   if (typeof view.setBigUint64 === "function")
     return view.setBigUint64(byteOffset, value, isLE);
@@ -408,7 +408,7 @@ var SHA256_IV = /* @__PURE__ */ Uint32Array.from([
   1541459225
 ]);
 
-// node_modules/@noble/hashes/esm/sha2.js
+// node_modules/@noble/curves/node_modules/@noble/hashes/esm/sha2.js
 var SHA256_K = /* @__PURE__ */ Uint32Array.from([
   1116352408,
   1899447441,
@@ -550,7 +550,7 @@ __name(_SHA256, "SHA256");
 var SHA256 = _SHA256;
 var sha256 = /* @__PURE__ */ createHasher(() => new SHA256());
 
-// node_modules/@noble/hashes/esm/hmac.js
+// node_modules/@noble/curves/node_modules/@noble/hashes/esm/hmac.js
 var _HMAC = class _HMAC extends Hash {
   constructor(hash, _key) {
     super();
