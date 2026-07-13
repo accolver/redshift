@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.1](https://github.com/accolver/redshift/compare/v0.14.0...v0.14.1) (2026-07-13)
+
+
+### Bug Fixes
+
+* **ci:** install relay test dependency in preflight ([#51](https://github.com/accolver/redshift/pull/51)) ([02cfb1a](https://github.com/accolver/redshift/commit/02cfb1a382840549260db7b5b2e02381ca6de50b))
+* **security:** harden production gates and product truth ([#50](https://github.com/accolver/redshift/pull/50)) ([510dc43](https://github.com/accolver/redshift/commit/510dc43ea6adb8b3100d2883561024b499c184c2))
+
 ## [0.14.0](https://github.com/accolver/redshift/compare/v0.13.0...v0.14.0) (2026-07-12)
 
 
