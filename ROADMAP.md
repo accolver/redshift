@@ -15,15 +15,15 @@ become a prerequisite for reading, writing, or exporting a user's secrets.
 
 | Surface | Current capability |
 | --- | --- |
-| CLI | `login`, `logout`, `setup`, `run`, `serve`, `configure`, singular secret workflows, encrypted backup/restore, exact-event publication recovery, and authenticated history commands under the current release candidate |
+| CLI | `login`, `logout`, `setup`, `run`, `serve`, `configure`, singular secret workflows, encrypted backup/restore, exact-event publication recovery, and authenticated history commands shipped in certified v0.14.0 |
 | Authentication | Local nsec, NIP-07 with NIP-44 capability gating, and NIP-46 remote signers |
 | Secret protocol | NIP-59 Gift Wraps containing owner-authored Kind 30078 rumors, strict author/recipient validation, deterministic version selection, and logical tombstones |
 | Relay resilience | Rate limiting, retry, majority publication quorum, classified per-relay outcomes, durable exact-event recovery, deterministic read conflict handling, and typed quorum failures |
 | Web dashboard | Individual project/environment management, encrypted secret editing, import/export, and full logout storage clearing |
 | Embedded dashboard | The compiled `redshift serve` binary serves the hydrated SvelteKit dashboard under a nonce-based CSP |
-| Managed relay code | NIP-42 principal binding, recipient-scoped Gift Wrap writes/reads, strict event verification, payment checks, and identity-scoped in-object quotas |
+| Managed relay code | Development candidate with NIP-42 principal binding, recipient-scoped Gift Wrap writes/reads, strict event verification, pay-to-relay disabled, and identity-scoped in-object quotas; no managed service is launched |
 | Verification | Crypto/CLI/web/relay tests, real local-relay CLI journeys, compiled-binary tests, and standalone/embedded Chromium E2E |
-| Release workflow | Certified v0.13.0 native artifacts include locked installs, checksums, SPDX SBOM, GitHub attestations, public fresh-install/upgrade journeys, publication recovery, and encrypted local backup/restore evidence |
+| Release workflow | Certified v0.14.0 native artifacts include locked installs, checksums, SPDX SBOM, GitHub attestations, public fresh-install/upgrade journeys, publication recovery, encrypted local backup/restore, and authenticated history evidence |
 
 ## Security semantics and known limits
 
@@ -43,7 +43,7 @@ become a prerequisite for reading, writing, or exporting a user's secrets.
 6. Plaintext output requires an explicit `--raw` acknowledgement. Operators
    must keep plaintext stdout out of logs and shell history.
 7. The hardened installer and self-updater require GitHub CLI attestation
-   verification. Certified v0.13.0 artifacts cover Linux and macOS x64/arm64;
+   verification. Certified v0.14.0 artifacts cover Linux and macOS x64/arm64;
    Windows is not currently published.
 8. The managed relay's custom domain and deployment workflow are declared in
    source, but uptime, geographic redundancy, backup retention, and SLA claims
@@ -67,23 +67,20 @@ The ordered plan and claim boundaries are in
 [`docs/resilience-next.md`](docs/resilience-next.md):
 
 - classified per-relay recovery shipped with certified v0.12.0 evidence;
-- user-initiated encrypted local backup/restore shipped with certified v0.13.0 evidence;
-- authenticated bounded history, key-only compare, and restore is the current development candidate;
-- production monitoring, incident response, credential rotation, managed retention drills, and sustained release canaries remain future work.
-
-A candidate remains unavailable as a shipped guarantee until its listed tests, public artifact certification, and operational drills pass.
+- encrypted local backup/restore shipped with certified v0.13.0 evidence;
+- bounded authenticated history/compare/restore shipped with certified v0.14.0 evidence;
+- managed deployment evidence, monitoring, incident response, credential rotation, managed retention drills, and sustained release canaries remain unapproved future work.
 
 ### P2 — operationalize the managed relay
 
-- Deploy through the reviewed workflow using least-scope Cloudflare credentials.
-- Prove NIP-42 authentication, payment authorization, recipient-scoped reads,
-  Gift Wrap writes, and quota behavior against the deployed endpoint.
+- Govern any future deploy through an approved workflow using least-scope Cloudflare credentials.
+- Prove NIP-42 authentication, recipient-scoped reads, Gift Wrap writes, and quota behavior against an explicitly approved deployed endpoint.
 - Add retention, backup/restore drills, monitoring, and incident runbooks.
 - Publish an SLA only after measured production evidence supports it.
 
-### P3 — trustworthy history and recovery
+### P3 — maintain trustworthy history and recovery
 
-Authenticated bounded history, metadata-only compare, and restore are implemented in the current development candidate under `add-authenticated-secret-history`. They are not a published-release guarantee until public artifact certification passes. The UI and CLI distinguish current logical state from relay-observed versions, report truncation, require explicit full-bundle/tombstone restore consent, and never describe a tombstone as cryptographic erasure or relay history as complete.
+Authenticated bounded history, metadata-only compare, and explicit restore shipped in v0.14.0. The supported boundary remains bounded owner-authenticated state observed from responding relays. It is not complete retained history, an audit log, offline recovery, cryptographic erasure, compare-and-swap, RPO/RTO, availability, or an SLA. See [`piolium/authenticated-secret-history-evidence.md`](piolium/authenticated-secret-history-evidence.md).
 
 ### P4 — collaboration research
 

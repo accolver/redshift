@@ -127,11 +127,15 @@ describe('Bunker Module', () => {
 			};
 			const manager = new BunkerSecretManager(connection, ['wss://relay.test'], 5);
 
-			await expect(manager.nip44Encrypt('peer', 'hello')).rejects.toThrow('Timed out waiting for bunker to encrypt');
-			await expect(manager.nip44Decrypt('peer', 'ciphertext')).rejects.toThrow('Timed out waiting for bunker to decrypt');
-			await expect(manager.signEvent({ kind: 1059, content: '', tags: [], created_at: 1 })).rejects.toThrow(
-				'Timed out waiting for bunker to sign event',
+			await expect(manager.nip44Encrypt('peer', 'hello')).rejects.toThrow(
+				'Timed out waiting for bunker to encrypt',
 			);
+			await expect(manager.nip44Decrypt('peer', 'ciphertext')).rejects.toThrow(
+				'Timed out waiting for bunker to decrypt',
+			);
+			await expect(
+				manager.signEvent({ kind: 1059, content: '', tags: [], created_at: 1 }),
+			).rejects.toThrow('Timed out waiting for bunker to sign event');
 		});
 
 		it('exposes signer-compatible NIP-44 methods for SecretManager', async () => {

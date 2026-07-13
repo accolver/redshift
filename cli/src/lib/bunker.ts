@@ -83,10 +83,12 @@ function createBunkerSigner(
 
 /** Close both the NIP-46 subscription and its owned relay pool. */
 export async function closeBunkerSigner(signer: BunkerSigner) {
+	const pool = bunkerSignerPools.get(signer);
+	pool?.beginClose();
 	try {
 		await signer.close();
 	} finally {
-		bunkerSignerPools.get(signer)?.destroy();
+		pool?.destroy();
 		bunkerSignerPools.delete(signer);
 	}
 }

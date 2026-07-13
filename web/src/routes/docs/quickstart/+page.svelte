@@ -10,157 +10,61 @@ import DocsPage from '$lib/components/DocsPage.svelte';
 	<meta name="description" content="Get started with Redshift in 5 minutes." />
 </svelte:head>
 
-<DocsPage title="Quick Start" description="Create your first project and manage secrets in under 5 minutes.">
-		<ProseHeading level={2} id="install">1. Install the CLI</ProseHeading>
-		<p>
-			Install the Redshift CLI using the install script or your package manager:
-		</p>
+<DocsPage title="Quick Start" description="Create a project and manage secrets.">
+	<ProseHeading level={2} id="install">1. Install the CLI</ProseHeading>
+	<CodeBlock code="curl -fsSL https://redshiftapp.com/install | sh" language="bash" />
+	<p>The verified installer supports Linux and macOS on x64 and arm64.</p>
 
-		<CodeBlock code={`# Using install script (recommended)
-curl -fsSL https://redshiftapp.com/install | sh
+	<ProseHeading level={2} id="authenticate">2. Authenticate</ProseHeading>
+	<CodeBlock code={`redshift login
+# Choose local nsec or NIP-46 authentication.
+# Use redshift login --connect for client-initiated NostrConnect pairing.`} language="bash" />
+	<p>
+		NIP-07 is the preferred browser-dashboard method. It is not a CLI login option. Never share
+		your nsec; anyone with it can access your secrets.
+	</p>
 
-# Or with bun
-bun add -g redshift`} language="bash" />
-
-		<ProseHeading level={2} id="authenticate">2. Authenticate</ProseHeading>
-		<p>
-			Log in with your Nostr identity. If you don't have one, Redshift can generate one for you:
-		</p>
-
-		<CodeBlock code={`redshift login
-
-# You'll see:
-# ? Select authentication method
-# > NIP-07 Browser Extension (recommended)
-#   Enter nsec manually
-#   Use bunker URL
-#   Generate new identity`} language="bash" />
-
-		<p>
-			For most users, we recommend using a <strong>NIP-07 browser extension</strong> like 
-			<a href="https://getalby.com" target="_blank" rel="noopener">Alby</a> or 
-			<a href="https://github.com/nicefoster/nos2x" target="_blank" rel="noopener">nos2x</a>. 
-			See the <a href="/docs/auth">Authentication docs</a> for all options.
-		</p>
-
-		<div class="not-prose my-6 rounded-lg border border-tokyo-red/50 bg-tokyo-red/10 p-4">
-			<p class="text-sm">
-				<strong class="text-tokyo-red">Important:</strong> Never share your nsec (private key). Anyone with your nsec can access your secrets.
-			</p>
-		</div>
-
-		<ProseHeading level={2} id="create-project">3. Create a Project</ProseHeading>
-		<p>
-			Projects organize your secrets. You might have one project per application:
-		</p>
-
-		<CodeBlock code={`# Using the web admin (opens browser)
-redshift serve
-
-# Or create directly via CLI
-# Projects are created in the web admin for now`} language="bash" />
-
-		<p>
-			Visit <a href="/admin">/admin</a> to create projects and environments through the web interface.
-		</p>
-
-		<ProseHeading level={2} id="setup-directory">4. Set Up Your Directory</ProseHeading>
-		<p>
-			Link a directory to a project/environment:
-		</p>
-
-		<CodeBlock code={`cd your-project
+	<ProseHeading level={2} id="setup-directory">3. Set Up Your Directory</ProseHeading>
+	<CodeBlock code={`cd your-project
 redshift setup
+# Select or create a project and environment.
+# Creates redshift.yaml`} language="bash" />
+	<p>This creates <InlineCode>redshift.yaml</InlineCode> with identifiers, not secret values:</p>
+	<CodeBlock code={`project: my-app
+environment: development
+relays:
+  - wss://relay.damus.io`} language="yaml" />
+	<p>
+		<InlineCode>redshift.yaml</InlineCode> contains project, environment, and relay identifiers—not
+		secret values. Decide whether to commit it according to the repository's environment policy.
+	</p>
 
-# You'll be prompted to select:
-# ? Select a project: my-app
-# ? Select an environment: development
-# 
-# ✓ Created .redshift.json`} language="bash" />
-
-		<p>
-			This creates a <InlineCode>.redshift.json</InlineCode> file in your project:
-		</p>
-
-		<CodeBlock code={`{
-  "project": "my-app",
-  "environment": "development"
-}`} language="json" />
-
-		<div class="not-prose my-6 rounded-lg border border-tokyo-orange/50 bg-tokyo-orange/10 p-4">
-			<p class="text-sm">
-				<strong class="text-tokyo-orange">Tip:</strong> Add <InlineCode>.redshift.json</InlineCode> to your <InlineCode>.gitignore</InlineCode> if you want different environments per developer, or commit it to share the same environment across your team.
-			</p>
-		</div>
-
-		<ProseHeading level={2} id="add-secrets">5. Add Secrets</ProseHeading>
-		<p>
-			Add secrets via the web admin or CLI:
-		</p>
-
-		<CodeBlock code={`# Via CLI
-redshift secrets set DATABASE_URL "postgres://localhost/mydb"
+	<ProseHeading level={2} id="add-secrets">4. Add Secrets</ProseHeading>
+	<CodeBlock code={`redshift secrets set DATABASE_URL "postgres://localhost/mydb"
 redshift secrets set API_KEY "sk-..."
-redshift secrets set STRIPE_SECRET "sk_test_..."
+redshift secrets
 
-# List all secrets
-redshift secrets list
+# Values are redacted by default:
+# DATABASE_URL  ********
+# API_KEY       ********
 
-# Output:
-# DATABASE_URL  postgres://localhost/mydb
-# API_KEY       sk-...
-# STRIPE_SECRET sk_test_...`} language="bash" />
+# Reveal one value only with explicit acknowledgement:
+redshift secrets get API_KEY --raw`} language="bash" />
+	<p>
+		Plaintext is displayed only when explicitly requested with <InlineCode>--raw</InlineCode>; keep
+		raw output out of logs and captured terminals.
+	</p>
 
-		<ProseHeading level={2} id="run-application">6. Run Your Application</ProseHeading>
-		<p>
-			Use <InlineCode>redshift run</InlineCode> to inject secrets as environment variables:
-		</p>
-
-		<CodeBlock code={`# Run any command with secrets injected
-redshift run -- npm start
+	<ProseHeading level={2} id="run-application">5. Run Your Application</ProseHeading>
+	<CodeBlock code={`redshift run -- npm start
 redshift run -- python app.py
-redshift run -- go run main.go
+redshift run -- go run main.go`} language="bash" />
+	<p>Secrets are injected into the child process environment and are not printed by Redshift.</p>
 
-# Secrets are available as environment variables
-# process.env.DATABASE_URL, os.environ['API_KEY'], etc.`} language="bash" />
-
-		<ProseHeading level={2} id="nodejs-example">Example: Node.js App</ProseHeading>
-		<p>Here's a complete example for a Node.js application:</p>
-
-		<CodeBlock code={`# 1. Install dependencies
-npm init -y
-npm install express
-
-# 2. Create app
-cat > index.js << 'EOF'
-const express = require('express');
-const app = express();
-
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Hello!',
-    hasApiKey: !!process.env.API_KEY,
-    environment: process.env.NODE_ENV
-  });
-});
-
-app.listen(3000, () => console.log('Server running on :3000'));
-EOF
-
-# 3. Set up Redshift
-redshift setup  # Select your project/environment
-
-# 4. Add secrets
-redshift secrets set API_KEY "my-secret-key"
-redshift secrets set NODE_ENV "development"
-
-# 5. Run with secrets
-redshift run -- node index.js`} language="bash" />
-
-		<ProseHeading level={2} id="next-steps">Next Steps</ProseHeading>
-		<ul>
-			<li><a href="/docs/auth">Learn about authentication options</a></li>
-			<li><a href="/docs/cli">Explore all CLI commands</a></li>
-			<li><a href="/docs/why-redshift">Understand why Redshift vs. alternatives</a></li>
-		</ul>
+	<ProseHeading level={2} id="next-steps">Next Steps</ProseHeading>
+	<ul>
+		<li><a href="/docs/auth">Learn about authentication options</a></li>
+		<li><a href="/docs/cli">Explore CLI commands</a></li>
+		<li><a href="/docs/why-redshift">Understand Redshift's security model</a></li>
+	</ul>
 </DocsPage>

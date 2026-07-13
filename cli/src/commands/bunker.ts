@@ -160,18 +160,27 @@ export async function bunkerCommand(options: BunkerCommandOptions): Promise<void
 	});
 
 	if (options.runOnceForTest) {
-		service.close();
+		await service.close();
 		return;
 	}
 
-	process.on('SIGINT', () => {
-		service.close();
-		process.exit(0);
-	});
-	process.on('SIGTERM', () => {
-		service.close();
-		process.exit(0);
-	});
+	let stopping = false;
+	const stop = () => {
+		if (stopping) return;
+		stopping = true;
+		void service.close().then(
+			() => process.exit(0),
+			(error: unknown) => {
+				console.error(
+					'Failed to stop bunker service:',
+					error instanceof Error ? error.message : error,
+				);
+				process.exit(1);
+			},
+		);
+	};
+	process.once('SIGINT', stop);
+	process.once('SIGTERM', stop);
 
 	await new Promise<never>(() => {
 		// Keep process alive until a signal is received.

@@ -25,6 +25,7 @@ bun run audit:dependencies
 
 phase "Type checks"
 bun run typecheck
+bun run typecheck:packages
 bun run typecheck:web
 (
   cd relay/nosflare
@@ -32,8 +33,8 @@ bun run typecheck:web
 )
 
 phase "Owned-source lint and format"
-bunx biome lint cli/src packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests --diagnostic-level=error
-bunx biome format cli/src packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests
+bunx biome lint cli/src cli/scripts cli/tests packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests --diagnostic-level=error
+bunx biome format cli/src cli/scripts cli/tests packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests
 
 phase "Deterministic dashboard and CLI builds"
 bun run verify:embeds

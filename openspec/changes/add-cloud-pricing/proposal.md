@@ -14,9 +14,9 @@ their own secrets.
 **Business Context**:
 
 - Target: Individual developers who want reliability without self-hosting
-- Price: $5/month (covers infrastructure costs)
-- Value: 99.5% SLA, automatic backups, 7-day audit logs
-- Launch: deferred until deployment, recovery, and SLA evidence exists
+- Pricing hypothesis: $5/month; unapproved and unavailable
+- Intended value, contingent on operational evidence: managed relay availability, encrypted managed retention, and bounded audit records
+- No SLA percentage, retention duration, or launch date may be committed until managed-production operations define and pass measurement gates
 
 ## What Changes
 
@@ -55,9 +55,10 @@ their own secrets.
 
 ## Impact
 
-- Affected specs: None (all new capabilities)
-- New capabilities: `cloud-subscription`, `btcpay-integration`, `access-tokens`,
-  `audit-logging`
+- Overlapping current specs: `product-truth`, `relay-access`, `quality-gates`,
+  `release-integrity`, `secret-state`, and `secret-history`
+- Proposed new capabilities: `cloud-subscription`, `btcpay-integration`,
+  `access-tokens`, and `audit-logging`
 - Affected code:
   - `packages/` (2 new packages)
   - `infrastructure/` (new: Nosflare + BTCPay configs)
@@ -154,7 +155,7 @@ kinds.
 
 **Yes** - Aligns with Telos L8:
 
-- $5/month covers infrastructure (~$25-62/month costs)
+- $5/month is hypothesized to cover the historical ~$25-62/month estimate; current costs, demand, and margin require measured validation
 - Break-even at ~5-12 subscribers
 - Clear upgrade path from free tier without paywalling core functionality
 - Bitcoin-only payments align with sovereignty values
@@ -181,7 +182,7 @@ kinds.
 - Cloudflare R2: Standard S3 API
 - All TypeScript/Bun compatible
 
-**Decision**: Both validation flows converge. Proceed with implementation.
+**Decision**: Strategic and technical feasibility is plausible, but implementation and all production mutation remain blocked pending explicit proposal approval and managed-production operational evidence.
 
 ## Resolved Questions
 

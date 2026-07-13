@@ -32,6 +32,10 @@ export interface ResolvedChildCommand {
 	args: string[];
 }
 
+export function formatChildCommandForLog(command: ResolvedChildCommand) {
+	return `${command.executable} (arguments hidden)`;
+}
+
 export function resolveChildCommand(
 	options: Pick<RunOptions, 'command' | 'shellCommand'>,
 	platform: NodeJS.Platform = process.platform,
@@ -144,7 +148,7 @@ export async function runCommand(options: RunOptions): Promise<number> {
 			secrets || {},
 		);
 		const env = applyPreserveEnvironment(process.env, injectedEnv, options.preserveEnv ?? []);
-		console.error(`Running: ${childCommand.executable} ${childCommand.args.join(' ')}\n`);
+		console.error(`Running: ${formatChildCommandForLog(childCommand)}\n`);
 
 		const child = spawn(childCommand.executable, childCommand.args, {
 			env,
@@ -189,7 +193,7 @@ export async function runDryCommand(options: RunOptions): Promise<void> {
 		console.log("Values redacted for security. Use 'secrets list' to view.");
 		console.log('');
 		const childCommand = resolveChildCommand(options);
-		console.log(`Would execute: ${childCommand.executable} ${childCommand.args.join(' ')}`);
+		console.log(`Would execute: ${formatChildCommandForLog(childCommand)}`);
 	} finally {
 		await manager.close();
 	}

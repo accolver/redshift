@@ -1,5 +1,12 @@
 # Teams, Cloud & Enterprise Architecture
 
+> **Historical non-normative planning document.** The active canonical Cloud
+> hypothesis is the deferred, unapproved `$5 USD/month` proposal in
+> `openspec/changes/add-cloud-pricing/`. No Cloud subscription, paid service,
+> production endpoint, retention policy, Teams offer, Enterprise offer, or SLA
+> is launched. All approvals, prices, dates, and guarantees below are obsolete
+> research, not operative product or commercial commitments.
+
 ## Overview
 
 This document details the security architecture, cryptographic protocols, and

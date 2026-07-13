@@ -164,14 +164,14 @@ export const posts: BlogPost[] = [
 		slug: 'migrating-from-doppler-to-redshift',
 		title: 'Migrating from Doppler to Redshift: Complete Guide',
 		description:
-			"Redshift is designed as a drop-in replacement for Doppler. Here's how to migrate your secrets in under 10 minutes.",
+			"Redshift offers a Doppler-inspired workflow with its own documented command contract. Here's how to migrate deliberately.",
 		date: '2024-12-10',
 		author: 'Redshift Team',
 		readingTime: '4 min read',
 		tags: ['migration', 'doppler', 'tutorial'],
 		content: `
 			<p class="lead">
-				We built the Redshift CLI to feel familiar if you're coming from Doppler. Most of the commands map one-to-one, so the actual migration is less work than you'd expect. I did it on a side project in about ten minutes, and most of that was waiting for <code>doppler secrets download</code> to finish.
+				We built the Redshift CLI to feel familiar if you're coming from Doppler, but it has its own supported commands and flags. Review each command below rather than assuming full compatibility. The data migration itself is straightforward once you have exported the intended Doppler project and environment.
 			</p>
 
 			<h2>Before You Begin</h2>
@@ -180,7 +180,7 @@ export const posts: BlogPost[] = [
 			</p>
 			<ul>
 				<li>Redshift CLI installed (<code>curl -fsSL https://redshiftapp.com/install | sh</code>)</li>
-				<li>A Nostr identity (NIP-07 extension or nsec key)</li>
+				<li>A CLI signer (local nsec or NIP-46 remote signer); NIP-07 is for the browser dashboard</li>
 				<li>Access to your Doppler project</li>
 			</ul>
 
@@ -199,7 +199,7 @@ export const posts: BlogPost[] = [
 			</p>
 			<pre><code>redshift login</code></pre>
 			<p>
-				It'll ask you to pick between a NIP-07 browser extension or pasting your nsec directly. If you already have Alby or nos2x set up, the extension route is easiest. If not, nsec works fine -- Redshift stores it in your system keychain, not in a plaintext file somewhere.
+				The CLI offers local nsec and NIP-46 remote-signer paths. NIP-07 extensions authenticate the browser dashboard and are not a CLI login method. Review the custody trade-offs in the authentication documentation before choosing.
 			</p>
 
 			<h2>Step 3: Create a Project</h2>
@@ -1160,7 +1160,7 @@ $ rm .env.*</code></pre>
 
 			<h3>Enterprise Compliance</h3>
 			<p>
-				Vault has years of enterprise deployments behind it, SOC 2 certifications, and the kind of compliance documentation that makes auditors happy. If you need to check specific certification boxes, Vault is the safer choice today. We're working on compliance, but we're not there yet.
+				Vault has years of enterprise deployments behind it, SOC 2 certifications, and the kind of compliance documentation that makes auditors happy. If you need specific certification coverage, evaluate products that currently provide it. The Redshift individual product does not offer compliance certification.
 			</p>
 
 			<h3>Dynamic Secrets</h3>
@@ -1180,12 +1180,12 @@ $ rm .env.*</code></pre>
 
 			<h2>Where Redshift Wins</h2>
 
-			<h3>Zero Ops</h3>
+			<h3>No Required Redshift-Operated Service</h3>
 			<p>
-				Running Vault in production is real work. Servers, storage backends, upgrades, HA configuration, unsealing -- if you've done it, you know. Redshift piggybacks on existing Nostr relay infrastructure, so there's nothing to deploy or maintain.
+				Running Vault in production is real work. The Redshift individual product instead uses relays you select, so no Redshift-operated service is required. Relay selection, availability, and retention still remain your operational decisions.
 			</p>
 			<p>
-				If you're a solo dev or small team without dedicated DevOps, Vault's operational overhead can be a dealbreaker. That's the problem we originally built Redshift to solve.
+				For an individual developer without dedicated infrastructure staff, that narrower operating model can be useful. It is not a managed availability or retention guarantee.
 			</p>
 
 			<h3>Actual Zero-Knowledge</h3>
@@ -1203,9 +1203,9 @@ $ rm .env.*</code></pre>
 				Vault Enterprise is expensive. Vault OSS is free but you're paying in infrastructure and ops time. Redshift is free for individuals -- unlimited projects, unlimited secrets.
 			</p>
 
-			<h3>Doppler-Compatible CLI</h3>
+			<h3>Doppler-inspired CLI</h3>
 			<p>
-				If you're coming from Doppler, Redshift's <code>run</code> command is a drop-in replacement. Vault's CLI is more powerful but also more complex for day-to-day use.
+				If you're coming from Doppler, Redshift's <code>run</code> workflow is familiar, but only Redshift's documented commands and flags are supported. Vault's CLI is more powerful and more complex for day-to-day use.
 			</p>
 
 			<h2>Feature Comparison</h2>
@@ -1241,7 +1241,7 @@ $ rm .env.*</code></pre>
 					<tr>
 						<td>Managed service</td>
 						<td>HCP Vault</td>
-						<td>Redshift Cloud</td>
+						<td>Not launched</td>
 					</tr>
 					<tr>
 						<td>Zero-knowledge</td>
@@ -1261,7 +1261,7 @@ $ rm .env.*</code></pre>
 					<tr>
 						<td>SSO/SAML</td>
 						<td>Enterprise</td>
-						<td>Coming soon</td>
+						<td>Not launched</td>
 					</tr>
 				</tbody>
 			</table>
@@ -1276,7 +1276,7 @@ $ rm .env.*</code></pre>
 				If you're a large enterprise with compliance requirements, a platform team, and budget for infrastructure -- use Vault. It's earned its reputation and we're not going to pretend otherwise.
 			</p>
 			<p>
-				If you're an individual developer, small team, or open-source project that doesn't want to run infrastructure just to manage secrets -- that's who we built Redshift for. We also think it's worth a look if secret sovereignty matters to you, regardless of team size.
+				If you're an individual developer or open-source maintainer who wants sovereign static-secret workflows, Redshift may fit. Shared team custody, RBAC, and enterprise controls are not launched.
 			</p>
 			<p>
 				<a href="/admin">Give Redshift a try</a> and see if it fits how you work. If Vault is a better fit, no hard feelings -- it's a good tool.

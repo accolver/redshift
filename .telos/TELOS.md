@@ -23,7 +23,7 @@ their sensitive data.
   encryption client-side
 - **Availability**: Secrets accessible from any Nostr relay without single point
   of failure
-- **DX Parity**: CLI command compatibility with Doppler (drop-in replacement)
+- **Familiar DX**: A Doppler-inspired CLI with an explicit, test-backed Redshift command contract; full flag or drop-in compatibility is not a shipped claim
 - **Free Tier Usage**: Unlimited projects/secrets for individual developers at
   zero cost
 
@@ -43,10 +43,10 @@ their sensitive data.
 | ----- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | L9    | Telos-Guardian         | Empower developers with sovereign, censorship-resistant control over their application secrets                                                   |
 | L8    | Market-Analyst         | Grow adoption through a completely free tier for individuals, monetizing via managed relays, Teams RBAC, and Enterprise SSO                      |
-| L7    | Insight-Synthesizer    | Deliver Doppler-compatible CLI and web admin that abstracts Nostr complexity, making decentralized secret management familiar and effortless     |
+| L7    | Insight-Synthesizer    | Deliver a Doppler-inspired CLI and web admin that abstracts Nostr complexity through a documented, test-backed Redshift command contract         |
 | L6    | UX-Simulator           | Create a minimalist, Tokyo-Night themed interface with subtle motion and spreadsheet-like editing prioritizing clarity and developer comfort     |
 | L5    | Journey-Validator      | Ensure complete user workflows: login -> project selection -> secret editing -> CLI injection -> command execution, across NIP-07 and local NSEC |
-| L4    | Integration-Contractor | Maintain stable Nostr protocol contracts (NIP-59, NIP-09, Kind 30078) and Doppler-compatible CLI command interfaces                              |
+| L4    | Integration-Contractor | Maintain stable Nostr protocol contracts (NIP-59, NIP-09, Kind 30078) and the explicitly supported Redshift CLI command interfaces                |
 | L3    | Component-Architect    | Build reusable Svelte 5 components using ShadCN-Svelte and Runes with clear prop contracts                                                       |
 | L2    | Function-Author        | Write TDD functions using Bun's native test runner with comprehensive coverage for crypto, CLI parsing, and secret management                    |
 | L1    | Syntax-Linter          | Enforce strict TypeScript typing with Bun-native tooling, ensuring security practices for cryptographic operations                               |
@@ -177,9 +177,10 @@ Gift Wrap, NIP-09 Deletion, Kind 30078) **Testing**: bun:test,
 ## Initialization Metadata
 
 - **Initialized**: December 4, 2025
+- **Current truth updated**: July 2026
 - **AI Assistant**: OpenCode via Telos `/telos-init`
 - **Project Type**: Decentralized Secret Management Platform (CLI + Web Admin)
-- **Project State**: Greenfield (spec.md defined, implementation pending)
+- **Project State**: certified individual-product v0.14.0 scope; managed production operations, paid Cloud, Teams, retention guarantees, and SLA claims are deferred pending approved proposals and external evidence
 
 ## Quick Reference: Decision Validation
 

@@ -3,11 +3,12 @@ import { Motion } from 'svelte-motion';
 import { Button } from '$lib/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 import { getAuthState } from '$lib/stores/auth.svelte';
-import { getProjectsState } from '$lib/stores/projects.svelte';
+import { getProjectsState, subscribeToProjects } from '$lib/stores/projects.svelte';
 import CreateProjectModal from '$lib/components/CreateProjectModal.svelte';
 import ProjectCard from '$lib/components/ProjectCard.svelte';
+import ProjectLoadState from '$lib/components/ProjectLoadState.svelte';
 import InlineCode from '$lib/components/InlineCode.svelte';
-import { LoaderCircle, Terminal, Copy, Check } from '@lucide/svelte';
+import { Terminal, Copy, Check } from '@lucide/svelte';
 
 const auth = $derived(getAuthState());
 const projectsState = $derived(getProjectsState());
@@ -83,14 +84,12 @@ const cliCommands = [
 							</p>
 						</CardContent>
 					</Card>
-				{:else if projectsState.isLoading}
-					<!-- Loading state -->
-					<Card class="border-dashed">
-						<CardContent class="flex flex-col items-center justify-center py-12 text-center">
-							<LoaderCircle class="mb-4 size-8 animate-spin text-muted-foreground" />
-							<p class="text-sm text-muted-foreground">Loading projects from relays...</p>
-						</CardContent>
-					</Card>
+				{:else if projectsState.error || projectsState.isLoading}
+					<ProjectLoadState
+						error={projectsState.error}
+						isLoading={projectsState.isLoading}
+						onRetry={subscribeToProjects}
+					/>
 				{:else if projectsState.projects.length === 0}
 					<!-- Empty state - connected but no projects -->
 					<ProjectCard placeholder />

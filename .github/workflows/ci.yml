@@ -36,12 +36,13 @@ jobs:
       - name: Typecheck product surfaces
         run: |
           bun run typecheck
+          bun run typecheck:packages
           bun run typecheck:web
           cd relay/nosflare && bun run typecheck
       - name: Run scoped product lint and format checks
         run: |
-          bunx biome lint cli/src packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests --diagnostic-level=error
-          bunx biome format cli/src packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests
+          bunx biome lint cli/src cli/scripts cli/tests packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests --diagnostic-level=error
+          bunx biome format cli/src cli/scripts cli/tests packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests
       - name: Build dashboard and compiled CLI test subject
         run: |
           bun run verify:embeds

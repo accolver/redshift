@@ -180,6 +180,7 @@ function getDisplayName(pubkey: string): string {
 				{#if auth.isConnected}
 					<button
 						type="button"
+						aria-label="Search projects and secrets"
 						class="flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:gap-2 sm:px-3"
 						onclick={() => (searchOpen = true)}
 					>

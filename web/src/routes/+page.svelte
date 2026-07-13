@@ -190,10 +190,10 @@ async function copyInstallCommand() {
 					>
 						<Terminal class="size-6" />
 					</div>
-					<h3 class="mb-2 text-lg font-semibold">Doppler Compatible CLI</h3>
+					<h3 class="mb-2 text-lg font-semibold">Doppler-inspired CLI</h3>
 					<p class="text-sm text-foreground/75">
-						Familiar commands like <InlineCode class="text-xs">redshift run</InlineCode>.
-						Drop-in replacement for your existing workflow.
+						Familiar commands like <InlineCode class="text-xs">redshift run</InlineCode>,
+						with an explicit, documented Redshift command contract.
 					</p>
 				</div>
 

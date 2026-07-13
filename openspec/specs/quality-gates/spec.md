@@ -40,11 +40,15 @@ CI SHALL run the same primary secret journey against hosted and compiled embedde
 - **THEN** every state transition persists or tombstones correctly, sensitive browser state is removed, and no CSP, console, or unexpected network failure occurs
 
 ### Requirement: Managed Relay Security Journey
-CI SHALL run the actual managed relay locally with deterministic payment and quota fixtures and test NIP-42, paid/unpaid reads, recipient writes, cross-recipient denial, ID mismatch, shared quotas, retention, and metadata.
+CI SHALL run the actual managed relay locally with deterministic authentication, access-mode, and quota fixtures and test NIP-42, recipient-scoped reads and writes, cross-recipient denial, ID mismatch, shared quotas, retention, non-commercial metadata, and disabled payment routes.
 
-#### Scenario: Unpaid broad read
-- **WHEN** an authenticated but unpaid or unconstrained reader subscribes
-- **THEN** access is rejected
+#### Scenario: Authenticated broad read
+- **WHEN** an authenticated but unconstrained reader subscribes
+- **THEN** access is rejected regardless of the disabled commercial mode
+
+#### Scenario: Payment mode remains disabled
+- **WHEN** the candidate is verified before deployment
+- **THEN** tests prove NIP-11 and the landing page omit payment claims and payment routes are inactive
 
 ### Requirement: Installer and Updater Journey
 CI SHALL use a controlled local release server/verifier to test valid replacement and every trust/atomicity failure without production credentials.

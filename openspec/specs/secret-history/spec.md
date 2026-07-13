@@ -1,7 +1,7 @@
 # secret-history Specification
 
 ## Purpose
-TBD - created by archiving change add-authenticated-secret-history. Update Purpose after archive.
+Define bounded owner-authenticated history observation, metadata-only comparison, and explicit restore-as-new-state semantics without claiming retained history, erasure, compare-and-swap, or availability guarantees.
 ## Requirements
 ### Requirement: Bounded Authenticated History Observation
 The system SHALL expose only NIP-59 versions whose sole outer recipient, verified seal author, decrypted rumor author, and exact d-tag match the authenticated owner and requested project/environment. It SHALL deduplicate by outer event ID, apply fixed observation/version bounds, and describe results as observed from responding configured relays rather than complete history.

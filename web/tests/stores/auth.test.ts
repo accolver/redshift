@@ -1,11 +1,14 @@
 import {
 	bunkerConnectionToUri,
 	disconnect,
+	getAuthState,
 	hasNip44Capabilities,
+	loadProfileFromEventStore,
 	serializeBunkerConnection,
 } from '$lib/stores/auth.svelte';
+import { disconnect as disconnectRelays, eventStore } from '$lib/stores/nostr.svelte';
 import { secureRetrieve, secureStore } from '$lib/stores/secure-storage';
-import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
+import { finalizeEvent, generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 // Mock sessionStorage
@@ -167,6 +170,56 @@ describe('Auth Store - capabilities and bunker persistence', () => {
 		expect(uri).toContain('bunker://');
 		expect(uri).toContain('relay=');
 		expect(uri).not.toContain('secret=');
+	});
+
+	it('derives valid profile metadata from the shared EventStore', () => {
+		const secretKey = generateSecretKey();
+		const pubkey = getPublicKey(secretKey);
+		loadProfileFromEventStore(pubkey);
+		eventStore.add(
+			finalizeEvent(
+				{
+					kind: 0,
+					created_at: Math.floor(Date.now() / 1000),
+					tags: [],
+					content: JSON.stringify({ name: 'Configured Relay User', picture: 42 }),
+				},
+				secretKey,
+			),
+		);
+
+		expect(getAuthState().profile).toEqual({ name: 'Configured Relay User' });
+	});
+
+	it('keeps profile updates bound to the cleared shared store after relay reconnect', () => {
+		const secretKey = generateSecretKey();
+		const pubkey = getPublicKey(secretKey);
+		loadProfileFromEventStore(pubkey);
+		eventStore.add(
+			finalizeEvent(
+				{
+					kind: 0,
+					created_at: 1,
+					tags: [],
+					content: JSON.stringify({ name: 'Before reconnect' }),
+				},
+				secretKey,
+			),
+		);
+		disconnectRelays();
+		eventStore.add(
+			finalizeEvent(
+				{
+					kind: 0,
+					created_at: 2,
+					tags: [],
+					content: JSON.stringify({ name: 'After reconnect' }),
+				},
+				secretKey,
+			),
+		);
+
+		expect(getAuthState().profile).toEqual({ name: 'After reconnect' });
 	});
 
 	it('full disconnect clears encrypted session data and the browser key', async () => {

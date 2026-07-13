@@ -189,9 +189,11 @@ describe('compiled CLI contracts', () => {
 		expect(rawSecret.stdout).toBe('binary-secret');
 
 		const childScript = join(root, 'inspect-child.sh');
+		const argumentSentinelFile = join(root, 'argument-sentinel.txt');
+		const argumentSentinel = 'PLAINTEXT-ARG-SENTINEL';
 		writeFileSync(
 			childScript,
-			'#!/bin/sh\nprintf \'argc=%s\\narg1=%s\\narg2=%s\\narg3=<%s>\\nsecret=%s\\nnsec=%s\\nbunker=%s\\n\' "$#" "$1" "$2" "$3" "$API_KEY" "${REDSHIFT_NSEC-unset}" "${REDSHIFT_BUNKER-unset}"\n',
+			`#!/bin/sh\nprintf '%s' "$4" > "${argumentSentinelFile}"\nprintf 'argc=%s\\narg1=%s\\narg2=%s\\narg3=<%s>\\nsecret=%s\\nnsec=%s\\nbunker=%s\\n' "$#" "$1" "$2" "$3" "$API_KEY" "\${REDSHIFT_NSEC-unset}" "\${REDSHIFT_BUNKER-unset}"\n`,
 		);
 		chmodSync(childScript, 0o755);
 
@@ -208,18 +210,23 @@ describe('compiled CLI contracts', () => {
 				'--literal',
 				'space value',
 				'',
+				argumentSentinel,
 			],
 			authEnvironment,
 			root,
 		);
 		expect(execution.exitCode, execution.stderr).toBe(0);
-		expect(execution.stdout).toContain('argc=3');
+		expect(execution.stdout).toContain('argc=4');
 		expect(execution.stdout).toContain('arg1=--literal');
 		expect(execution.stdout).toContain('arg2=space value');
 		expect(execution.stdout).toContain('arg3=<>');
 		expect(execution.stdout).toContain('secret=binary-secret');
 		expect(execution.stdout).toContain('nsec=unset');
 		expect(execution.stdout).toContain('bunker=unset');
+		expect(readFileSync(argumentSentinelFile, 'utf8')).toBe(argumentSentinel);
+		expect(execution.stdout).not.toContain(argumentSentinel);
+		expect(execution.stderr).not.toContain(argumentSentinel);
+		expect(execution.stderr).toContain('arguments hidden');
 
 		const shellExecution = await runBinary(
 			[

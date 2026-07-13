@@ -1,16 +1,25 @@
 # Redshift CLI
 
-Decentralized, censorship-resistant secret management CLI with
-Doppler-compatible commands.
+Decentralized, censorship-resistant secret management CLI with Doppler-inspired
+workflows and Redshift's documented command contract. Full Doppler command/flag
+compatibility is not claimed.
 
 ## Installation
 
-```bash
-# Build from source
-bun build cli/src/main.ts --compile --outfile dist/redshift
+The verified installer supports Linux and macOS on x64 and arm64, verifies
+checksums and GitHub build-provenance attestations, and installs to
+`~/.local/bin/redshift`. Certified v0.14.0 passed native installation and
+lifecycle verification on all four targets. Windows is not currently supported.
 
-# Or run directly
-bun run cli/src/main.ts
+```bash
+curl -fsSL https://redshiftapp.com/install | sh
+```
+
+For development from source:
+
+```bash
+bun install --frozen-lockfile
+bun run build
 ```
 
 ## Quick Start
@@ -416,7 +425,7 @@ Integration tests require a local Nostr relay. Install
 
 ```bash
 # Install nak (if not already installed)
-go install github.com/fiatjaf/nak@latest
+go install github.com/fiatjaf/nak@v0.19.7
 ```
 
 Run integration tests:
@@ -468,20 +477,7 @@ REDSHIFT_CONFIG_DIR=/tmp/redshift-test bun run dev -- run -- echo "API_KEY is \$
 
 ## Test Coverage
 
-- **89 unit tests** covering:
-  - CLI argument parsing (Doppler-compatible)
-  - NIP-59 Gift Wrap encryption/decryption
-  - NIP-09 deletion events
-  - Key validation with bech32 checksum
-  - Config loading/saving (nsec + bunker)
-  - Secret injection
-  - Relay filtering and d-tag resolution
-
-- **10 integration tests** covering:
-  - Relay connectivity
-  - Publishing and fetching secrets
-  - Secret updates (newer timestamp wins)
-  - D-tag isolation between projects
-  - Tombstone (logical deletion)
-  - Complex nested objects
-  - Project and environment listing
+Current release evidence and aggregate test counts are recorded per release
+rather than maintained manually here. See
+`piolium/authenticated-secret-history-evidence.md` for the certified v0.14.0
+unit, compiled-binary, browser, relay, and installed-artifact gates.

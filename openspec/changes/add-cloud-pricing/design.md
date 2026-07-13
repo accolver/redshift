@@ -1,5 +1,9 @@
 # Design: Cloud Tier Architecture
 
+## Status
+
+**Unapproved design hypothesis.** Every provider, price, retention duration, availability target, backup behavior, schedule, and architecture below is a candidate for review—not an implementation decision or launch commitment. No task may begin until this change and the separate managed-production evidence gates are explicitly approved.
+
 ## Context
 
 Redshift needs a sustainable revenue model that doesn't compromise user
@@ -25,11 +29,11 @@ relays, backups) rather than feature access.
 
 ### Goals
 
-- Enable $5/month subscription via BTCPay Server + Voltage Lightning
-- Provide managed relay with 99.5% SLA
-- Implement access token system for relay authentication
-- Support 7-day audit log retention
-- Create seamless web and CLI subscription flows
+- Evaluate the unapproved $5/month subscription hypothesis with a reviewed payment design
+- Define a candidate managed-relay offer without selecting or promising an SLA
+- Evaluate an access-token design for relay authentication
+- Derive any audit-record retention duration from approved privacy, operational, and recovery evidence
+- Specify web and CLI subscription flows only after commercial and managed-production approval
 
 ### Non-Goals
 
@@ -184,7 +188,7 @@ encrypted content.
 - Same reasoning as access tokens - use existing NIP-78 infrastructure
 - User owns their audit data
 - Encrypted content means we can't read it
-- 7-day retention enforced by relay cleanup
+- Any retention duration remains unapproved and must be enforced by tested relay cleanup only after privacy and operational review
 
 **Audit Event Schema**:
 
@@ -199,7 +203,7 @@ encrypted content.
     ["t", "redshift-audit"],                      // Type tag for filtering
     ["action", "secret:create"],
     ["target", projectId],
-    ["expiration", `${timestamp + 7 * 24 * 60 * 60}`],  // NIP-40: 7-day retention
+    ["expiration", approvedExpirationTimestamp],  // Duration is an evidence-gated open decision
   ],
   content: encryptedDetails,  // NIP-44 encrypted to user's key
 }
@@ -274,10 +278,10 @@ Paid: $0.015/GB/month storage.
 
 **Yes - Verified**:
 
-- $5/month covers infrastructure costs (Cloudflare + Voltage)
-- Clear value proposition: reliability without self-hosting
-- Free tier drives adoption, Cloud tier monetizes convenience
-- Bitcoin-only payments align with sovereignty values
+- $5/month is an unvalidated pricing hypothesis whose costs and demand require evidence
+- Reliability without self-hosting is a proposed value, not a current guarantee
+- The individual product remains complete without the proposed convenience layer
+- Any payment design requires separate security, legal, and operational approval
 
 ### L7 (Insight-Synthesizer): Product Strategy
 
@@ -286,9 +290,9 @@ Paid: $0.015/GB/month storage.
 **Yes - Verified**:
 
 - Free users get full functionality with public relays
-- Cloud tier adds: managed relay, backups, audit logs, SLA
-- No features removed from free tier
-- Doppler-like UX maintained across tiers
+- A future approved tier may add a managed relay and evidence-bounded retention/recovery features; no SLA is selected
+- No features may be removed from the individual product
+- Redshift's documented command contract remains consistent across any approved tier
 
 ### L4 (Integration-Contractor): Protocol Compatibility
 
@@ -425,7 +429,7 @@ as recommended by NIP-78.
     ["t", "redshift-audit"],                        // Type tag for filtering
     ["action", "secret:create"],
     ["target", projectId],
-    ["expiration", `${timestamp + 7 * 24 * 60 * 60}`],  // NIP-40: 7-day retention
+    ["expiration", approvedExpirationTimestamp],    // Duration is an evidence-gated open decision
   ],
   content: encryptedDetails,  // NIP-44 encrypted JSON
 }
@@ -492,7 +496,7 @@ config.
 | Domain + SSL      | Cloudflare    | Free        |
 | **Total**         |               | **~$25-62** |
 
-Break-even at ~5-12 subscribers ($5/month each).
+The historical model estimated break-even at roughly 5-12 subscribers at the unapproved $5/month hypothesis; current provider costs, demand, taxes, support, and risk remain unvalidated.
 
 ## Migration Plan
 
@@ -501,11 +505,11 @@ unaffected.
 
 ### Rollout Strategy
 
-1. **Week 1-2**: Deploy BTCPay Server + Voltage Cloud, internal testing
-2. **Week 3-4**: Deploy Nosflare relay, configure R2 backups
-3. **Week 5**: Web subscription page, beta testing
-4. **Week 6**: Public launch, CLI integration
-5. **Week 7+**: Monitor, iterate, add audit logging
+1. **Approval gate**: approve Cloud pricing plus managed-production, security, privacy/legal, and FinOps evidence plans.
+2. **Credential-free planning**: review exact provider resources, source/plan digests, budgets, data classes, and rollback without mutation.
+3. **Synthetic preproduction**: test billing and relay behavior with non-user data only after authorized mutation approval.
+4. **Operational evidence**: complete monitoring, incident, rotation, rollback, retention, and restore drills and the approved measurement window.
+5. **Explicit launch decision**: approve or reject bounded pricing/service claims; no public onboarding or announcement follows automatically.
 
 ### Rollback
 

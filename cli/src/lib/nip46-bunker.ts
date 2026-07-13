@@ -16,7 +16,6 @@ import { finalizeEvent, getPublicKey, verifyEvent } from 'nostr-tools/pure';
 export const NIP46_KIND = 24133;
 export const MAX_NIP46_PARAM_BYTES = 64 * 1024;
 export const MAX_NIP46_REQUESTS_PER_MINUTE = 120;
-export const MAX_NIP46_SESSIONS = 16;
 export const MAX_NIP46_EVENT_AGE_SECONDS = 600;
 export const MAX_NIP46_EVENT_CONTENT_BYTES = 128 * 1024;
 const MAX_NIP46_CONCURRENCY = 4;
@@ -44,7 +43,7 @@ export interface Nip46Response {
 }
 
 export interface Nip46BunkerService {
-	close(): void;
+	close(): Promise<void>;
 }
 
 export interface Nip46RelayPool {
@@ -65,8 +64,8 @@ export interface Nip46BunkerHandlerOptions {
 	userSecretKey: Uint8Array;
 	/** Relays the signer wants clients to use after connection. */
 	relays: string[];
-	/** Optional single-use-ish connection secret for prototype authorization. */
-	secret?: string;
+	/** Required one-time pairing secret for prototype authorization. */
+	secret: string;
 	/** Event kinds the prototype is allowed to sign. Defaults to Redshift secret kinds. */
 	allowedSignEventKinds?: number[];
 	/** Injectable relay pool for tests. Defaults to resilient NIP-46 transport. */
@@ -112,6 +111,9 @@ export function validateNip46TransportEvent(
 
 class BoundedTaskQueue {
 	private active = 0;
+	private accepting = true;
+	private drainPromise: Promise<void> | null = null;
+	private resolveDrain: (() => void) | null = null;
 	private readonly pending: Array<{
 		task: () => Promise<void>;
 		resolve: () => void;
@@ -124,6 +126,7 @@ class BoundedTaskQueue {
 	) {}
 
 	run(task: () => Promise<void>) {
+		if (!this.accepting) return Promise.reject(new Error('NIP-46 request queue is closed'));
 		if (this.active < this.concurrency) return this.start(task);
 		if (this.pending.length >= this.maxQueued) {
 			return Promise.reject(new Error('NIP-46 request queue is full'));
@@ -133,14 +136,33 @@ class BoundedTaskQueue {
 		});
 	}
 
+	async close(): Promise<void> {
+		if (this.accepting) {
+			this.accepting = false;
+			const error = new Error('NIP-46 request queue is closed');
+			for (const pending of this.pending.splice(0)) pending.reject(error);
+		}
+		if (this.active === 0) return;
+		if (!this.drainPromise) {
+			this.drainPromise = new Promise<void>((resolve) => {
+				this.resolveDrain = resolve;
+			});
+		}
+		await this.drainPromise;
+	}
+
 	private async start(task: () => Promise<void>) {
 		this.active++;
 		try {
 			await task();
 		} finally {
 			this.active--;
-			const next = this.pending.shift();
+			const next = this.accepting ? this.pending.shift() : undefined;
 			if (next) void this.start(next.task).then(next.resolve, next.reject);
+			if (this.active === 0) {
+				this.resolveDrain?.();
+				this.resolveDrain = null;
+			}
 		}
 	}
 }
@@ -287,6 +309,9 @@ function isPermittedAuthTemplate(template: EventTemplate, relays: string[]): boo
 export function createNip46BunkerHandler(options: Nip46BunkerHandlerOptions): Nip46BunkerHandler {
 	validateSecretKey(options.signerSecretKey, 'signerSecretKey');
 	validateSecretKey(options.userSecretKey, 'userSecretKey');
+	if (typeof options.secret !== 'string' || options.secret.trim().length === 0) {
+		throw new Error('NIP-46 bunker pairing secret is required');
+	}
 
 	const signerPubkey = getPublicKey(options.signerSecretKey);
 	const userPubkey = getPublicKey(options.userSecretKey);
@@ -416,18 +441,13 @@ export function createNip46BunkerHandler(options: Nip46BunkerHandlerOptions): Ni
 					if (sessions.has(clientPubkey)) {
 						return { id: request.id, result: 'ack' };
 					}
-					if (sessions.size >= MAX_NIP46_SESSIONS) {
-						return { id: request.id, error: 'bunker session limit reached' };
+					if (providedSecret !== options.secret) {
+						return { id: request.id, error: 'invalid bunker secret' };
 					}
-					if (options.secret) {
-						if (providedSecret !== options.secret) {
-							return { id: request.id, error: 'invalid bunker secret' };
-						}
-						if (secretConsumedBy && secretConsumedBy !== clientPubkey) {
-							return { id: request.id, error: 'bunker secret has already been used' };
-						}
-						secretConsumedBy = clientPubkey;
+					if (secretConsumedBy && secretConsumedBy !== clientPubkey) {
+						return { id: request.id, error: 'bunker secret has already been used' };
 					}
+					secretConsumedBy = clientPubkey;
 					sessions.add(clientPubkey);
 					permissionsByClient.set(
 						clientPubkey,
@@ -456,6 +476,8 @@ export function startNip46BunkerService(options: Nip46BunkerHandlerOptions): Nip
 	const pool = options.relayPool ?? (new ResilientSimplePool() as Nip46RelayPool);
 	const signerPubkey = handler.getSignerPublicKey();
 	const tasks = new BoundedTaskQueue(MAX_NIP46_CONCURRENCY, MAX_NIP46_QUEUE);
+	let closed = false;
+	let closePromise: Promise<void> | null = null;
 
 	const sub = pool.subscribeMany(
 		options.relays,
@@ -465,11 +487,13 @@ export function startNip46BunkerService(options: Nip46BunkerHandlerOptions): Nip
 		},
 		{
 			onevent: (event) => {
+				if (closed) return;
 				const transportError = validateNip46TransportEvent(event, signerPubkey);
 				if (transportError || !verifyEvent(event)) return;
 				return tasks
 					.run(async () => {
 						try {
+							if (closed) return;
 							const decrypted = decryptNip46Message(
 								options.signerSecretKey,
 								event.pubkey,
@@ -478,6 +502,7 @@ export function startNip46BunkerService(options: Nip46BunkerHandlerOptions): Nip
 							if (!isNip46Request(decrypted)) return;
 
 							const response = await handler.handleRequest(event.pubkey, decrypted);
+							if (closed) return;
 							const encryptedResponse = encryptNip46Message(
 								options.signerSecretKey,
 								event.pubkey,
@@ -492,13 +517,18 @@ export function startNip46BunkerService(options: Nip46BunkerHandlerOptions): Nip
 								},
 								options.signerSecretKey,
 							);
-							await Promise.any(pool.publish(options.relays, responseEvent));
+							const publications = await Promise.allSettled(
+								pool.publish(options.relays, responseEvent),
+							);
+							if (!publications.some((result) => result.status === 'fulfilled')) {
+								throw new Error('Failed to publish NIP-46 response');
+							}
 						} catch {
 							// Ignore malformed or unrelated NIP-46 events on shared relays.
 						}
 					})
 					.catch(() => {
-						// Drop requests when the bounded service queue is saturated.
+						// Drop requests when the bounded service queue is full or closed.
 					});
 			},
 		},
@@ -506,9 +536,16 @@ export function startNip46BunkerService(options: Nip46BunkerHandlerOptions): Nip
 
 	return {
 		close() {
-			sub.close();
-			if (pool.destroy) pool.destroy();
-			else pool.close(options.relays);
+			if (!closePromise) {
+				closePromise = (async () => {
+					closed = true;
+					sub.close();
+					await tasks.close();
+					if (pool.destroy) pool.destroy();
+					else pool.close(options.relays);
+				})();
+			}
+			return closePromise;
 		},
 	};
 }

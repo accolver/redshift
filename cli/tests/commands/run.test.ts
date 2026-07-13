@@ -10,7 +10,11 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 import type { RunOptions } from '../../src/commands/run';
-import { applyPreserveEnvironment, resolveChildCommand } from '../../src/commands/run';
+import {
+	applyPreserveEnvironment,
+	formatChildCommandForLog,
+	resolveChildCommand,
+} from '../../src/commands/run';
 
 // Mock modules before importing run
 const mockSpawn = mock(() => ({
@@ -174,6 +178,16 @@ describe('run command', () => {
 });
 
 describe('run command execution contract', () => {
+	it('hides child arguments in normal and dry-run log text', () => {
+		const sentinel = 'PLAINTEXT-ARG-SENTINEL';
+		const resolved = resolveChildCommand({ command: ['printf', sentinel] }, 'linux');
+		const logText = formatChildCommandForLog(resolved);
+
+		expect(logText).toBe('printf (arguments hidden)');
+		expect(logText).not.toContain(sentinel);
+		expect(resolved.args).toEqual([sentinel]);
+	});
+
 	it('preserves every positional argument exactly', () => {
 		const argv = ['printf', '%s', '', 'a b', "'quoted'", '\\path', '*'];
 		const resolved = resolveChildCommand({ command: argv }, 'linux');

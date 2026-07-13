@@ -122,9 +122,10 @@ describe('authenticated secret history', () => {
 		const first = paginateSecretHistory(observation, { limit: 2 });
 		expect(first.items.map(({ eventId }) => eventId)).toEqual([ids.low, ids.middle]);
 		expect(first.nextCursor).toBe(createHistoryCursor(observation.versions[1]!));
+		if (!first.nextCursor) throw new Error('Expected a cursor for the second history page');
 		const second = paginateSecretHistory(observation, {
 			limit: 2,
-			cursor: first.nextCursor ?? undefined,
+			cursor: first.nextCursor,
 		});
 		expect(second.items.map(({ eventId }) => eventId)).toEqual([ids.high]);
 		expect(second.nextCursor).toBeNull();

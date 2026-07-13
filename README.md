@@ -18,23 +18,20 @@ Decentralized, censorship-resistant secret management built on
 
 ## Installation
 
-The hardened release installer targets Linux and macOS and requires a current
-[GitHub CLI](https://cli.github.com/). It fails closed unless the binary has a
-GitHub build-provenance attestation from Redshift's release workflow and exact
-release source commit. These controls are prepared for the next release; the
-currently published `v0.10.0` predates them, so build from source until a newer
-attested release is published and independently verified.
+The verified installer supports Linux and macOS on x64 and arm64 and requires a
+current [GitHub CLI](https://cli.github.com/). It verifies the selected release's
+GitHub build-provenance attestations, exact source commit, and checksums before
+installation. Certified release v0.14.0 passed native installation and lifecycle
+verification on all four supported targets. Windows is not currently supported.
 
 ```bash
-# Use after an attested post-v0.10.0 release is published
 curl -fsSL https://redshiftapp.com/install | sh
-
-# Current safe path: build from source
-git clone https://github.com/accolver/redshift.git
-cd redshift && bun install --frozen-lockfile
-bun run build
-install -m 0755 dist/redshift ~/.local/bin/redshift
 ```
+
+The default destination is `~/.local/bin/redshift`. If that directory is not in
+`PATH`, the installer prints the required shell configuration. See
+[`piolium/authenticated-secret-history-evidence.md`](piolium/authenticated-secret-history-evidence.md)
+for v0.14.0 release evidence.
 
 ### OpenClaw Skill
 
@@ -166,7 +163,7 @@ When creating a project in the web UI, you'll set:
   their stdout out of CI logs, shell history, and captured terminals.
 - Encrypted local backup is a user-initiated snapshot, not automatic/offsite retention or key recovery. Restore publishes new target-authorized state and may be partially complete across multiple bundles; each publication keeps normal quorum and recovery behavior.
 
-The individual CLI and dashboard are the supported product surfaces. Authenticated history/compare/restore is a development candidate until its public release evidence passes. Teams, shared-secret collaboration, managed backup/retention guarantees, and enterprise controls remain roadmap work and are not production claims.
+The individual CLI and dashboard are the supported product surfaces. Authenticated bounded history/compare/restore shipped in certified v0.14.0. It remains relay-observed, bounded, and potentially incomplete—not retained history, an audit log, offline recovery, compare-and-swap, or an availability guarantee. Teams, shared-secret collaboration, managed backup/retention guarantees, and enterprise controls remain roadmap work and are not production claims.
 
 ## Development
 
@@ -225,13 +222,13 @@ When you push commits to `main` with
 The hardened release workflow is configured to:
 
 1. Create/update a release PR with changelog
-2. When merged, create a GitHub release with tag
+2. When merged, create an immutable release tag and draft GitHub release
 3. GitHub Actions verifies tests and browser journeys on the compiled binary
 4. Native Linux/macOS runners build and smoke-test each platform binary
 5. Publish checksums, an SPDX SBOM, provenance attestations, and binaries
 
-These are workflow capabilities in the unreleased hardening change, not evidence
-that older public releases contain those assets.
+Certified v0.14.0 release evidence records these release controls and the
+supported native installation matrix.
 
 ### Manual Release (if needed)
 
