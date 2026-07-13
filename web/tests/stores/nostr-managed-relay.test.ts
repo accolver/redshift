@@ -15,10 +15,15 @@ vi.stubGlobal('fetch', mockFetch);
 
 // Use vi.hoisted to set up shared mock state BEFORE vi.mock calls execute
 // vi.mock is hoisted to the top of the file, so we need vi.hoisted to run first
-const { mockEvents, mockPublish } = vi.hoisted(() => {
+const { mockEvents, mockPublish, mockSubscriptions } = vi.hoisted(() => {
 	const mockEvents: NostrEvent[] = [];
 	const mockPublish = vi.fn().mockResolvedValue(undefined);
-	return { mockEvents, mockPublish };
+	const mockSubscriptions: Array<{
+		relays: string[];
+		filters: Array<Record<string, unknown>>;
+		next?: (event: NostrEvent) => void;
+	}> = [];
+	return { mockEvents, mockPublish, mockSubscriptions };
 });
 
 vi.mock('applesauce-core', () => {
@@ -33,6 +38,11 @@ vi.mock('applesauce-core', () => {
 						filters.some((filter) => !filter.kinds || filter.kinds.includes(event.kind)),
 					),
 			};
+			removeByFilters() {
+				const removed = mockEvents.length;
+				mockEvents.length = 0;
+				return removed;
+			}
 			__clearMockEvents() {
 				mockEvents.length = 0;
 			}
@@ -52,10 +62,21 @@ vi.mock('applesauce-relay', () => {
 				challenge$: { subscribe: vi.fn(() => new Subscription()) },
 				authenticate: vi.fn(),
 			});
-			subscription = vi.fn().mockReturnValue({
-				pipe: vi.fn().mockReturnValue({
-					subscribe: vi.fn().mockReturnValue({ unsubscribe: vi.fn() }),
-				}),
+			subscription = vi.fn((relays: string[], filters: Array<Record<string, unknown>>) => {
+				const captured = { relays, filters } as {
+					relays: string[];
+					filters: Array<Record<string, unknown>>;
+					next?: (event: NostrEvent) => void;
+				};
+				mockSubscriptions.push(captured);
+				return {
+					pipe: vi.fn().mockReturnValue({
+						subscribe: vi.fn((observer: { next?: (event: NostrEvent) => void }) => {
+							captured.next = observer.next;
+							return { unsubscribe: vi.fn() };
+						}),
+					}),
+				};
 			});
 		},
 		onlyEvents: vi.fn().mockReturnValue((x: unknown) => x),
@@ -92,7 +113,10 @@ import {
 	MANAGED_RELAY_API,
 	checkManagedRelayAccess,
 	clearPaymentCache,
+	connectAndSync,
+	disconnect,
 	eventStore,
+	getRelayState,
 	getRelaysForUser,
 	getRuntimeRelays,
 	resetManagedRelaySync,
@@ -106,6 +130,8 @@ describe('Managed Relay Integration', () => {
 		vi.clearAllMocks();
 		mockFetch.mockReset();
 		mockPublish.mockReset().mockResolvedValue(undefined);
+		mockSubscriptions.length = 0;
+		disconnect();
 		// Reset internal state
 		resetManagedRelaySync();
 		clearPaymentCache();
@@ -133,6 +159,65 @@ describe('Managed Relay Integration', () => {
 			await vi.advanceTimersByTimeAsync(5000);
 			await rejection;
 			expect(vi.getTimerCount()).toBe(0);
+		});
+	});
+
+	describe('connection synchronization lifecycle', () => {
+		it('uses the configured relay set and repeats bounded full filters after a future event', () => {
+			const pubkey = 'a'.repeat(64);
+			const configuredRelays = ['ws://127.0.0.1:4777'];
+			connectAndSync(pubkey, configuredRelays);
+			expect(mockSubscriptions[0]?.relays).toEqual(configuredRelays);
+			expect(mockSubscriptions[0]?.filters).toHaveLength(3);
+			for (const filter of mockSubscriptions[0]?.filters ?? []) {
+				expect(filter).not.toHaveProperty('since');
+			}
+
+			mockSubscriptions[0]?.next?.({
+				id: 'f'.repeat(64),
+				pubkey,
+				created_at: 4_102_444_800,
+				kind: 1059,
+				tags: [['p', pubkey]],
+				content: 'invalid-future-outer-event',
+				sig: '0'.repeat(128),
+			});
+			connectAndSync(pubkey, configuredRelays);
+
+			expect(mockSubscriptions).toHaveLength(2);
+			expect(mockSubscriptions[1]?.filters).toEqual(mockSubscriptions[0]?.filters);
+			for (const filter of mockSubscriptions[1]?.filters ?? []) {
+				expect(filter).not.toHaveProperty('since');
+			}
+		});
+
+		it('prevents an old fallback timer from completing a newer connection', async () => {
+			vi.useFakeTimers();
+			connectAndSync('a'.repeat(64), ['wss://old.example']);
+			await vi.advanceTimersByTimeAsync(5_000);
+			connectAndSync('b'.repeat(64), ['wss://new.example']);
+			await vi.advanceTimersByTimeAsync(5_000);
+			expect(getRelayState().status).toBe('connecting');
+			expect(getRelayState().relays).toEqual(['wss://new.example']);
+			await vi.advanceTimersByTimeAsync(5_000);
+			expect(getRelayState().status).toBe('connected');
+		});
+
+		it('disconnect clears the fallback timer without later mutating disconnected state', async () => {
+			vi.useFakeTimers();
+			connectAndSync('a'.repeat(64), ['wss://relay.example']);
+			expect(getRelayState().status).toBe('connecting');
+			disconnect();
+			expect(getRelayState().status).toBe('disconnected');
+			expect(vi.getTimerCount()).toBe(0);
+			await vi.advanceTimersByTimeAsync(10_000);
+			expect(getRelayState()).toEqual({
+				status: 'disconnected',
+				connectedCount: 0,
+				totalCount: 0,
+				relays: [],
+				hasManagedAccess: false,
+			});
 		});
 	});
 

@@ -70,16 +70,27 @@ function createNakNsec() {
 
 const compiledBinary = join(import.meta.dir, '../../../dist/redshift');
 
+async function stopProcess(process: Bun.Subprocess) {
+	process.kill('SIGTERM');
+	const terminated = await Promise.race([
+		process.exited.then(() => true),
+		Bun.sleep(1000).then(() => false),
+	]);
+	if (!terminated) {
+		process.kill('SIGKILL');
+		await process.exited;
+	}
+}
+
 describe('nak-backed bunker E2E', () => {
 	let relayProcess: Bun.Subprocess | null = null;
 	let service: Nip46BunkerService | null = null;
 
 	afterEach(async () => {
-		service?.close();
+		await service?.close();
 		service = null;
 		if (relayProcess) {
-			relayProcess.kill('SIGTERM');
-			await Promise.race([relayProcess.exited, Bun.sleep(1000)]);
+			await stopProcess(relayProcess);
 			relayProcess = null;
 		}
 	});
@@ -184,6 +195,7 @@ describe('nak-backed bunker E2E', () => {
 			signerSecretKey,
 			userSecretKey,
 			relays: [relay],
+			secret: 'compiled-bunker-secret',
 		});
 		writeFileSync(join(configDir, 'config.json'), JSON.stringify({ relays: [relay] }));
 		const script = join(root, 'inspect.sh');
@@ -208,7 +220,7 @@ describe('nak-backed bunker E2E', () => {
 					cwd: root,
 					env: {
 						...process.env,
-						REDSHIFT_BUNKER: `bunker://${signerPubkey}?relay=${encodeURIComponent(relay)}`,
+						REDSHIFT_BUNKER: `bunker://${signerPubkey}?relay=${encodeURIComponent(relay)}&secret=compiled-bunker-secret`,
 					},
 					stdin: 'ignore',
 					stdout: 'pipe',

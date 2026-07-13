@@ -2,9 +2,14 @@ import { describe, expect, it } from 'bun:test';
 import { MAX_PRINCIPAL_SUBSCRIPTIONS, PUBKEY_RATE_LIMIT } from '../src/config';
 import { PrincipalQuota } from '../src/quota-object';
 
+interface TestStorageTransaction {
+	get<T>(key: string): Promise<T | undefined>;
+	put(key: string, value: unknown): Promise<void>;
+}
+
 function createQuota() {
 	const values = new Map<string, unknown>();
-	const transaction = {
+	const transaction: TestStorageTransaction = {
 		async get<T>(key: string) {
 			return values.get(key) as T | undefined;
 		},
@@ -13,7 +18,7 @@ function createQuota() {
 		},
 	};
 	const storage = {
-		async transaction<T>(callback: (transaction: typeof transaction) => Promise<T>) {
+		async transaction<T>(callback: (transaction: TestStorageTransaction) => Promise<T>) {
 			return callback(transaction);
 		},
 	};

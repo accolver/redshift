@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { describe, expect, test } from 'vitest';
 
 const webRoot = process.cwd();
 
@@ -41,9 +41,8 @@ describe('landing page Lighthouse hygiene', () => {
 		expect(hooks).not.toContain('Content-Security-Policy');
 		expect(svelteConfig).toContain('name: `redshift-web-${webPackage.version}`');
 		expect(svelteConfig).toContain("mode: 'auto'");
-		expect(svelteConfig).toContain(
-			"'script-src': ['self', 'https://static.cloudflareinsights.com']",
-		);
+		expect(svelteConfig).toContain("'script-src': ['self']");
+		expect(svelteConfig).not.toContain('cloudflareinsights.com');
 		expect(svelteConfig).not.toMatch(/'script-src': \[[^\]]*unsafe-inline/);
 		expect(headers).toContain('X-Robots-Tag: index, follow');
 		expect(headers).toContain(

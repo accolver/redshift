@@ -45,8 +45,8 @@ Audit events SHALL conform to NIP-78 event schema for ecosystem compatibility.
   - pubkey: user's pubkey
   - tags: `["d", "com.redshiftapp.audit.{timestamp}"]` (reverse-DNS for global
     uniqueness), `["t", "redshift-audit"]`, `["action", actionType]`,
-    `["target", projectId]`, `["expiration", expiryTimestamp]` (7 days from
-    creation, per NIP-40)
+    `["target", projectId]`, `["expiration", approvedExpiryTimestamp]` (an
+    evidence-gated duration approved under managed-production privacy and recovery review)
   - content: NIP-44 encrypted JSON with operation details
 
 ### Requirement: Audit Log Viewer
@@ -71,23 +71,25 @@ The system SHALL provide a web interface for viewing audit logs.
 - **WHEN** a user selects a date range filter
 - **THEN** the audit log view shows only entries within that range
 
-### Requirement: Audit Log Retention
+### Requirement: Approved Audit Record Retention
 
-The system SHALL enforce 7-day retention for Cloud tier audit logs.
+The system SHALL NOT implement or advertise an audit-record retention duration until managed-production privacy, storage, deletion-boundary, restore, and measurement evidence approves one. Any approved duration SHALL be encoded with NIP-40 and disclosed as a serving policy rather than guaranteed ciphertext erasure.
 
-#### Scenario: Logs older than 7 days expired
+#### Scenario: Retention duration is not approved
 
-- **WHEN** an audit event is older than 7 days
-- **THEN** the Nosflare relay expires/deletes the event via NIP-40 `expiration`
-  tag
-- **AND** the event is no longer returned in queries
-- **AND** the relay MAY persist events indefinitely but SHOULD NOT serve expired
-  events to clients
+- **WHEN** the Cloud proposal lacks an approved retention evidence record
+- **THEN** audit-log implementation and every duration/retention claim remain blocked
 
-#### Scenario: Retention policy displayed
+#### Scenario: Approved record expires from serving
 
-- **WHEN** a user views the audit log page
-- **THEN** the page displays a notice: "Audit logs are retained for 7 days"
+- **WHEN** an audit event passes a separately approved expiration timestamp
+- **THEN** the managed relay stops returning it according to NIP-40 policy
+- **AND** documentation states that relays, caches, or backups may still retain ciphertext
+
+#### Scenario: Approved retention policy displayed
+
+- **WHEN** an approved audit-log page is viewed
+- **THEN** it displays the exact evidence-bounded serving duration, deletion limitation, and evidence date
 
 ### Requirement: Audit Log API
 

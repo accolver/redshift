@@ -8,7 +8,7 @@
 		"dev": "wrangler dev",
 		"test": "bun test",
 		"deploy": "bun run build && bun run typecheck && bun run test && wrangler deploy",
-		"verify:generated": "bun run build && git diff --exit-code -- worker.js",
+		"verify:generated": "tmp=$(mktemp -d) && trap 'rm -rf \"$tmp\"' EXIT && esbuild src/index.ts --bundle --outfile=\"$tmp/worker.js\" --platform=neutral --target=es2020 --format=esm --minify=false --keep-names --external:node:* && cmp \"$tmp/worker.js\" worker.js",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
@@ -16,7 +16,9 @@
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "4.20260702.1",
+		"@types/bun": "1.3.14",
 		"esbuild": "0.28.1",
+		"typescript": "5.9.3",
 		"wrangler": "4.110.0"
 	}
 }

@@ -17,6 +17,11 @@ vi.mock('applesauce-core', () => ({
 		add(event: NostrEvent) {
 			if (!mockEvents.some(({ id }) => id === event.id)) mockEvents.push(event);
 		}
+		removeByFilters() {
+			const removed = mockEvents.length;
+			mockEvents.length = 0;
+			return removed;
+		}
 		database = { getByFilters: () => mockEvents };
 	},
 }));

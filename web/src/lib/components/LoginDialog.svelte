@@ -201,6 +201,7 @@ function goBack() {
 						/>
 						<button
 							type="button"
+							aria-label={showNsec ? 'Hide private key' : 'Reveal private key'}
 							class="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer p-1 text-muted-foreground transition-colors hover:text-foreground"
 							onclick={() => (showNsec = !showNsec)}
 						>
@@ -217,7 +218,7 @@ function goBack() {
 				</div>
 
 				{#if auth.error}
-					<p class="text-sm text-destructive">{auth.error}</p>
+					<p class="text-sm text-destructive" role="alert">{auth.error}</p>
 				{/if}
 
 				<div class="flex gap-2">
@@ -257,7 +258,7 @@ function goBack() {
 				</div>
 
 				{#if auth.error}
-					<p class="text-sm text-destructive">{auth.error}</p>
+					<p class="text-sm text-destructive" role="alert">{auth.error}</p>
 				{/if}
 
 				<div class="flex gap-2">

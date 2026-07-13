@@ -52,12 +52,13 @@ jobs:
       - name: Typecheck all product surfaces
         run: |
           bun run typecheck
+          bun run typecheck:packages
           bun run typecheck:web
           cd relay/nosflare && bun run typecheck
       - name: Run scoped product lint and format checks
         run: |
-          bunx biome lint cli/src packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests --diagnostic-level=error
-          bunx biome format cli/src packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests
+          bunx biome lint cli/src cli/scripts cli/tests packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests --diagnostic-level=error
+          bunx biome format cli/src cli/scripts cli/tests packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests
       - name: Build compiled CLI test subject
         run: |
           bun run verify:embeds
@@ -285,11 +286,11 @@ jobs:
       - verify-published-macos
     if: >-
       ${{ always() && needs.release-please.outputs.release_created == 'true' &&
-          (needs.verify-release.result == 'failure' ||
-           needs.build-binaries.result == 'failure' ||
-           needs.publish-release.result == 'failure' ||
-           needs.verify-published-release.result == 'failure' ||
-           needs.verify-published-macos.result == 'failure') }}
+          (needs.verify-release.result != 'success' ||
+           needs.build-binaries.result != 'success' ||
+           needs.publish-release.result != 'success' ||
+           needs.verify-published-release.result != 'success' ||
+           needs.verify-published-macos.result != 'success') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -1,6 +1,13 @@
 # Tasks: Cloud Tier Implementation
 
-## Phase 1: Infrastructure Setup (2-3 weeks)
+## Phase 0: Approval Gate
+
+- [ ] 0.1 Obtain explicit approval for this Cloud pricing proposal and its revised design.
+- [ ] 0.2 Obtain the required managed-production, security, privacy/legal, and FinOps approvals with named authorities and immutable evidence.
+- [ ] 0.3 Do not implement, deploy, add credentials, enable payment behavior, onboard users, or publish pricing/retention/SLA claims until both approval gates pass.
+- [ ] 0.4 Replace every open provider, retention, availability, recovery, and launch hypothesis with an approved evidence plan before mutation.
+
+## Phase 1: Infrastructure Setup (schedule unapproved)
 
 ### 1.1 BTCPay Server + Voltage Cloud Setup
 
@@ -150,21 +157,21 @@
 - [ ] 6.2.1 Create `/admin/settings/audit-logs` route
 - [ ] 6.2.2 Fetch and decrypt audit events for current user
 - [ ] 6.2.3 Display audit log with filtering by action/date
-- [ ] 6.2.4 Implement 7-day retention display note
+- [ ] 6.2.4 Display only the approved evidence-bounded retention duration, if any, with its limitations
 
 ### 6.3 Retention Policy
 
 - [ ] 6.3.1 Configure Nosflare to use NIP-40 expiration for audit events
 - [ ] 6.3.2 Document retention policy for users
 
-## Phase 7: Monitoring & SLA (1 week)
+## Phase 7: Monitoring & Evidence (schedule unapproved)
 
 ### 7.1 Uptime Monitoring
 
 - [ ] 7.1.1 Set up external uptime monitoring (BetterStack/UptimeRobot)
 - [ ] 7.1.2 Configure alerts for relay downtime
 - [ ] 7.1.3 Create public status page at status.redshiftapp.com
-- [ ] 7.1.4 Implement 99.5% SLA tracking dashboard
+- [ ] 7.1.4 Measure approved availability checks without selecting or publishing an SLA
 
 ### 7.2 Metrics
 
@@ -173,7 +180,7 @@
 - [ ] 7.2.3 Track R2 backup success/failure rates
 - [ ] 7.2.4 Track payment success rate (via BTCPay)
 
-## Phase 8: Documentation & Launch (1 week)
+## Phase 8: Documentation & Explicit Launch Decision (schedule unapproved)
 
 ### 8.1 Documentation
 
@@ -187,10 +194,11 @@
 - [ ] 8.2.1 Security review of payment flow
 - [ ] 8.2.2 Load testing on Nosflare relay
 - [ ] 8.2.3 Beta user testing (invite-only)
-- [ ] 8.2.4 Prepare launch announcement
+- [ ] 8.2.4 Prepare an announcement only after a separate explicit launch approval
 
 ## Dependencies
 
+- **Every phase** depends on **Phase 0**; an unchecked approval gate blocks all implementation and mutation
 - **Phase 2** depends on **Phase 1** (infrastructure must exist)
 - **Phase 3** depends on **Phase 2** (needs packages)
 - **Phase 4** depends on **Phase 3** (needs API)

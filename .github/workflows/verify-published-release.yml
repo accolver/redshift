@@ -13,8 +13,33 @@ permissions:
   attestations: read
 
 jobs:
+  resolve-release:
+    name: Resolve immutable release source
+    runs-on: ubuntu-latest
+    outputs:
+      source_digest: ${{ steps.resolve.outputs.source_digest }}
+    steps:
+      - name: Resolve tag source digest
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Expected an exact vX.Y.Z release tag" >&2
+            exit 1
+          fi
+          gh api "repos/${{ github.repository }}/git/ref/tags/$TAG" >/dev/null
+          RELEASE_JSON=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG")
+          test "$(jq -r .tag_name <<<"$RELEASE_JSON")" = "$TAG"
+          test "$(jq -r .draft <<<"$RELEASE_JSON")" = "false"
+          SOURCE_DIGEST=$(gh api "repos/${{ github.repository }}/commits/$TAG" --jq .sha)
+          test -n "$SOURCE_DIGEST"
+          echo "source_digest=$SOURCE_DIGEST" >> "$GITHUB_OUTPUT"
+
   verify:
     name: Fresh install ${{ matrix.platform }}
+    needs: resolve-release
     strategy:
       fail-fast: false
       matrix:
@@ -26,6 +51,10 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Bind checkout to resolved GitHub source digest
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve-release.outputs.source_digest }}"
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Verify public installer, lifecycle, and forced upgrade
         env:
@@ -37,6 +66,7 @@ jobs:
 
   verify-macos:
     name: Fresh install ${{ matrix.platform }}
+    needs: resolve-release
     strategy:
       fail-fast: false
       matrix:
@@ -48,6 +78,10 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Bind checkout to resolved GitHub source digest
+        run: test "$(git rev-parse HEAD)" = "${{ needs.resolve-release.outputs.source_digest }}"
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: 1.26.5

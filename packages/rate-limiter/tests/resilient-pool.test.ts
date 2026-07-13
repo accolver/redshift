@@ -74,6 +74,38 @@ describe('ResilientSimplePool', () => {
 		expect(calls).toBe(0);
 	});
 
+	it('stops retries and diagnostics when shutdown begins', async () => {
+		const attempt: { reject?: (error: Error) => void } = {};
+		let calls = 0;
+		const diagnostics: string[] = [];
+		const originalDebug = console.debug;
+		console.debug = (...values: unknown[]) => diagnostics.push(values.map(String).join(' '));
+		const pool = new ResilientSimplePool({
+			minDelayMs: 0,
+			backoff: immediateBackoff,
+			publishRelay: async () => {
+				calls++;
+				return new Promise<string>((_resolve, reject) => {
+					attempt.reject = reject;
+				});
+			},
+		});
+
+		try {
+			const publication = pool.publish(['wss://relay.test'], event)[0];
+			if (!publication) throw new Error('Expected a publication promise');
+			while (!attempt.reject) await Bun.sleep(1);
+			pool.beginClose();
+			attempt.reject(new Error('relay connection closed by us'));
+			await expect(publication).rejects.toThrow('relay connection closed by us');
+			expect(calls).toBe(1);
+			expect(diagnostics).toEqual([]);
+		} finally {
+			console.debug = originalDebug;
+			pool.destroy();
+		}
+	});
+
 	it('deduplicates relay targets before publishing', async () => {
 		let calls = 0;
 		const pool = new ResilientSimplePool({

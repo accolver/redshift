@@ -2,9 +2,9 @@ import type { AuthState, EventTemplate, ProfileMetadata, SignedEvent } from '$li
 import { ResilientSimplePool } from '@redshift/rate-limiter';
 import { getPublicKey, nip19 } from 'nostr-tools';
 import { type BunkerPointer, BunkerSigner, parseBunkerInput } from 'nostr-tools/nip46';
-import { SimplePool } from 'nostr-tools/pool';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
-import { DEFAULT_RELAYS } from './nostr.svelte';
+import type { Subscription } from 'rxjs';
+import { eventStore } from './nostr.svelte';
 import {
 	isSecureStorageAvailable,
 	secureClearAll,
@@ -92,6 +92,7 @@ let activeBunkerSigner: BunkerSigner | null = null;
 
 // Active bunker pool instance (for cleanup on disconnect or error)
 let activeBunkerPool: ResilientSimplePool | null = null;
+let activeProfileSubscription: Subscription | null = null;
 
 // Auth state using $state rune
 let authState = $state<AuthState>({
@@ -106,29 +107,29 @@ let authState = $state<AuthState>({
 let authRestorationAttempted = $state(false);
 
 /**
- * Fetch user profile metadata (kind 0) from relays
+ * Load accepted profile metadata from the shared Applesauce EventStore. Relay I/O is
+ * owned by connectAndSync, so profiles use the same active runtime/user relay set.
  */
-async function fetchProfile(pubkey: string): Promise<ProfileMetadata | null> {
-	const pool = new SimplePool();
-
-	try {
-		const event = await pool.get(DEFAULT_RELAYS, {
-			kinds: [0],
-			authors: [pubkey],
-			limit: 1,
-		});
-
-		if (event?.content) {
-			const metadata = JSON.parse(event.content) as ProfileMetadata;
-			return metadata;
-		}
-		return null;
-	} catch (err) {
-		console.error('Failed to fetch profile:', err);
-		return null;
-	} finally {
-		pool.close(DEFAULT_RELAYS);
-	}
+export function loadProfileFromEventStore(pubkey: string): void {
+	activeProfileSubscription?.unsubscribe();
+	activeProfileSubscription = eventStore.profile(pubkey).subscribe({
+		next: (profile) => {
+			if (!profile) return;
+			const metadata: ProfileMetadata = {};
+			if (typeof profile.name === 'string') metadata.name = profile.name;
+			if (typeof profile.display_name === 'string') metadata.display_name = profile.display_name;
+			if (typeof profile.picture === 'string') metadata.picture = profile.picture;
+			if (typeof profile.about === 'string') metadata.about = profile.about;
+			if (typeof profile.nip05 === 'string') metadata.nip05 = profile.nip05;
+			authState.profile = metadata;
+		},
+		error: (error: unknown) => {
+			console.error(
+				'Failed to load profile from EventStore:',
+				error instanceof Error ? error : new Error(String(error)),
+			);
+		},
+	});
 }
 
 /**
@@ -161,10 +162,7 @@ export async function connectWithNip07(): Promise<boolean> {
 			error: null,
 			profile: null,
 		};
-		// Fetch profile in background
-		fetchProfile(pubkey).then((profile) => {
-			if (profile) authState.profile = profile;
-		});
+		loadProfileFromEventStore(pubkey);
 		return true;
 	} catch (err) {
 		const message = err instanceof Error ? err.message : 'Failed to connect';
@@ -223,10 +221,7 @@ export async function connectWithNsec(nsec: string): Promise<boolean> {
 			error: null,
 			profile: null,
 		};
-		// Fetch profile in background
-		fetchProfile(pubkey).then((profile) => {
-			if (profile) authState.profile = profile;
-		});
+		loadProfileFromEventStore(pubkey);
 		return true;
 	} catch (err) {
 		const message = err instanceof Error ? err.message : 'Invalid private key';
@@ -294,10 +289,7 @@ export async function connectWithBunker(bunkerUri: string): Promise<boolean> {
 				profile: null,
 			};
 
-			// Fetch profile in background
-			fetchProfile(pubkey).then((profile) => {
-				if (profile) authState.profile = profile;
-			});
+			loadProfileFromEventStore(pubkey);
 
 			return true;
 		} catch (error) {
@@ -315,6 +307,9 @@ export async function connectWithBunker(bunkerUri: string): Promise<boolean> {
  * Disconnect and clear auth state
  */
 export async function disconnect(): Promise<void> {
+	activeProfileSubscription?.unsubscribe();
+	activeProfileSubscription = null;
+
 	// Clean up bunker connection if active
 	if (activeBunkerSigner) {
 		try {

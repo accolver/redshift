@@ -12,7 +12,6 @@ import {
 	MAX_NIP46_EVENT_AGE_SECONDS,
 	MAX_NIP46_PARAM_BYTES,
 	MAX_NIP46_REQUESTS_PER_MINUTE,
-	MAX_NIP46_SESSIONS,
 	NIP46_KIND,
 	type Nip46RelayPool,
 	createNip46BunkerHandler,
@@ -40,6 +39,26 @@ describe('NIP-46 message encryption', () => {
 });
 
 describe('NIP-46 bounds', () => {
+	it('rejects handler construction without a nonempty pairing secret', () => {
+		const baseOptions = {
+			signerSecretKey: new Uint8Array(32).fill(1),
+			userSecretKey: new Uint8Array(32).fill(2),
+			relays: ['wss://relay.test'],
+		};
+		expect(() => createNip46BunkerHandler({ ...baseOptions, secret: '' })).toThrow(
+			'pairing secret is required',
+		);
+		expect(() => createNip46BunkerHandler({ ...baseOptions, secret: '   ' })).toThrow(
+			'pairing secret is required',
+		);
+		expect(() =>
+			createNip46BunkerHandler(baseOptions as typeof baseOptions & { secret: string }),
+		).toThrow('pairing secret is required');
+		expect(() =>
+			startNip46BunkerService(baseOptions as typeof baseOptions & { secret: string }),
+		).toThrow('pairing secret is required');
+	});
+
 	it('rejects stale, oversized, and incorrectly addressed transport events', () => {
 		const signerSecretKey = new Uint8Array(32).fill(1);
 		const clientSecretKey = new Uint8Array(32).fill(3);
@@ -74,17 +93,18 @@ describe('NIP-46 bounds', () => {
 		).toContain('recipient');
 	});
 
-	it('bounds parameter size, request rate, and connected sessions', async () => {
+	it('bounds parameter size and request rate', async () => {
 		const handler = createNip46BunkerHandler({
 			signerSecretKey: new Uint8Array(32).fill(1),
 			userSecretKey: new Uint8Array(32).fill(2),
 			relays: ['wss://relay.test'],
+			secret: 'connect-secret',
 		});
 		const firstClient = getPublicKey(new Uint8Array(32).fill(3));
 		await handler.handleRequest(firstClient, {
 			id: 'connect',
 			method: 'connect',
-			params: [handler.getSignerPublicKey()],
+			params: [handler.getSignerPublicKey(), 'connect-secret'],
 		});
 		const oversized = await handler.handleRequest(firstClient, {
 			id: 'oversized',
@@ -102,18 +122,6 @@ describe('NIP-46 bounds', () => {
 			});
 		}
 		expect(finalResponse.error).toContain('rate-limited');
-
-		for (let index = 4; index < MAX_NIP46_SESSIONS + 4; index++) {
-			const client = getPublicKey(new Uint8Array(32).fill(index));
-			const response = await handler.handleRequest(client, {
-				id: `connect-${index}`,
-				method: 'connect',
-				params: [handler.getSignerPublicKey()],
-			});
-			if (index === MAX_NIP46_SESSIONS + 3) {
-				expect(response.error).toContain('session limit');
-			}
-		}
 	});
 });
 
@@ -140,7 +148,7 @@ describe('NIP-46 relay service', () => {
 			},
 			close() {},
 		};
-		startNip46BunkerService({
+		const service = startNip46BunkerService({
 			signerSecretKey,
 			userSecretKey,
 			relays: ['wss://relay.test', 'wss://backup.test'],
@@ -176,6 +184,60 @@ describe('NIP-46 relay service', () => {
 			id: 'connect-1',
 			result: 'ack',
 		});
+		await service.close();
+	});
+
+	it('stops accepted work before closing the relay pool', async () => {
+		const signerSecretKey = new Uint8Array(32).fill(1);
+		const userSecretKey = new Uint8Array(32).fill(2);
+		const clientSecretKey = new Uint8Array(32).fill(3);
+		const signerPubkey = getPublicKey(signerSecretKey);
+		let onevent: ((event: Event) => void | Promise<void>) | null = null;
+		let poolClosed = false;
+		let publishCalls = 0;
+		let publishAfterClose = 0;
+		const relayPool: Nip46RelayPool = {
+			subscribeMany(_relays, _filter, handlers) {
+				onevent = handlers.onevent;
+				return { close() {} };
+			},
+			publish() {
+				publishCalls++;
+				if (poolClosed) publishAfterClose++;
+				return [Promise.resolve()];
+			},
+			close() {
+				poolClosed = true;
+			},
+		};
+		const service = startNip46BunkerService({
+			signerSecretKey,
+			userSecretKey,
+			relays: ['wss://relay.test'],
+			secret: 'connect-secret',
+			relayPool,
+		});
+		const requestEvent = finalizeEvent(
+			{
+				kind: NIP46_KIND,
+				content: encryptNip46Message(clientSecretKey, signerPubkey, {
+					id: 'connect-close-race',
+					method: 'connect',
+					params: [signerPubkey, 'connect-secret'],
+				}),
+				tags: [['p', signerPubkey]],
+				created_at: Math.floor(Date.now() / 1000),
+			},
+			clientSecretKey,
+		);
+
+		const handling = Promise.resolve(onevent!(requestEvent));
+		await service.close();
+		await handling;
+
+		expect(poolClosed).toBe(true);
+		expect(publishCalls).toBe(0);
+		expect(publishAfterClose).toBe(0);
 	});
 
 	it('ignores invalid, undecryptable, and response-shaped relay events', async () => {
@@ -196,7 +258,7 @@ describe('NIP-46 relay service', () => {
 			},
 			close() {},
 		};
-		startNip46BunkerService({
+		const service = startNip46BunkerService({
 			signerSecretKey,
 			userSecretKey,
 			relays: ['wss://relay.test'],
@@ -240,6 +302,7 @@ describe('NIP-46 relay service', () => {
 		);
 
 		expect(published).toHaveLength(0);
+		await service.close();
 	});
 });
 

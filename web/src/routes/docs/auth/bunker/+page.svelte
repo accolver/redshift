@@ -2,7 +2,7 @@
 import CodeBlock from '$lib/components/CodeBlock.svelte';
 import ProseHeading from '$lib/components/ProseHeading.svelte';
 import DocsPage from '$lib/components/DocsPage.svelte';
-import { Shield, Server, Smartphone, Users, Building2, Zap, Globe, Terminal, AlertTriangle } from '@lucide/svelte';
+import { Shield, Server, Smartphone, Zap, Globe, Terminal, AlertTriangle } from '@lucide/svelte';
 </script>
 
 <svelte:head>
@@ -85,11 +85,11 @@ import { Shield, Server, Smartphone, Users, Building2, Zap, Globe, Terminal, Ale
 			</div>
 
 			<div class="flex items-start gap-3 rounded-lg border border-border bg-card p-4">
-				<Users class="size-5 shrink-0 text-tokyo-green" />
+				<Zap class="size-5 shrink-0 text-tokyo-green" />
 				<div>
-					<p class="font-medium leading-5">Team Access</p>
+					<p class="font-medium leading-5">Individual Automation</p>
 					<p class="mt-1 text-sm text-muted-foreground">
-						Multiple team members can sign with a shared identity (with proper controls).
+						Keep one individual's signing key outside the CLI process while automating approved requests.
 					</p>
 				</div>
 			</div>
@@ -118,7 +118,7 @@ import { Shield, Server, Smartphone, Users, Building2, Zap, Globe, Terminal, Ale
 								<span class="rounded-full bg-tokyo-green px-2 py-0.5 text-xs font-medium text-white">Recommended</span>
 							</span>
 						</td>
-						<td class="px-4 py-3 text-muted-foreground">Teams, CI/CD, self-hosted</td>
+						<td class="px-4 py-3 text-muted-foreground">Individual CLI, CI/CD, self-hosted</td>
 						<td class="px-4 py-3 text-muted-foreground">2 min</td>
 						<td class="px-4 py-3 text-muted-foreground">macOS, Linux, Windows</td>
 					</tr>
@@ -138,36 +138,19 @@ import { Shield, Server, Smartphone, Users, Building2, Zap, Globe, Terminal, Ale
 			</table>
 		</div>
 
-		<!-- Teams & Enterprise Recommendation -->
-		<div class="not-prose my-8 rounded-lg border-2 border-tokyo-green bg-tokyo-green/5 p-6">
+		<div class="not-prose my-8 rounded-lg border-2 border-tokyo-orange bg-tokyo-orange/5 p-6">
 			<div class="flex items-start gap-4">
-				<Building2 class="size-8 shrink-0 text-tokyo-green" />
+				<AlertTriangle class="size-8 shrink-0 text-tokyo-orange" />
 				<div>
-					<h3 class="text-lg font-semibold text-tokyo-green">Recommended for Teams & Enterprise</h3>
+					<h3 class="text-lg font-semibold text-tokyo-orange">Current scope: individual NIP-46</h3>
 					<p class="mt-2 text-muted-foreground">
-						For organizations using <strong>Redshift Teams</strong> or <strong>Enterprise SSO</strong>, 
-						we recommend <strong>nak bunker</strong> deployed on your own infrastructure. It provides:
+						Redshift v0.14.0 verifies an individual remote-signer workflow with the pinned
+						<code>nak</code> v0.19.7 test fixture. Shared custody, role-based access,
+						invitations, organizational recovery, and SSO are not launched. Upstream bunker
+						client authorization is not a Redshift team-access or compliance control.
 					</p>
-					<ul class="mt-3 space-y-2 text-sm text-muted-foreground">
-						<li class="flex items-center gap-2">
-							<Shield class="size-4 text-tokyo-green" />
-							<span>Self-hosted with no external dependencies</span>
-						</li>
-						<li class="flex items-center gap-2">
-							<Server class="size-4 text-tokyo-green" />
-							<span>Persistent configuration across restarts</span>
-						</li>
-						<li class="flex items-center gap-2">
-							<Users class="size-4 text-tokyo-green" />
-							<span>Authorized client pubkeys for team access</span>
-						</li>
-						<li class="flex items-center gap-2">
-							<Building2 class="size-4 text-tokyo-green" />
-							<span>Run in secure enclaves for compliance requirements</span>
-						</li>
-					</ul>
-					<a href="#nak-bunker" class="mt-4 inline-flex items-center gap-1 text-sm font-medium text-tokyo-green hover:underline">
-						Jump to Setup Guide →
+					<a href="#nak-bunker" class="mt-4 inline-flex items-center gap-1 text-sm font-medium text-tokyo-orange hover:underline">
+						Jump to the tested reference →
 					</a>
 				</div>
 			</div>
@@ -220,36 +203,35 @@ redshift secrets list`} />
 
 		<ProseHeading level={2} id="bunker-options">Bunker Options</ProseHeading>
 
-		<!-- Option 1: nak (RECOMMENDED) -->
-		<ProseHeading level={3} id="nak-bunker">nak bunker (Teams & CI/CD)</ProseHeading>
+		<!-- Option 1: pinned nak reference -->
+		<ProseHeading level={3} id="nak-bunker">nak bunker (Individual & CI/CD)</ProseHeading>
 		<div class="not-prose my-4 flex items-start gap-3 rounded-lg border-2 border-tokyo-green bg-tokyo-green/5 p-4">
 			<Terminal class="size-5 shrink-0 text-tokyo-green" />
 			<div>
 				<p class="flex items-center gap-2 font-medium">
-					Best for: Teams, CI/CD pipelines, self-hosted infrastructure
-					<span class="rounded-full bg-tokyo-green px-2 py-0.5 text-xs font-medium text-white">Recommended</span>
+					Tested reference: individual CLI, CI/CD, self-hosted infrastructure
+					<span class="rounded-full bg-tokyo-green px-2 py-0.5 text-xs font-medium text-white">Pinned in tests</span>
 				</p>
 				<p class="mt-1 text-sm text-muted-foreground">
-					The "nostr army knife" CLI includes a production-ready bunker server with no external dependencies.
+					Redshift's local and release gates exercise <code>nak</code> v0.19.7. Operators must assess upstream security, persistence, availability, and upgrades for their own environment.
 				</p>
 			</div>
 		</div>
 
 		<p>
-			<strong>Why nak bunker for Teams?</strong>
+			<strong>Why use the pinned nak reference?</strong>
 		</p>
 		<ul>
-			<li><strong>Self-contained</strong> - No external services to rely on, fully self-hosted</li>
-			<li><strong>Persistent configuration</strong> - Survives restarts with <code>--persist</code></li>
-			<li><strong>Authorized clients</strong> - Whitelist specific pubkeys with <code>-k</code> flag</li>
-			<li><strong>Actively maintained</strong> - Core Nostr infrastructure by fiatjaf</li>
-			<li><strong>Enterprise-ready</strong> - Deploy in secure enclaves for compliance</li>
+			<li><strong>Verified interoperability</strong> - Redshift tests the exact pinned version through a real local relay</li>
+			<li><strong>Separate signer process</strong> - The Redshift CLI does not need the signing key</li>
+			<li><strong>Explicit client authorization</strong> - Upstream controls can limit client pubkeys, but do not provide Redshift RBAC</li>
+			<li><strong>Operator-owned deployment</strong> - Persistence, hardening, monitoring, and recovery remain your responsibility</li>
 		</ul>
 
 		<ProseHeading level={4} id="nak-install">Installation</ProseHeading>
 
 		<CodeBlock language="bash" code={`# Install via Go
-go install github.com/fiatjaf/nak@latest
+go install github.com/fiatjaf/nak@v0.19.7
 
 # Or download pre-built binary from releases:
 # https://github.com/fiatjaf/nak/releases
@@ -283,58 +265,13 @@ redshift login --bunker-stdin
 # Re-authenticate an existing Redshift CLI profile through the same protected input path.
 redshift login --force --bunker-stdin`} />
 
-		<ProseHeading level={4} id="nak-teams">Teams Setup (Persistent)</ProseHeading>
+		<ProseHeading level={4} id="nak-operation">Persistent Operation Boundary</ProseHeading>
 		<p>
-			For production team use, enable persistence and authorize specific client pubkeys:
-		</p>
-
-		<CodeBlock language="bash" code={`# First-time setup: create persistent bunker with authorized clients
-nak bunker --persist \\
-  --sec ncryptsec1... \\
-  -k <alice-pubkey> \\
-  -k <bob-pubkey> \\
-  -k <ci-runner-pubkey> \\
-  relay.damus.io nos.lol
-
-# Subsequent runs: just use --persist
-nak bunker --persist
-
-# The bunker remembers:
-# - Your encrypted secret key
-# - Authorized client pubkeys
-# - Relay configuration`} />
-
-		<ProseHeading level={4} id="nak-enterprise">Enterprise Deployment</ProseHeading>
-		<p>
-			For <strong>Redshift Enterprise</strong> with compliance requirements:
-		</p>
-
-		<CodeBlock language="bash" code={`# Run as a systemd service
-# /etc/systemd/system/redshift-bunker.service
-[Unit]
-Description=Redshift NIP-46 Bunker
-After=network.target
-
-[Service]
-Type=simple
-User=redshift
-ExecStart=/usr/local/bin/nak bunker --persist
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target`} />
-
-		<p>
-			For SSO integration, the bunker can be deployed in:
-		</p>
-		<ul>
-			<li>AWS Nitro Enclaves</li>
-			<li>Azure Confidential Computing</li>
-			<li>Air-gapped infrastructure</li>
-		</ul>
-		<p>
-			Contact us for Enterprise SSO bridge configuration (Okta/AzureAD → Nostr identity mapping).
+			A long-running bunker is independent infrastructure that you operate. Review the pinned
+			upstream version's persistence, authorization, service supervision, backup, upgrade, and
+			recovery documentation before relying on it. Redshift does not currently provide managed
+			bunker hosting, shared custody, organizational recovery, compliance certification, or an
+			identity-provider bridge.
 		</p>
 
 		<a href="https://github.com/fiatjaf/nak" target="_blank" rel="noopener" class="text-tokyo-blue hover:underline">
@@ -342,13 +279,14 @@ WantedBy=multi-user.target`} />
 		</a>
 
 		<!-- Option 2: nsec.app -->
-		<ProseHeading level={3} id="nsec-app">nsec.app (Cross-Platform, No Setup)</ProseHeading>
+		<ProseHeading level={3} id="nsec-app">nsec.app (Third-Party Signer)</ProseHeading>
 		<div class="not-prose my-4 flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 			<Globe class="size-5 shrink-0 text-tokyo-cyan" />
 			<div>
-				<p class="font-medium">Best for: Personal use, mobile users, zero setup</p>
+				<p class="font-medium">Compatibility is not release-certified</p>
 				<p class="mt-1 text-sm text-muted-foreground">
-					A hosted non-custodial key storage with remote signing. Works everywhere.
+					nsec.app is an independent service. Review its custody, privacy, availability, and
+					current NIP-46 compatibility before using it; Redshift's release evidence does not certify it.
 				</p>
 			</div>
 		</div>
@@ -369,13 +307,14 @@ redshift login --connect
 		</a>
 
 		<!-- Option 3: Amber -->
-		<ProseHeading level={3} id="amber-android">Amber (Android Mobile Signer)</ProseHeading>
+		<ProseHeading level={3} id="amber-android">Amber (Third-Party Android Signer)</ProseHeading>
 		<div class="not-prose my-4 flex items-start gap-3 rounded-lg border border-border bg-card p-4">
 			<Smartphone class="size-5 shrink-0 text-tokyo-purple" />
 			<div>
-				<p class="font-medium">Best for: Android users who want phone-as-bunker</p>
+				<p class="font-medium">Compatibility is not release-certified</p>
 				<p class="mt-1 text-sm text-muted-foreground">
-					Your phone becomes the signing device. No server required.
+					Amber is independent software. Review its custody model and current NostrConnect/NIP-46
+					compatibility; Redshift's release evidence currently certifies only the pinned nak fixture.
 				</p>
 			</div>
 		</div>
@@ -441,10 +380,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       
       - name: Install Redshift
-        run: curl -fsSL https://redshift.dev/install | sh
+        run: curl -fsSL https://redshiftapp.com/install | sh
         
       - name: Deploy with secrets
         env:
@@ -467,11 +406,10 @@ jobs:
 			<div class="flex items-start gap-3">
 				<Zap class="size-5 shrink-0 text-tokyo-blue" />
 				<div>
-					<p class="font-medium text-tokyo-blue">Pro Tip: Teams CI/CD</p>
+					<p class="font-medium text-tokyo-blue">Individual CI/CD boundary</p>
 					<p class="mt-1 text-sm text-muted-foreground">
-						For Redshift Teams, deploy a dedicated <strong>nak bunker</strong> with your CI runner's pubkey 
-						pre-authorized using the <code>-k</code> flag. This enables fully automated deployments 
-						without manual approval steps.
+						Use a dedicated signer identity and narrowly authorized client for each automation context.
+						Upstream allowlists do not provide Redshift team RBAC, approval workflows, or shared recovery.
 					</p>
 				</div>
 			</div>
@@ -497,7 +435,7 @@ jobs:
 		<ProseHeading level={2} id="security-considerations">Security Considerations</ProseHeading>
 		<ul>
 			<li><strong>Bunker security is critical</strong> - A compromised bunker means a compromised identity</li>
-			<li><strong>Use HTTPS relays</strong> - Ensure the relay connection is encrypted</li>
+			<li><strong>Use WSS relays</strong> - Use encrypted relay transport except for explicit loopback development</li>
 			<li><strong>Rotate secrets</strong> - Periodically regenerate bunker connection secrets</li>
 			<li><strong>Monitor usage</strong> - Watch for unexpected signing requests</li>
 			<li><strong>Limit permissions</strong> - Configure the bunker to only allow necessary operations</li>
@@ -507,12 +445,11 @@ jobs:
 			<div class="flex items-start gap-3">
 				<Shield class="size-5 shrink-0 text-tokyo-green" />
 				<div>
-					<p class="font-medium text-tokyo-green">Enterprise Security</p>
+					<p class="font-medium text-tokyo-green">Operator security boundary</p>
 					<p class="mt-1 text-sm text-muted-foreground">
-						For Redshift Enterprise, deploy <strong>nak bunker</strong> in a hardened environment 
-						(AWS Nitro Enclaves, Azure Confidential Computing, or air-gapped infrastructure). 
-						The <code>--persist</code> flag stores encrypted keys locally - combine with HSM-backed 
-						storage where compliance requires it.
+						A remote signer moves key custody; it does not make the workflow compliant or managed.
+						Harden, monitor, back up, and recover the signer according to your own threat model,
+						and test revocation before unattended use.
 					</p>
 				</div>
 			</div>

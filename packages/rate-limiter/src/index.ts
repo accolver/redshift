@@ -452,6 +452,7 @@ export class ResilientSimplePool extends SimplePool {
 	private readonly limiters = new Map<string, RateLimiter>();
 	private readonly policy: ResilientSimplePoolOptions;
 	private closed = false;
+	private destroyed = false;
 
 	constructor(options: ResilientSimplePoolOptions = {}) {
 		super({ enableReconnect: true });
@@ -459,25 +460,43 @@ export class ResilientSimplePool extends SimplePool {
 	}
 
 	override publish(relays: string[], event: Event, params?: PublishParams): Promise<string>[] {
+		const configuredRetry = this.policy.backoff?.retry;
+		const defaultRetry = PUBLISH_BACKOFF_OPTIONS.retry;
 		return [...new Set(relays)].map((relay) =>
-			withPublishBackoff(async () => {
-				if (this.closed) throw new Error('forbidden: relay pool is closed');
-				const limiter = this.getLimiter(relay);
-				await limiter.waitForSlot();
-				if (this.closed) throw new Error('forbidden: relay pool is closed');
-				if (this.policy.publishRelay) return this.policy.publishRelay(relay, event, params);
-				const publication = super.publish([relay], event, params)[0];
-				if (!publication) throw new Error(`No publication promise created for ${relay}`);
-				return publication;
-			}, this.policy.backoff),
+			withPublishBackoff(
+				async () => {
+					if (this.closed) throw new Error('forbidden: relay pool is closed');
+					const limiter = this.getLimiter(relay);
+					await limiter.waitForSlot();
+					if (this.closed) throw new Error('forbidden: relay pool is closed');
+					if (this.policy.publishRelay) return this.policy.publishRelay(relay, event, params);
+					const publication = super.publish([relay], event, params)[0];
+					if (!publication) throw new Error(`No publication promise created for ${relay}`);
+					return publication;
+				},
+				{
+					...this.policy.backoff,
+					retry: (error, attemptNumber) => {
+						if (this.closed) return false;
+						if (configuredRetry) return configuredRetry(error, attemptNumber);
+						return defaultRetry ? defaultRetry(error, attemptNumber) : !isPermanentError(error);
+					},
+				},
+			),
 		);
 	}
 
-	override destroy() {
+	beginClose() {
 		if (this.closed) return;
 		this.closed = true;
 		for (const limiter of this.limiters.values()) limiter.reset();
 		this.limiters.clear();
+	}
+
+	override destroy() {
+		if (this.destroyed) return;
+		this.beginClose();
+		this.destroyed = true;
 		super.destroy();
 	}
 

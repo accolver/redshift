@@ -212,8 +212,19 @@ test('standalone dashboard hydrates and offers secure fallback when NIP-07 is un
 	const extension = page.getByRole('button', { name: /Browser Extension/ });
 	await expect(extension).toBeDisabled();
 	await expect(extension).toContainText('No extension detected');
-	await expect(page.getByRole('button', { name: /Private Key \(nsec\)/ })).toBeEnabled();
+	const privateKeyOption = page.getByRole('button', { name: /Private Key \(nsec\)/ });
+	await expect(privateKeyOption).toBeEnabled();
 	await expect(page.getByRole('button', { name: /Bunker URL \(NIP-46\)/ })).toBeEnabled();
+
+	await privateKeyOption.click();
+	const privateKeyInput = page.locator('input#nsec');
+	await expect(privateKeyInput).toHaveAttribute('type', 'password');
+	await page.getByRole('button', { name: 'Reveal private key' }).click();
+	await expect(privateKeyInput).toHaveAttribute('type', 'text');
+	await expect(page.getByRole('button', { name: 'Hide private key' })).toBeVisible();
+	await privateKeyInput.fill('not-a-valid-nsec');
+	await page.getByRole('dialog').getByRole('button', { name: 'Connect', exact: true }).click();
+	await expect(page.getByRole('alert')).toContainText('Invalid');
 });
 
 test('browser exposes degraded relay state and retries only the unavailable relay with the exact event', async ({

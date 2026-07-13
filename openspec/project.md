@@ -8,8 +8,9 @@ No third party can access, revoke, or compromise sensitive data.
 
 ### Goals
 
-- Replicate the developer experience (DX) of **Doppler** while using Nostr for
-  decentralized storage
+- Provide a **Doppler-inspired** developer experience while using Nostr for
+  decentralized storage, with an explicit Redshift command contract rather than
+  a full compatibility or drop-in claim
 - Ensure all encryption happens client-side - secrets are never stored in
   plaintext on any server
 - Provide a single-binary CLI with embedded web admin UI
@@ -103,7 +104,7 @@ package.
 #### Event Structure
 
 - **Kind 30078** - Arbitrary Custom App Data (inner rumor)
-- **d-tag format**: `{projectSlug}|{environment}` (pipe-separated)
+- **d-tag format**: `{projectSlug}|{environment}` (pipe-separated), where `projectSlug` is the immutable CLI project identifier used by current commands; internal metadata UUIDs remain distinct and are not secret d-tag components
 - **Gift Wrap type tag**: `["t", "redshift-secrets"]` on outer envelope
 
 #### Error Handling
@@ -166,8 +167,8 @@ Use typed errors from `cli/src/lib/errors.ts`:
 
 ```typescript
 interface Project {
-  id: string; // Internal UUID (for event d-tags)
-  slug: string; // Immutable, CLI-friendly (lowercase, hyphens)
+  id: string; // Internal metadata UUID; not used in secret d-tags
+  slug: string; // Immutable CLI identifier and secret d-tag project component
   displayName: string; // Human-readable (can be renamed)
   environments: Environment[];
   createdAt: number;
@@ -210,7 +211,7 @@ interface Project {
 ### Nostr Relays
 
 - Public relays for free tier (user-configurable)
-- Redshift Cloud managed relay for paid tier ($5/month)
+- Proposed Redshift Cloud managed relay hypothesis ($5/month); no paid service or production endpoint is currently available
 
 ### Key Libraries
 
@@ -248,7 +249,7 @@ development. See `.telos/TELOS.md` for the complete hierarchy.
 | ----- | ---------------------- | --------------------------------------- |
 | L9    | Telos-Guardian         | Ultimate purpose: user sovereignty      |
 | L8    | Market-Analyst         | Business value: free tier + paid tiers  |
-| L7    | Insight-Synthesizer    | Product strategy: Doppler-compatible DX |
+| L7    | Insight-Synthesizer    | Product strategy: Doppler-inspired, Redshift-defined DX |
 | L6    | UX-Simulator           | Tokyo Night theme, minimalist design    |
 | L5    | Journey-Validator      | User workflows: login → edit → run      |
 | L4    | Integration-Contractor | NIP-59, NIP-09, Kind 30078 contracts    |

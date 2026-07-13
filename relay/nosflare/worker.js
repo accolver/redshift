@@ -45,14 +45,14 @@ __export(config_exports, {
 });
 var relayNpub = "npub14lcrmzysc0fsxyf46c60mmw7a3jj6akc9zewl0futhjrplqhu6uslc4x3q";
 var relayLnAddress = "alan@minibits.cash";
-var PAY_TO_RELAY_ENABLED = true;
+var PAY_TO_RELAY_ENABLED = false;
 var RELAY_ACCESS_PRICE_SATS = 12121;
 var AUTH_REQUIRED = true;
 var AUTH_TIMEOUT_MS = 6e5;
 var MAX_PRINCIPAL_SUBSCRIPTIONS = 100;
 var relayInfo = {
-  name: "Redshift Managed Relay",
-  description: "Managed relay for Redshift Cloud subscribers. Encrypted secrets storage only.",
+  name: "Redshift Managed Relay Candidate",
+  description: "Development candidate; no Cloud subscription, retention guarantee, or SLA is launched.",
   pubkey: "aff03d8890c3d3031135d634fdeddeec652d76d828b2efbd3c5de430fc17e6b9",
   contact: "support@redshiftapp.com",
   supported_nips: [1, 11, 40, 42, 59],
@@ -4238,8 +4238,8 @@ function serveLandingPage() {
   const nonce = crypto.randomUUID().replace(/-/g, "");
   const paySection = PAY_TO_RELAY_ENABLED2 ? `
     <div id="paySection" class="subscribe-section">
-      <p class="price-info">Managed relay access costs ${RELAY_ACCESS_PRICE_SATS2.toLocaleString()} sats.</p>
-      <a class="subscribe-button" href="https://redshiftapp.com/admin">Manage Cloud access</a>
+      <p class="price-info">Payment mode is not launched.</p>
+      <a class="subscribe-button" href="https://redshiftapp.com/">Return to Redshift</a>
     </div>
   ` : "";
   const accessSection = `
@@ -4484,7 +4484,7 @@ function serveLandingPage() {
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                 <polyline points="22 4 12 14.01 9 11.01"></polyline>
             </svg>
-            Cloud Subscriber
+            Development Candidate
         </div>
 
         ${paySection}
@@ -4508,7 +4508,7 @@ function serveLandingPage() {
                 <svg class="benefit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"></path>
                 </svg>
-                <span class="benefit-text">Lifetime access</span>
+                <span class="benefit-text">No service launch or SLA</span>
             </div>
         </div>
         

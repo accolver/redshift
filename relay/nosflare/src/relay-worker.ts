@@ -1780,7 +1780,7 @@ async function queryEvents(
 	}
 }
 
-function handleRelayInfoRequest(request: Request): Response {
+export function handleRelayInfoRequest(request: Request): Response {
 	const responseInfo = { ...relayInfo };
 
 	if (PAY_TO_RELAY_ENABLED) {
@@ -1807,8 +1807,8 @@ export function serveLandingPage(): Response {
 	const paySection = PAY_TO_RELAY_ENABLED
 		? `
     <div id="paySection" class="subscribe-section">
-      <p class="price-info">Managed relay access costs ${RELAY_ACCESS_PRICE_SATS.toLocaleString()} sats.</p>
-      <a class="subscribe-button" href="https://redshiftapp.com/admin">Manage Cloud access</a>
+      <p class="price-info">Payment mode is not launched.</p>
+      <a class="subscribe-button" href="https://redshiftapp.com/">Return to Redshift</a>
     </div>
   `
 		: '';
@@ -2056,7 +2056,7 @@ export function serveLandingPage(): Response {
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                 <polyline points="22 4 12 14.01 9 11.01"></polyline>
             </svg>
-            Cloud Subscriber
+            Development Candidate
         </div>
 
         ${paySection}
@@ -2080,7 +2080,7 @@ export function serveLandingPage(): Response {
                 <svg class="benefit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"></path>
                 </svg>
-                <span class="benefit-text">Lifetime access</span>
+                <span class="benefit-text">No service launch or SLA</span>
             </div>
         </div>
         

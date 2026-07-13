@@ -86,7 +86,7 @@ describe('spawned CLI bunker workflows', () => {
 	let tempDir: string | null = null;
 
 	afterEach(async () => {
-		service?.close();
+		await service?.close();
 		service = null;
 		if (relayProcess) {
 			relayProcess.kill();

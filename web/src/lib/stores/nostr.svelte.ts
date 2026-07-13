@@ -2,8 +2,8 @@ import { REDSHIFT_KIND } from '$lib/constants';
 import { HISTORY_LIMITS, getRedshiftSecretsFilter } from '$lib/crypto';
 import { clearDecryptionCache } from '$lib/models/gift-wrap-secrets';
 import {
-	type QuorumReport,
 	QuorumError,
+	type QuorumReport,
 	RateLimiter,
 	executeWithQuorum,
 	getUnavailableTargets,
@@ -24,8 +24,8 @@ import {
 	takeUntil,
 	takeWhile,
 	tap,
-	timer,
 	timeout,
+	timer,
 } from 'rxjs';
 import type { Subscription } from 'rxjs';
 import {
@@ -199,9 +199,9 @@ export function clearPaymentCache(): void {
 	paymentStatusCache = null;
 }
 
-// Single EventStore instance for the entire app
-// Using `let` so it can be replaced with a fresh instance on disconnect/logout
-export let eventStore = new EventStore();
+// Single EventStore instance for the entire app. Disconnect clears it in place so
+// shared model subscriptions remain bound to the same lifecycle-owned store.
+export const eventStore = new EventStore();
 
 // Single RelayPool instance for the entire app
 export const relayPool = new RelayPool();
@@ -209,6 +209,7 @@ export const relayPool = new RelayPool();
 // Track active subscriptions
 let activeSubscription: { unsubscribe: () => void } | null = null;
 let managedRelayAuthSubscription: Subscription | null = null;
+let connectionFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
 interface ManagedAuthRelay {
 	readonly authenticated: boolean;
@@ -243,9 +244,6 @@ export function watchManagedRelayAuthentication(
 	});
 }
 
-// Track the latest event timestamp seen for incremental sync on reconnection
-let lastSeenTimestamp: number | null = null;
-
 // Relay connection status
 export type RelayStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -276,9 +274,13 @@ export function getRelayState(): RelayState {
  * Connect to relays and start syncing events for a user
  */
 export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS): void {
-	// Clean up any existing subscription
+	// Clean up resources owned by any previous connection lifecycle.
 	if (activeSubscription) {
 		activeSubscription.unsubscribe();
+	}
+	if (connectionFallbackTimer) {
+		clearTimeout(connectionFallbackTimer);
+		connectionFallbackTimer = null;
 	}
 
 	managedRelayAuthSubscription?.unsubscribe();
@@ -317,30 +319,17 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 		limit: HISTORY_LIMITS.maxObservedEvents,
 	};
 
-	// Build filters, adding `since` for incremental sync on reconnection
-	// Subtract 60 seconds as safety margin against clock skew between relays
-	const sinceTimestamp = lastSeenTimestamp ? lastSeenTimestamp - 60 : undefined;
-	const secretsFilterWithSince = sinceTimestamp
-		? { ...secretsFilter, since: sinceTimestamp }
-		: secretsFilter;
-	const redshiftFilter = sinceTimestamp
-		? { kinds: [REDSHIFT_KIND], authors: [pubkey], since: sinceTimestamp }
-		: { kinds: [REDSHIFT_KIND], authors: [pubkey] };
-	const profileFilter = sinceTimestamp
-		? { kinds: [0], authors: [pubkey], since: sinceTimestamp }
-		: { kinds: [0], authors: [pubkey] };
+	// Every connection performs the same bounded full query. Raw outer-event timestamps
+	// are untrusted and must never narrow a later state subscription.
+	const redshiftFilter = { kinds: [REDSHIFT_KIND], authors: [pubkey] };
+	const profileFilter = { kinds: [0], authors: [pubkey] };
 
 	activeSubscription = relayPool
-		.subscription(relays, [secretsFilterWithSince, redshiftFilter, profileFilter])
+		.subscription(relays, [secretsFilter, redshiftFilter, profileFilter])
 		.pipe(onlyEvents())
 		.subscribe({
 			next: (event: NostrEvent) => {
 				eventStore.add(event);
-
-				// Track the latest event timestamp for incremental sync
-				if (lastSeenTimestamp === null || event.created_at > lastSeenTimestamp) {
-					lastSeenTimestamp = event.created_at;
-				}
 
 				// Mark as connected once we receive any event
 				if (relayState.status !== 'connected') {
@@ -365,7 +354,8 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 	// New users with zero events will hit this, and it's not an error.
 	// Normal connections will be marked 'connected' when the first event arrives
 	// (see the next() handler above).
-	setTimeout(() => {
+	connectionFallbackTimer = setTimeout(() => {
+		connectionFallbackTimer = null;
 		if (relayState.status === 'connecting') {
 			relayState = {
 				...relayState,
@@ -386,6 +376,10 @@ export function disconnect(): void {
 		activeSubscription.unsubscribe();
 		activeSubscription = null;
 	}
+	if (connectionFallbackTimer) {
+		clearTimeout(connectionFallbackTimer);
+		connectionFallbackTimer = null;
+	}
 	managedRelayAuthSubscription?.unsubscribe();
 	managedRelayAuthSubscription = null;
 	relayState = {
@@ -395,13 +389,11 @@ export function disconnect(): void {
 		relays: [],
 		hasManagedAccess: false,
 	};
-	// Replace EventStore with a fresh instance to clear all cached events
-	// This prevents encrypted events from a previous user leaking to the next session
-	eventStore = new EventStore();
+	// Clear every cached event in place. This prevents cross-user leakage while
+	// keeping shared Applesauce model subscriptions bound across relay reconnects.
+	eventStore.removeByFilters({});
 	// Clear the decryption cache so decrypted secrets from the previous user are purged
 	clearDecryptionCache();
-	// Reset incremental sync timestamp so next session fetches all events
-	lastSeenTimestamp = null;
 	// Reset sync flag so next session will sync again
 	resetManagedRelaySync();
 	// Recovery state is scoped to the authenticated browser session.

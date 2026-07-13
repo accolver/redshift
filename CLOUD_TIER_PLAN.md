@@ -1,5 +1,11 @@
 # Redshift Cloud Tier Implementation Plan
 
+> **Historical non-normative planning document.** The active canonical Cloud
+> hypothesis is the deferred, unapproved `$5 USD/month` proposal in
+> `openspec/changes/add-cloud-pricing/`. No paid service, production endpoint,
+> retention policy, managed backup, or SLA is launched. All implementation,
+> pricing, dates, and guarantees below are obsolete research, not current truth.
+
 ## Overview
 
 The Cloud tier (12,121 sats one-time) provides managed high-availability relays with

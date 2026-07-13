@@ -97,7 +97,7 @@ import { CircleCheck, CircleX, Minus } from '@lucide/svelte';
 						<td class="px-2 py-3 text-center sm:px-4"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
 					</tr>
 					<tr>
-						<td class="px-2 py-3 sm:px-4">No infra to manage</td>
+						<td class="px-2 py-3 sm:px-4">No Redshift-operated service required</td>
 						<td class="px-2 py-3 text-center sm:px-4"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
 						<td class="px-2 py-3 text-center sm:px-4"><CircleCheck class="mx-auto size-5 text-tokyo-green" /></td>
 						<td class="px-2 py-3 text-center sm:px-4"><CircleX class="mx-auto size-5 text-tokyo-red" /></td>
@@ -135,15 +135,15 @@ import { CircleCheck, CircleX, Minus } from '@lucide/svelte';
 			</table>
 		</div>
 		<p class="text-sm text-muted-foreground">
-			<CircleCheck class="inline size-4 text-tokyo-green" /> = Full support, 
-			<Minus class="inline size-4 text-muted-foreground" /> = Partial/Coming soon, 
+			<CircleCheck class="inline size-4 text-tokyo-green" /> = Supported in the current individual product,
+			<Minus class="inline size-4 text-muted-foreground" /> = Not available in the current individual product,
 			<CircleX class="inline size-4 text-tokyo-red" /> = Not available
 		</p>
 
 		<ProseHeading level={2} id="when-to-use-redshift">When to Use Redshift</ProseHeading>
 		<p><strong>Redshift is ideal for:</strong></p>
 		<ul>
-			<li>Solo developers and small teams</li>
+			<li>Individual developers and open-source maintainers</li>
 			<li>Privacy-conscious developers</li>
 			<li>Open source projects</li>
 			<li>Side projects and indie hackers</li>

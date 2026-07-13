@@ -28,8 +28,8 @@
 		"noImplicitOverride": true,
 		"forceConsistentCasingInFileNames": true,
 		"skipLibCheck": true,
-		"types": ["bun-types"]
+		"types": ["bun"]
 	},
-	"include": ["src/**/*"],
+	"include": ["src/**/*", "tests/**/*"],
 	"exclude": ["node_modules"]
 }

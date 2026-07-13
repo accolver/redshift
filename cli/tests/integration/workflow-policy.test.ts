@@ -36,15 +36,16 @@ describe('GitHub Actions policy', () => {
 		}
 	});
 
-	it('keeps generated sources, formatting, and release-critical E2E explicit', () => {
+	it('keeps generated sources, formatting, typechecks, and release-critical E2E explicit', () => {
+		const ownedSourceScope =
+			'cli/src cli/scripts cli/tests packages tests/helpers web/src web/tests relay/nosflare/src relay/nosflare/tests';
 		for (const path of ['.github/workflows/ci.yml', '.github/workflows/release.yml']) {
 			const workflow = readWorkflow(path);
 			expect(workflow).toContain('bun run verify:embeds');
 			expect(workflow).toContain('cmp /tmp/embedded-files.ts cli/src/lib/embedded-files.ts');
 			expect(workflow).toContain('bun run verify:generated');
-			expect(workflow).toContain(
-				'bunx biome format cli/src packages tests/helpers web/src web/tests',
-			);
+			expect(workflow).toContain(`bunx biome format ${ownedSourceScope}`);
+			expect(workflow).toContain('bun run typecheck:packages');
 			for (const testPath of [
 				'tests/integration/binary-cli.test.ts',
 				'tests/integration/upgrade-binary-e2e.test.ts',
@@ -60,6 +61,15 @@ describe('GitHub Actions policy', () => {
 		}
 	});
 
+	it('verifies generated relay bytes without requiring a clean worktree', () => {
+		const relayPackage = JSON.parse(readRepositoryFile('relay/nosflare/package.json')) as {
+			scripts: Record<string, string>;
+		};
+		const verifyGenerated = relayPackage.scripts['verify:generated'];
+		expect(verifyGenerated).toContain('cmp');
+		expect(verifyGenerated).not.toContain('git diff');
+	});
+
 	it('blocks CI and releases on root and relay dependency advisories', () => {
 		const packageJson = JSON.parse(readRepositoryFile('package.json')) as {
 			scripts: Record<string, string>;
@@ -71,7 +81,7 @@ describe('GitHub Actions policy', () => {
 		}
 	});
 
-	it('keeps releases draft until verified and withdraws failed publication', () => {
+	it('keeps releases draft until verified and withdraws any non-successful published certification', () => {
 		const releasePlease = JSON.parse(readRepositoryFile('release-please-config.json')) as {
 			packages: Record<string, { draft?: boolean }>;
 		};
@@ -82,6 +92,15 @@ describe('GitHub Actions policy', () => {
 		expect(release).not.toContain('ref: ${{ needs.release-please.outputs.tag_name }}');
 		expect(release).toContain('--draft=false');
 		expect(release).toContain('name: Withdraw Failed Release');
+		for (const job of [
+			'verify-release',
+			'build-binaries',
+			'publish-release',
+			'verify-published-release',
+			'verify-published-macos',
+		]) {
+			expect(release).toContain(`needs.${job}.result != 'success'`);
+		}
 		expect(release).toContain('--latest=false');
 	});
 
@@ -109,11 +128,42 @@ describe('GitHub Actions policy', () => {
 
 		const manualVerification = readWorkflow('.github/workflows/verify-published-release.yml');
 		expect(manualVerification).toContain('workflow_dispatch:');
+		expect(manualVerification).toContain('resolve-release:');
+		expect(manualVerification).toContain('^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$');
+		expect(manualVerification).toContain('git/ref/tags/$TAG');
+		expect(manualVerification).toContain('releases/tags/$TAG');
+		expect(manualVerification).toContain('commits/$TAG');
+		expect(manualVerification).not.toContain('commits/${{ inputs.tag }}');
+		expect(manualVerification).toContain('ref: ${{ inputs.tag }}');
+		expect(manualVerification).toContain('git rev-parse HEAD');
+		expect(manualVerification).toContain('needs.resolve-release.outputs.source_digest');
 		expect(manualVerification).toContain('scripts/test-release-containers.sh');
 		expect(manualVerification).toContain('verify-macos:');
 		expect(manualVerification).toContain('platform: darwin/x64');
 		expect(manualVerification).toContain('platform: darwin/arm64');
 		expect(manualVerification).toContain('tests/release/container-entrypoint.sh');
+		expect(manualVerification).not.toContain('contents: write');
+		expect(manualVerification).not.toContain('gh release edit');
+	});
+
+	it('keeps relay credentials out of credential-free preflight', () => {
+		const workflow = readWorkflow('.github/workflows/deploy-relay.yml');
+		const preflight = workflow.slice(
+			workflow.indexOf('  preflight:'),
+			workflow.indexOf('  deploy:'),
+		);
+		expect(preflight).toContain('bun install --frozen-lockfile');
+		expect(preflight).not.toContain('environment: production');
+		expect(preflight).not.toContain('CLOUDFLARE_API_TOKEN');
+		expect(preflight).not.toContain('CLOUDFLARE_ACCOUNT_ID');
+		expect(workflow).toContain('needs: preflight');
+		expect(workflow).toContain("github.event_name == 'workflow_dispatch'");
+		expect(workflow).toContain("vars.MANAGED_RELAY_DEPLOY_APPROVED == 'true'");
+		expect(workflow).toContain('source_commit:');
+		expect(workflow).toContain('git rev-parse HEAD');
+		const deploymentStep = workflow.slice(workflow.indexOf('- name: Deploy declared worker'));
+		expect(deploymentStep).toContain('CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}');
+		expect(deploymentStep).toContain('CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}');
 	});
 
 	it('documents the immutable GitHub release ceremony and rollback', () => {

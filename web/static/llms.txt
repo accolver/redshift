@@ -1,55 +1,59 @@
 # Redshift
 
-> Redshift is a decentralized, censorship-resistant secret management platform built on the Nostr protocol. It provides a Doppler-compatible CLI for managing environment variables and secrets with client-side encryption.
+> Redshift is a sovereign secret-management tool built on Nostr. The certified v0.14.0 individual product provides a Doppler-inspired CLI with an explicit Redshift command contract; it does not claim full compatibility or drop-in behavior.
 
-Important notes:
+Important boundaries:
 
-- Redshift uses Nostr (NIP-78 application-specific data) for storing encrypted secrets across distributed relays
-- Secrets are encrypted client-side before being published - the server/relays never see plaintext
-- Authentication uses Nostr keys (nsec/npub) via NIP-07 browser extensions or direct key entry
-- The CLI is designed to be a drop-in replacement for Doppler's workflow (`redshift run`, `redshift secrets`)
+- Secret bundles are encrypted client-side with NIP-59 before publication; relays do not receive plaintext.
+- The CLI authenticates with a local nsec or an NIP-46 remote signer. NIP-07 is a browser-dashboard method, not a CLI login method.
+- History is bounded state observed from responding relays, not retained history, an audit log, offline recovery, or an SLA.
+- Cloud, paid subscriptions, Teams, Enterprise SSO, managed retention/backup, and availability guarantees are not launched.
 
-## Docs
+## Documentation
 
-- [Documentation](https://redshiftapp.com/docs): CLI commands reference, installation, and environment variables
-- [Tutorial](https://redshiftapp.com/tutorial): Step-by-step getting started guide covering installation, authentication, project setup, and secret management
+- [Documentation](https://redshiftapp.com/docs): supported product and security boundaries
+- [Installation](https://redshiftapp.com/docs/installation): verified Linux and macOS installer
+- [Quick Start](https://redshiftapp.com/docs/quickstart): authentication, project setup, secret management, and command execution
 
-## CLI Commands
+## Primary CLI Commands
 
-- `redshift login`: Authenticate with Nostr identity (supports --nsec, --bunker, or NIP-07)
-- `redshift setup`: Configure project and environment for current directory (creates redshift.yaml)
-- `redshift run -- <command>`: Run a command with secrets injected as environment variables
-- `redshift secrets list`: List all secrets in current project/environment
-- `redshift secrets set <KEY> <VALUE>`: Set a secret value
-- `redshift secrets get <KEY>`: Get a specific secret value
-- `redshift secrets delete <KEY>`: Delete a secret
-- `redshift serve`: Start the local web admin UI
+- `redshift login`: authenticate interactively with local nsec or NIP-46
+- `redshift login --bunker-stdin`: read a bunker URI through protected input
+- `redshift login --connect`: start client-initiated NostrConnect pairing
+- `redshift setup`: configure project/environment identifiers in `redshift.yaml`
+- `redshift secrets`: list redacted secret names and values
+- `redshift secrets set <KEY> <VALUE>`: set one secret
+- `redshift secrets get <KEY>`: read a redacted value; `--raw` explicitly reveals plaintext
+- `redshift secrets delete <KEY>`: publish current-state logical deletion
+- `redshift run -- <command> [args...]`: execute exact argv with secrets injected and Redshift credentials scrubbed
+- `redshift backup`, `redshift history`, and `redshift recovery`: user-initiated local portability and bounded relay-state workflows
+- `redshift serve`: start the embedded individual dashboard
 
 ## Installation
 
-```bash
-# Install via script
-curl -fsSL https://redshiftapp.com/install | sh
+The verified installer supports Linux and macOS on x64 and arm64 and requires GitHub CLI attestation verification:
 
-# Or with bun
-bun add -g redshift
+```bash
+curl -fsSL https://redshiftapp.com/install | sh
+redshift --version
 ```
+
+No npm, Bun, Homebrew, or Windows package is currently published.
 
 ## Configuration
 
-Redshift uses a `redshift.yaml` file in your project root:
+`redshift setup` creates identifier-only configuration:
 
 ```yaml
 project: my-app
 environment: development
+relays:
+  - wss://relay.damus.io
 ```
 
-Environment variables for CI/CD:
-- `REDSHIFT_NSEC`: Private key for authentication
-- `REDSHIFT_BUNKER`: Bunker URL for remote signing (NIP-46)
-- `REDSHIFT_CONFIG_DIR`: Override config directory (default: ~/.redshift)
+Keep nsec values, bunker pairing secrets, passphrases, raw secret output, and provider credentials out of configuration, argv, logs, and captured terminals.
 
-## Optional
+## References
 
-- [GitHub Repository](https://github.com/accolver/redshift): Source code, issues, and contributions
-- [Nostr Protocol](https://nostr.com): Background on the Nostr protocol that Redshift is built on
+- [GitHub Repository](https://github.com/accolver/redshift)
+- [Nostr Protocol](https://nostr.com)

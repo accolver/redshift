@@ -16,7 +16,7 @@ function shouldHighlight(tier: typeof tiers[number]) {
 
 <svelte:head>
 	<title>Pricing - Redshift</title>
-	<meta name="description" content="Redshift pricing plans. Free and open source for individuals, with paid tiers coming soon for teams and enterprises." />
+	<meta name="description" content="Redshift is free and open source for individual developers; paid tiers are not launched." />
 </svelte:head>
 
 <Navbar />
@@ -32,8 +32,9 @@ function shouldHighlight(tier: typeof tiers[number]) {
 			Simple, <span class="gradient-text">transparent</span> pricing
 		</h1>
 		<p class="mx-auto max-w-2xl text-lg text-muted-foreground">
-			Redshift is free and open source for individual developers. 
-			Paid tiers for teams and enterprises are coming soon.
+			Redshift is free and open source for individual developers. Cloud, Teams, and
+			Enterprise are not launched; no subscription, paid offer, retention guarantee, or SLA is
+			currently available.
 		</p>
 	</div>
 
@@ -73,7 +74,7 @@ function shouldHighlight(tier: typeof tiers[number]) {
 				{#if !tier.available}
 					<div class="absolute right-4 top-4">
 						<Badge variant="secondary" class="bg-tokyo-orange/10 text-tokyo-orange">
-							Coming Soon
+							Not Launched
 						</Badge>
 					</div>
 				{/if}
@@ -88,17 +89,8 @@ function shouldHighlight(tier: typeof tiers[number]) {
 						{#if tier.price === 0}
 							<span class="text-4xl font-bold">Free</span>
 							<span class="text-muted-foreground"> forever</span>
-						{:else if tier.price === null}
-							<span class="text-4xl font-bold">Custom</span>
-						{:else if tier.name === 'Cloud'}
-							<span class="text-4xl font-bold">12,121</span>
-							<span class="text-muted-foreground"> sats</span>
-							<div class="text-sm text-muted-foreground">one-time payment</div>
 						{:else}
-							<span class="text-4xl font-bold">${tier.price}</span>
-							<span class="text-muted-foreground">
-								{tier.name === 'Teams' ? '/user/mo' : '/month'}
-							</span>
+							<span class="text-2xl font-bold">{tier.priceLabel}</span>
 						{/if}
 					</div>
 
@@ -111,18 +103,10 @@ function shouldHighlight(tier: typeof tiers[number]) {
 						{/each}
 					</ul>
 
-					{#if tier.available}
+					{#if tier.ctaLink}
 						<Button 
 							href={tier.ctaLink} 
 							class="w-full bg-tokyo-blue transition-colors hover:bg-tokyo-blue/90"
-						>
-							{tier.cta}
-						</Button>
-					{:else if tier.ctaLink}
-						<Button 
-							href={tier.ctaLink}
-							variant="outline" 
-							class="w-full"
 						>
 							{tier.cta}
 						</Button>
@@ -153,10 +137,11 @@ function shouldHighlight(tier: typeof tiers[number]) {
 				</p>
 			</div>
 			<div class="rounded-lg border border-border/50 bg-card/50 p-6">
-				<h3 class="mb-2 font-semibold">What's coming in paid tiers?</h3>
+				<h3 class="mb-2 font-semibold">What is only proposed?</h3>
 				<p class="text-sm text-muted-foreground">
-					A future Cloud tier may add paid managed-relay access after deployment and
-					operational verification; no backup or uptime SLA is currently offered. Teams and
+					A future Cloud tier has an unapproved $5/month planning hypothesis. It may add
+					paid managed-relay access only after deployment and operational verification;
+					no subscription, retention guarantee, backup promise, or uptime SLA is currently offered. Teams and
 					Enterprise remain research directions whose custody, revocation, identity, and
 					compliance designs require approval before implementation.
 				</p>

@@ -17,20 +17,24 @@ A WebSocket SHALL bind one authenticated principal after strict NIP-42 AUTH usin
 - **WHEN** an authenticated socket submits AUTH for a different pubkey
 - **THEN** the relay rejects it and retains the original principal
 
-### Requirement: Recipient-Scoped Paid Gift Wrap Access
-For Redshift kind 1059 writes, the relay SHALL verify the ephemeral outer event while using its sole canonical Redshift `p` recipient as authenticated/paid principal. Reads SHALL require a paid authenticated principal and filters explicitly constrained to kind 1059, the same sole `#p`, and the Redshift type tag. Direct kind 30078 SHALL be rejected.
+### Requirement: Recipient-Scoped Gift Wrap Access
+For Redshift kind 1059 writes, the relay SHALL verify the ephemeral outer event while using its sole canonical Redshift `p` recipient as the authenticated principal. Reads SHALL require that authenticated principal and filters explicitly constrained to kind 1059, the same sole `#p`, and the Redshift type tag. Direct kind 30078 SHALL be rejected. The development candidate SHALL keep payment enforcement, payment endpoints, fees, and paid-service metadata disabled unless a separately approved commercial change is implemented.
 
-#### Scenario: Paid recipient write
-- **WHEN** a valid ephemeral-authored Gift Wrap targets the authenticated paid recipient
-- **THEN** the relay accepts it
+#### Scenario: Authenticated recipient write
+- **WHEN** a valid ephemeral-authored Gift Wrap targets the authenticated recipient
+- **THEN** the relay accepts it without requiring an unapproved payment record
 
 #### Scenario: Cross-recipient write
 - **WHEN** a socket authenticated as one principal publishes a Gift Wrap for another recipient
 - **THEN** the relay rejects it
 
 #### Scenario: Broad read
-- **WHEN** a paid authenticated principal sends a broad, mixed-kind, missing-recipient, or wrong-recipient filter
+- **WHEN** an authenticated principal sends a broad, mixed-kind, missing-recipient, or wrong-recipient filter
 - **THEN** the relay closes/rejects the subscription
+
+#### Scenario: Commercial mode is unapproved
+- **WHEN** the candidate serves NIP-11 metadata, its landing page, or HTTP routes
+- **THEN** it omits payment fees, payment URLs, payment controls, and active payment endpoints
 
 ### Requirement: Shared Identity Quotas
 Event, request, crypto-work, and active-connection limits SHALL be shared by authenticated identity across sockets and SHALL survive hibernation/reconstruction. Pre-authentication work SHALL have a bounded secondary limit.
