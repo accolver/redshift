@@ -5,11 +5,11 @@
 
 ### Bug Fixes
 
-* **release:** authenticate updater GitHub API requests ([097f47f](https://github.com/accolver/redshift/commit/097f47f77049bfdeaf35ba80acfe0640bb5a1ed1))
-* **release:** authenticate updater GitHub API requests ([bb2f8c1](https://github.com/accolver/redshift/commit/bb2f8c16288a9b3791efb1d055079acc88f30b8d))
+* **release:** authenticate updater GitHub API requests ([#53](https://github.com/accolver/redshift/pull/53)) ([bb2f8c1](https://github.com/accolver/redshift/commit/bb2f8c16288a9b3791efb1d055079acc88f30b8d))
 
 ## [0.14.1](https://github.com/accolver/redshift/compare/v0.14.0...v0.14.1) (2026-07-13)
 
+> **Certification status:** v0.14.1 was withdrawn from latest and marked prerelease after both macOS forced-updater journeys hit anonymous GitHub API rate limits. Its tag and assets remain preserved as incident evidence.
 
 ### Bug Fixes
 
