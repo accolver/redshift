@@ -10,6 +10,7 @@ import {
 	detectArch,
 	detectOS,
 	extractVersion,
+	githubApiHeaders,
 	parseTrustedChecksum,
 	replaceBinaryAtomically,
 	smokeTestDownloadedBinary,
@@ -95,6 +96,23 @@ describe('Upgrade Command', () => {
 
 		test('returns tag as-is when no v prefix and no version pattern', () => {
 			expect(extractVersion('latest')).toBe('latest');
+		});
+	});
+
+	describe('GitHub API requests', () => {
+		test('authenticates requests to the canonical GitHub API when a token is available', () => {
+			expect(githubApiHeaders('https://api.github.com', 'release-token')).toEqual({
+				Accept: 'application/vnd.github+json',
+				Authorization: 'Bearer release-token',
+				'X-GitHub-Api-Version': '2022-11-28',
+			});
+		});
+
+		test('never forwards a GitHub token to a test override origin', () => {
+			expect(githubApiHeaders('http://127.0.0.1:3000', 'release-token')).toEqual({
+				Accept: 'application/vnd.github+json',
+				'X-GitHub-Api-Version': '2022-11-28',
+			});
 		});
 	});
 

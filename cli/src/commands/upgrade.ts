@@ -24,6 +24,25 @@ function githubApiBase() {
 	return 'https://api.github.com';
 }
 
+export function githubApiHeaders(apiBase: string, token?: string) {
+	const headers: Record<string, string> = {
+		Accept: 'application/vnd.github+json',
+		'X-GitHub-Api-Version': '2022-11-28',
+	};
+	const normalizedToken = token?.trim();
+	if (apiBase === 'https://api.github.com' && normalizedToken) {
+		headers.Authorization = `Bearer ${normalizedToken}`;
+	}
+	return headers;
+}
+
+async function fetchGitHubApi(path: string) {
+	const apiBase = githubApiBase();
+	return fetch(`${apiBase}${path}`, {
+		headers: githubApiHeaders(apiBase, process.env.GH_TOKEN || process.env.GITHUB_TOKEN),
+	});
+}
+
 export interface UpgradeOptions {
 	force?: boolean;
 	version?: string;
@@ -96,7 +115,7 @@ export function detectArch(): string {
  * Fetch the latest release info from GitHub.
  */
 async function fetchLatestRelease(): Promise<GitHubRelease> {
-	const response = await fetch(`${githubApiBase()}/repos/${REPO}/releases/latest`);
+	const response = await fetchGitHubApi(`/repos/${REPO}/releases/latest`);
 
 	if (!response.ok) {
 		throw new Error(`Failed to fetch latest release: ${response.statusText}`);
@@ -109,7 +128,7 @@ async function fetchLatestRelease(): Promise<GitHubRelease> {
  * Fetch a specific release by tag.
  */
 async function fetchReleaseByTag(tag: string): Promise<GitHubRelease> {
-	const response = await fetch(`${githubApiBase()}/repos/${REPO}/releases/tags/${tag}`);
+	const response = await fetchGitHubApi(`/repos/${REPO}/releases/tags/${tag}`);
 
 	if (!response.ok) {
 		throw new Error(`Failed to fetch release ${tag}: ${response.statusText}`);
@@ -119,9 +138,7 @@ async function fetchReleaseByTag(tag: string): Promise<GitHubRelease> {
 }
 
 async function fetchReleaseSourceDigest(tag: string) {
-	const response = await fetch(
-		`${githubApiBase()}/repos/${REPO}/commits/${encodeURIComponent(tag)}`,
-	);
+	const response = await fetchGitHubApi(`/repos/${REPO}/commits/${encodeURIComponent(tag)}`);
 	if (!response.ok) {
 		throw new Error(`Failed to resolve source digest for release ${tag}: ${response.statusText}`);
 	}
