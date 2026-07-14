@@ -176,7 +176,9 @@ describe('GitHub Actions policy', () => {
 			workflow.indexOf('  preflight:'),
 			workflow.indexOf('  deploy:'),
 		);
-		expect(preflight).toContain('bun install --frozen-lockfile');
+		expect(preflight).toContain('name: Install locked product test dependencies');
+		expect(preflight).toContain('working-directory: .\n        run: bun install --frozen-lockfile');
+		expect(preflight).toContain('name: Install locked relay dependencies');
 		expect(preflight).not.toContain('environment: production');
 		expect(preflight).not.toContain('CLOUDFLARE_API_TOKEN');
 		expect(preflight).not.toContain('CLOUDFLARE_ACCOUNT_ID');
