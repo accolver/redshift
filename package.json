@@ -1,6 +1,6 @@
 {
 	"name": "redshift",
-	"version": "0.14.3",
+	"version": "0.15.0",
 	"description": "Decentralized, censorship-resistant secret management platform",
 	"type": "module",
 	"private": true,
