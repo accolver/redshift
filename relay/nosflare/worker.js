@@ -2861,18 +2861,32 @@ function authorizeEventWrite(event, authenticatedPrincipal) {
 __name(authorizeEventWrite, "authorizeEventWrite");
 function authorizeReadFilters(filters, authenticatedPrincipal) {
   if (!authenticatedPrincipal) return { allowed: false, reason: "authentication required" };
-  if (filters.length === 0) return { allowed: false, reason: "at least one filter is required" };
-  for (const filter of filters) {
-    if (filter.kinds?.length !== 1 || filter.kinds[0] !== REDSHIFT_GIFT_WRAP_KIND || filter["#p"]?.length !== 1 || filter["#p"][0] !== authenticatedPrincipal || filter["#t"]?.length !== 1 || filter["#t"][0] !== REDSHIFT_TYPE_TAG) {
-      return {
-        allowed: false,
-        reason: "filters must target kind 1059, the authenticated #p, and #t redshift-secrets"
-      };
+  if (!Array.isArray(filters) || filters.length === 0) {
+    return { allowed: false, reason: "at least one filter is required" };
+  }
+  for (const value of filters) {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      return invalidReadFilterDecision();
+    }
+    const filter = value;
+    if (!hasExactFilterValues(filter.kinds, [REDSHIFT_GIFT_WRAP_KIND]) || !hasExactFilterValues(filter["#p"], [authenticatedPrincipal]) || !hasExactFilterValues(filter["#t"], [REDSHIFT_TYPE_TAG])) {
+      return invalidReadFilterDecision();
     }
   }
   return { allowed: true, principal: authenticatedPrincipal };
 }
 __name(authorizeReadFilters, "authorizeReadFilters");
+function hasExactFilterValues(value, expected) {
+  return Array.isArray(value) && value.length === expected.length && value.every((item, index) => item === expected[index]);
+}
+__name(hasExactFilterValues, "hasExactFilterValues");
+function invalidReadFilterDecision() {
+  return {
+    allowed: false,
+    reason: "filters must target kind 1059, the authenticated #p, and #t redshift-secrets"
+  };
+}
+__name(invalidReadFilterDecision, "invalidReadFilterDecision");
 function normalizeAuthRelayUrl(value) {
   try {
     const url = new URL(value);

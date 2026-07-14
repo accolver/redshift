@@ -183,12 +183,21 @@ bun run dev:web
 bun run test:all
 cd relay/nosflare && bun test
 
+# Deterministic required and extended fuzz/property suites
+bun run test:fuzz
+bun run test:fuzz:extended
+# Replay controls: REDSHIFT_FUZZ_SEED, REDSHIFT_FUZZ_RUNS,
+# REDSHIFT_FUZZ_TIME_MS, and REDSHIFT_FUZZ_PATH
+
 # Browser E2E (install once, then run)
 cd web && bunx playwright install chromium && bun run test:e2e
 
 # Build everything
 bun run build:all
 ```
+
+See [docs/fuzz-testing.md](docs/fuzz-testing.md) for bounded run modes, CI behavior,
+and exact seed/path replay instructions.
 
 ## Project Structure
 

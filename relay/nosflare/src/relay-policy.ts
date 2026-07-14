@@ -1,4 +1,4 @@
-import type { NostrEvent, NostrFilter } from './types';
+import type { NostrEvent } from './types';
 
 export const REDSHIFT_GIFT_WRAP_KIND = 1059;
 export const REDSHIFT_SECRET_KIND = 30078;
@@ -40,27 +40,42 @@ export function authorizeEventWrite(
 }
 
 export function authorizeReadFilters(
-	filters: NostrFilter[],
+	filters: unknown,
 	authenticatedPrincipal: string | undefined,
 ): PolicyDecision {
 	if (!authenticatedPrincipal) return { allowed: false, reason: 'authentication required' };
-	if (filters.length === 0) return { allowed: false, reason: 'at least one filter is required' };
-	for (const filter of filters) {
+	if (!Array.isArray(filters) || filters.length === 0) {
+		return { allowed: false, reason: 'at least one filter is required' };
+	}
+	for (const value of filters) {
+		if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+			return invalidReadFilterDecision();
+		}
+		const filter = value as Record<string, unknown>;
 		if (
-			filter.kinds?.length !== 1 ||
-			filter.kinds[0] !== REDSHIFT_GIFT_WRAP_KIND ||
-			filter['#p']?.length !== 1 ||
-			filter['#p'][0] !== authenticatedPrincipal ||
-			filter['#t']?.length !== 1 ||
-			filter['#t'][0] !== REDSHIFT_TYPE_TAG
+			!hasExactFilterValues(filter.kinds, [REDSHIFT_GIFT_WRAP_KIND]) ||
+			!hasExactFilterValues(filter['#p'], [authenticatedPrincipal]) ||
+			!hasExactFilterValues(filter['#t'], [REDSHIFT_TYPE_TAG])
 		) {
-			return {
-				allowed: false,
-				reason: 'filters must target kind 1059, the authenticated #p, and #t redshift-secrets',
-			};
+			return invalidReadFilterDecision();
 		}
 	}
 	return { allowed: true, principal: authenticatedPrincipal };
+}
+
+function hasExactFilterValues(value: unknown, expected: Array<string | number>): boolean {
+	return (
+		Array.isArray(value) &&
+		value.length === expected.length &&
+		value.every((item, index) => item === expected[index])
+	);
+}
+
+function invalidReadFilterDecision(): PolicyDecision {
+	return {
+		allowed: false,
+		reason: 'filters must target kind 1059, the authenticated #p, and #t redshift-secrets',
+	};
 }
 
 export function normalizeAuthRelayUrl(value: string): string | null {

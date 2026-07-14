@@ -41,23 +41,23 @@ export function calculateMissingSecrets(
 	const currentKeys = new Set(currentSecrets.map((s) => s.key));
 
 	// Find all unique keys across all environments
-	const keyToEnvs = new Map<string, string[]>();
+	const keyToEnvs = new Map<string, Set<string>>();
 
 	for (const [envSlug, secrets] of allEnvSecrets) {
 		if (envSlug === currentEnvSlug) continue;
 		for (const secret of secrets) {
 			if (!currentKeys.has(secret.key)) {
-				const envs = keyToEnvs.get(secret.key) ?? [];
-				envs.push(envSlug);
+				const envs = keyToEnvs.get(secret.key) ?? new Set<string>();
+				envs.add(envSlug);
 				keyToEnvs.set(secret.key, envs);
 			}
 		}
 	}
 
-	// Convert to array and sort alphabetically
+	// Convert to an insertion-order-independent result and sort alphabetically.
 	const missing: MissingSecret[] = [];
-	for (const [key, existsIn] of keyToEnvs) {
-		missing.push({ key, existsIn });
+	for (const [key, environments] of keyToEnvs) {
+		missing.push({ key, existsIn: [...environments].sort() });
 	}
 
 	return missing.sort((a, b) => a.key.localeCompare(b.key));

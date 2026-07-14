@@ -263,5 +263,18 @@ describe('Secrets Model', () => {
 			const result = calculateMissingSecrets(allEnvSecrets, 'dev');
 			expect(result).toHaveLength(0);
 		});
+
+		it('returns deterministic environment lists regardless of map insertion order', () => {
+			const forward = new Map<string, Secret[]>([
+				['dev', []],
+				['staging', [{ key: 'API_KEY', value: 'one' }]],
+				['prod', [{ key: 'API_KEY', value: 'two' }]],
+			]);
+			const reverse = new Map([...forward].reverse());
+			expect(calculateMissingSecrets(reverse, 'dev')).toEqual(
+				calculateMissingSecrets(forward, 'dev'),
+			);
+			expect(calculateMissingSecrets(forward, 'dev')[0]?.existsIn).toEqual(['prod', 'staging']);
+		});
 	});
 });

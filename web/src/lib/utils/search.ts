@@ -9,6 +9,13 @@ function normalizeQuery(query: string): string {
 	return query.toLowerCase().replace(/\s+/g, '_');
 }
 
+function splitQuery(query: string): string[] {
+	return query
+		.toLowerCase()
+		.split(/[\s_]+/)
+		.filter(Boolean);
+}
+
 /**
  * Check if a text matches a search query with fuzzy matching
  * - Spaces in query are treated as underscores
@@ -21,6 +28,8 @@ function normalizeQuery(query: string): string {
 export function fuzzyMatch(text: string, query: string): boolean {
 	if (!query.trim()) return true;
 
+	const queryParts = splitQuery(query);
+	if (queryParts.length === 0) return false;
 	const normalizedText = text.toLowerCase();
 	const normalizedQuery = normalizeQuery(query);
 
@@ -29,11 +38,7 @@ export function fuzzyMatch(text: string, query: string): boolean {
 		return true;
 	}
 
-	// Then check if all query parts (split by underscore/space) exist in text
-	const queryParts = query
-		.toLowerCase()
-		.split(/[\s_]+/)
-		.filter(Boolean);
+	// Then check if all semantic query parts exist in text.
 	return queryParts.every((part) => normalizedText.includes(part));
 }
 
@@ -48,6 +53,8 @@ export function fuzzyMatch(text: string, query: string): boolean {
 export function matchScore(text: string, query: string): number {
 	if (!query.trim()) return 0;
 
+	const queryParts = splitQuery(query);
+	if (queryParts.length === 0) return -1;
 	const normalizedText = text.toLowerCase();
 	const normalizedQuery = normalizeQuery(query);
 
@@ -67,31 +74,25 @@ export function matchScore(text: string, query: string): number {
 	}
 
 	// All query parts exist in order (decent score)
-	const queryParts = query
-		.toLowerCase()
-		.split(/[\s_]+/)
-		.filter(Boolean);
-	if (queryParts.length > 0) {
-		let lastIndex = -1;
-		let allInOrder = true;
+	let lastIndex = -1;
+	let allInOrder = true;
 
-		for (const part of queryParts) {
-			const index = normalizedText.indexOf(part, lastIndex + 1);
-			if (index === -1) {
-				allInOrder = false;
-				break;
-			}
-			lastIndex = index;
+	for (const part of queryParts) {
+		const index = normalizedText.indexOf(part, lastIndex + 1);
+		if (index === -1) {
+			allInOrder = false;
+			break;
 		}
+		lastIndex = index;
+	}
 
-		if (allInOrder) {
-			return 70;
-		}
+	if (allInOrder) {
+		return 70;
+	}
 
-		// All parts exist but not in order (lower score)
-		if (queryParts.every((part) => normalizedText.includes(part))) {
-			return 60;
-		}
+	// All parts exist but not in order (lower score)
+	if (queryParts.every((part) => normalizedText.includes(part))) {
+		return 60;
 	}
 
 	// No match

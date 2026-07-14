@@ -11,6 +11,7 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "vitest run",
+		"test:fuzz": "vitest run tests/lib/fuzz.test.ts",
 		"test:watch": "vitest",
 		"test:ui": "vitest --ui",
 		"test:e2e": "playwright test",
@@ -39,7 +40,8 @@
 		"typescript": "^5.9.3",
 		"vite": "^7.3.6",
 		"vitest": "^4.1.10",
-		"wrangler": "^4.110.0"
+		"wrangler": "^4.110.0",
+		"yaml": "2.9.0"
 	},
 	"dependencies": {
 		"@lucide/svelte": "^0.544.0",
