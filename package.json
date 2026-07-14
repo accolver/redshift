@@ -1,10 +1,13 @@
 {
 	"name": "redshift",
-	"version": "0.14.2",
+	"version": "0.14.3",
 	"description": "Decentralized, censorship-resistant secret management platform",
 	"type": "module",
 	"private": true,
-	"workspaces": ["packages/*", "web"],
+	"workspaces": [
+		"packages/*",
+		"web"
+	],
 	"overrides": {
 		"cookie": "0.7.2",
 		"esbuild": "0.28.1",
