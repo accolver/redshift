@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.3](https://github.com/accolver/redshift/compare/v0.14.2...v0.14.3) (2026-07-14)
+
+
+### Bug Fixes
+
+* **ci:** install fuzz dependencies in relay preflight ([#57](https://github.com/accolver/redshift/issues/57)) ([42605df](https://github.com/accolver/redshift/commit/42605dfa7baf58ea2e4397b13f7b4fef96ed953a))
+* **core:** harden boundaries with deterministic fuzz tests ([#56](https://github.com/accolver/redshift/issues/56)) ([adf149b](https://github.com/accolver/redshift/commit/adf149b2177b0b85bc45cd9ad739d04d77bf9cbb))
+
 ## [0.14.2](https://github.com/accolver/redshift/compare/v0.14.1...v0.14.2) (2026-07-13)
 
 
