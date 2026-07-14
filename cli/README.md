@@ -8,7 +8,7 @@ compatibility is not claimed.
 
 The verified installer supports Linux and macOS on x64 and arm64, verifies
 checksums and GitHub build-provenance attestations, and installs to
-`~/.local/bin/redshift`. Certified v0.14.0 passed native installation and
+`~/.local/bin/redshift`. Certified v0.14.2 passed native installation and
 lifecycle verification on all four targets. Windows is not currently supported.
 
 ```bash
@@ -479,5 +479,5 @@ REDSHIFT_CONFIG_DIR=/tmp/redshift-test bun run dev -- run -- echo "API_KEY is \$
 
 Current release evidence and aggregate test counts are recorded per release
 rather than maintained manually here. See
-`piolium/authenticated-secret-history-evidence.md` for the certified v0.14.0
+`piolium/v0.14.2-production-readiness-evidence.md` for the current certified
 unit, compiled-binary, browser, relay, and installed-artifact gates.

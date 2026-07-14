@@ -23,7 +23,7 @@ become a prerequisite for reading, writing, or exporting a user's secrets.
 | Embedded dashboard | The compiled `redshift serve` binary serves the hydrated SvelteKit dashboard under a nonce-based CSP |
 | Managed relay code | Development candidate with NIP-42 principal binding, recipient-scoped Gift Wrap writes/reads, strict event verification, pay-to-relay disabled, and identity-scoped in-object quotas; no managed service is launched |
 | Verification | Crypto/CLI/web/relay tests, real local-relay CLI journeys, compiled-binary tests, and standalone/embedded Chromium E2E |
-| Release workflow | Certified v0.14.0 native artifacts include locked installs, checksums, SPDX SBOM, GitHub attestations, public fresh-install/upgrade journeys, publication recovery, encrypted local backup/restore, and authenticated history evidence |
+| Release workflow | Certified v0.14.2 native artifacts include locked installs, checksums, SPDX SBOM, GitHub attestations, public fresh-install/upgrade journeys, publication recovery, encrypted local backup/restore, and authenticated history evidence |
 
 ## Security semantics and known limits
 
@@ -43,7 +43,7 @@ become a prerequisite for reading, writing, or exporting a user's secrets.
 6. Plaintext output requires an explicit `--raw` acknowledgement. Operators
    must keep plaintext stdout out of logs and shell history.
 7. The hardened installer and self-updater require GitHub CLI attestation
-   verification. Certified v0.14.0 artifacts cover Linux and macOS x64/arm64;
+   verification. Certified v0.14.2 artifacts cover Linux and macOS x64/arm64;
    Windows is not currently published.
 8. The managed relay's custom domain and deployment workflow are declared in
    source, but uptime, geographic redundancy, backup retention, and SLA claims
