@@ -4,8 +4,8 @@
 
 ## Release Decision
 
-- [x] Link the current certified release: [v0.14.0](https://github.com/accolver/redshift/releases/tag/v0.14.0).
-- [x] Link installed-artifact evidence: [authenticated history release evidence](../piolium/authenticated-secret-history-evidence.md).
+- [x] Link the current certified release: [v0.14.2](https://github.com/accolver/redshift/releases/tag/v0.14.2).
+- [x] Link installed-artifact evidence: [v0.14.2 production-readiness evidence](../piolium/v0.14.2-production-readiness-evidence.md).
 - [ ] Confirm the owner and public location for the funding showcase itself.
 - [ ] Confirm whether a future showcase update is documentation-only or accompanies an independently approved product release.
 

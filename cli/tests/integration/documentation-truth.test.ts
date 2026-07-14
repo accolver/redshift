@@ -6,30 +6,42 @@ const repositoryRoot = resolve(import.meta.dir, '../../..');
 const read = (path: string) => readFileSync(resolve(repositoryRoot, path), 'utf8');
 
 const requiredText: Array<[string, string[]]> = [
-	['README.md', ['v0.14.0', '~/.local/bin/redshift', 'bounded history']],
-	['ROADMAP.md', ['certified v0.14.0', 'managed deployment evidence']],
+	['README.md', ['v0.14.2', '~/.local/bin/redshift', 'bounded history']],
+	['ROADMAP.md', ['Certified v0.14.2', 'managed deployment evidence']],
 	['docs/resilience-next.md', ['shipped in v0.14.0', 'authenticated-secret-history-evidence.md']],
-	['cli/README.md', ['v0.14.0', 'github.com/fiatjaf/nak@v0.19.7']],
+	[
+		'docs/funding-showcase.md',
+		['current certified product release is [v0.14.2]', 'v0.14.2 production-readiness evidence'],
+	],
+	[
+		'docs/release-showcase-checklist.md',
+		['current certified release: [v0.14.2]', 'v0.14.2 production-readiness evidence'],
+	],
+	['cli/README.md', ['v0.14.2', 'github.com/fiatjaf/nak@v0.19.7']],
+	[
+		'piolium/v0.14.2-production-readiness-evidence.md',
+		['v0.14.2', '10f6a70b8b353cdd63ef6a024880ed2f01088f27', '29234383229', '29304055032'],
+	],
 	[
 		'web/src/routes/docs/installation/+page.svelte',
-		['Linux and macOS', '~/.local/bin/redshift', 'v0.14.0'],
+		['Linux and macOS', '~/.local/bin/redshift', 'v0.14.2'],
 	],
 	['web/src/routes/docs/quickstart/+page.svelte', ['redshift.yaml', '--raw']],
 	['spec.md', ['Legacy non-normative PRD', 'applesauce-core/event-factory']],
 	['openspec/specs/secret-history/spec.md', ['bounded owner-authenticated history']],
 	['relay/README.md', ['development managed-relay candidate', 'No Redshift Cloud subscription']],
-	['.telos/TELOS.md', ['Doppler-inspired', 'certified individual-product v0.14.0']],
+	['.telos/TELOS.md', ['Doppler-inspired', 'certified individual-product v0.14.2']],
 	['openspec/project.md', ['Doppler-inspired', 'no paid service or production endpoint']],
 	[
 		'web/src/routes/pricing/+page.svelte',
 		['not launched', 'unapproved $5/month planning hypothesis'],
 	],
 	['web/src/routes/+page.svelte', ['Doppler-inspired CLI', 'documented Redshift command contract']],
-	['web/static/llms.txt', ['Doppler-inspired', 'Linux and macOS', 'NIP-46']],
+	['web/static/llms.txt', ['v0.14.2', 'Doppler-inspired', 'Linux and macOS', 'NIP-46']],
 	['web/src/lib/blog/posts.ts', ['Doppler-inspired', 'Not launched']],
 	[
 		'web/src/routes/docs/auth/bunker/+page.svelte',
-		['individual NIP-46', 'github.com/fiatjaf/nak@v0.19.7'],
+		['v0.14.2', 'individual NIP-46', 'github.com/fiatjaf/nak@v0.19.7'],
 	],
 	[
 		'openspec/changes/add-cloud-pricing/design.md',

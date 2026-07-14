@@ -180,7 +180,7 @@ Gift Wrap, NIP-09 Deletion, Kind 30078) **Testing**: bun:test,
 - **Current truth updated**: July 2026
 - **AI Assistant**: OpenCode via Telos `/telos-init`
 - **Project Type**: Decentralized Secret Management Platform (CLI + Web Admin)
-- **Project State**: certified individual-product v0.14.0 scope; managed production operations, paid Cloud, Teams, retention guarantees, and SLA claims are deferred pending approved proposals and external evidence
+- **Project State**: certified individual-product v0.14.2 scope; managed production operations, paid Cloud, Teams, retention guarantees, and SLA claims are deferred pending approved proposals and external evidence
 
 ## Quick Reference: Decision Validation
 

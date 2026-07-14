@@ -1,6 +1,6 @@
 # Redshift
 
-> Redshift is a sovereign secret-management tool built on Nostr. The certified v0.14.0 individual product provides a Doppler-inspired CLI with an explicit Redshift command contract; it does not claim full compatibility or drop-in behavior.
+> Redshift is a sovereign secret-management tool built on Nostr. The certified v0.14.2 individual product provides a Doppler-inspired CLI with an explicit Redshift command contract; it does not claim full compatibility or drop-in behavior.
 
 Important boundaries:
 

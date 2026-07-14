@@ -21,7 +21,7 @@ Decentralized, censorship-resistant secret management built on
 The verified installer supports Linux and macOS on x64 and arm64 and requires a
 current [GitHub CLI](https://cli.github.com/). It verifies the selected release's
 GitHub build-provenance attestations, exact source commit, and checksums before
-installation. Certified release v0.14.0 passed native installation and lifecycle
+installation. Certified release v0.14.2 passed native installation and lifecycle
 verification on all four supported targets. Windows is not currently supported.
 
 ```bash
@@ -30,8 +30,9 @@ curl -fsSL https://redshiftapp.com/install | sh
 
 The default destination is `~/.local/bin/redshift`. If that directory is not in
 `PATH`, the installer prints the required shell configuration. See
-[`piolium/authenticated-secret-history-evidence.md`](piolium/authenticated-secret-history-evidence.md)
-for v0.14.0 release evidence.
+[`piolium/v0.14.2-production-readiness-evidence.md`](piolium/v0.14.2-production-readiness-evidence.md)
+for current release evidence. The original bounded-history certification remains in
+[`piolium/authenticated-secret-history-evidence.md`](piolium/authenticated-secret-history-evidence.md).
 
 ### OpenClaw Skill
 
@@ -227,7 +228,7 @@ The hardened release workflow is configured to:
 4. Native Linux/macOS runners build and smoke-test each platform binary
 5. Publish checksums, an SPDX SBOM, provenance attestations, and binaries
 
-Certified v0.14.0 release evidence records these release controls and the
+Certified v0.14.2 release evidence records these release controls and the
 supported native installation matrix.
 
 ### Manual Release (if needed)

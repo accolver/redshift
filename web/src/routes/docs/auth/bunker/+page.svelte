@@ -144,7 +144,7 @@ import { Shield, Server, Smartphone, Zap, Globe, Terminal, AlertTriangle } from 
 				<div>
 					<h3 class="text-lg font-semibold text-tokyo-orange">Current scope: individual NIP-46</h3>
 					<p class="mt-2 text-muted-foreground">
-						Redshift v0.14.0 verifies an individual remote-signer workflow with the pinned
+						Redshift v0.14.2 verifies an individual remote-signer workflow with the pinned
 						<code>nak</code> v0.19.7 test fixture. Shared custody, role-based access,
 						invitations, organizational recovery, and SSO are not launched. Upstream bunker
 						client authorization is not a Redshift team-access or compliance control.

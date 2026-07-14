@@ -2,7 +2,7 @@
 
 ## Overview
 
-Define the operator workflow and evidence required to promote the managed-relay development candidate to a bounded production service. This PRD is an approval artifact, not deployment authorization. The individual v0.14.0 product remains the only certified scope.
+Define the operator workflow and evidence required to promote the managed-relay development candidate to a bounded production service. This PRD is an approval artifact, not deployment authorization. The individual v0.14.2 product remains the only certified scope.
 
 ## Goals & Objectives
 

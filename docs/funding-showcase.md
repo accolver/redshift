@@ -1,6 +1,6 @@
 # Redshift Funding Showcase Package
 
-> Draft package for GitHub issue [#23](https://github.com/accolver/redshift/issues/23). This document is not itself a release; the current certified product release is [v0.14.0](https://github.com/accolver/redshift/releases/tag/v0.14.0).
+> Draft package for GitHub issue [#23](https://github.com/accolver/redshift/issues/23). This document is not itself a release; the current certified product release is [v0.14.2](https://github.com/accolver/redshift/releases/tag/v0.14.2).
 
 ## Reviewer Snapshot
 
@@ -24,8 +24,8 @@ Redshift is a decentralized, censorship-resistant secret manager for developers.
 | Architecture summary | Draft | [Architecture summary](#architecture-summary) |
 | Threat model | Canonical | [SECURITY.md](../SECURITY.md) |
 | Funding threat-model summary | Draft | [docs/threat-model.md](./threat-model.md) |
-| Install docs | Certified in v0.14.0 | [README installation](../README.md#installation), [CLI installation](../cli/README.md#installation) |
-| Release evidence | Published | [v0.14.0 history evidence](../piolium/authenticated-secret-history-evidence.md) |
+| Install docs | Certified in v0.14.2 | [README installation](../README.md#installation), [CLI installation](../cli/README.md#installation) |
+| Release evidence | Published | [v0.14.2 production-readiness evidence](../piolium/v0.14.2-production-readiness-evidence.md) |
 | Roadmap | Existing | [ROADMAP.md](../ROADMAP.md) |
 | Teams/Cloud/Enterprise design | Existing | [TEAMS_CLOUD_ENTERPRISE.md](../TEAMS_CLOUD_ENTERPRISE.md) |
 

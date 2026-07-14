@@ -53,7 +53,7 @@ install -m 0755 dist/redshift ~/.local/bin/redshift`} language="bash" />
 
 	<ProseHeading level={2} id="verify-installation">Verify Installation</ProseHeading>
 	<CodeBlock code={`redshift --version
-# Certified release at time of writing: redshift v0.14.0`} language="bash" />
+# Certified release at time of writing: redshift v0.14.2`} language="bash" />
 
 	<ProseHeading level={2} id="system-requirements">System Requirements</ProseHeading>
 	<div class="not-prose my-6 space-y-3">
