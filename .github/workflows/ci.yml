@@ -53,6 +53,10 @@ jobs:
           cmp /tmp/embedded-files.ts cli/src/lib/embedded-files.ts
           bun run build:cli
           ./dist/redshift --version
+      - name: Run deterministic property and fuzz tests
+        env:
+          CI: 'true'
+        run: bun run test:fuzz
       - name: Run crypto, CLI, and web tests
         env:
           CI: 'true'

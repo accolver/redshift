@@ -1,4 +1,4 @@
-import { parseEnvFile } from '@redshift/crypto';
+import { formatEnvLine, parseEnvFile } from '@redshift/crypto';
 import type { Secret } from '$lib/types/nostr';
 
 /**
@@ -15,7 +15,10 @@ export type ExportFormat = 'env' | 'json' | 'yaml' | 'csv';
  */
 function envNeedsQuoting(value: string): boolean {
 	return (
+		value.trim() !== value ||
 		value.includes('\n') ||
+		value.includes('\r') ||
+		value.includes('\t') ||
 		value.includes('"') ||
 		value.includes("'") ||
 		value.includes(' ') ||
@@ -30,14 +33,9 @@ export function exportToEnv(secrets: Secret[]): string {
 	if (secrets.length === 0) return '';
 
 	return secrets
-		.map(({ key, value }) => {
-			if (envNeedsQuoting(value)) {
-				// Escape backslashes, newlines, and quotes
-				const escaped = value.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"');
-				return `${key}="${escaped}"`;
-			}
-			return `${key}=${value}`;
-		})
+		.map(({ key, value }) =>
+			envNeedsQuoting(value) ? formatEnvLine(key, value) : `${key}=${value}`,
+		)
 		.join('\n');
 }
 
@@ -53,54 +51,22 @@ export function exportToJson(secrets: Secret[]): string {
 }
 
 /**
- * Check if a YAML value needs quoting
- */
-function yamlNeedsQuoting(value: string): boolean {
-	// Quote if it looks like a boolean, number, null, or contains special chars
-	const lowerValue = value.toLowerCase();
-	if (
-		lowerValue === 'true' ||
-		lowerValue === 'false' ||
-		lowerValue === 'null' ||
-		lowerValue === 'yes' ||
-		lowerValue === 'no'
-	) {
-		return true;
-	}
-	// Quote if it's a number
-	if (/^-?\d+(\.\d+)?$/.test(value)) {
-		return true;
-	}
-	// Quote if it contains colons, newlines, or starts with special chars
-	if (value.includes(':') || value.includes('\n') || value.includes('#')) {
-		return true;
-	}
-	return false;
-}
-
-/**
- * Export secrets to YAML format
+ * Export secrets to YAML format.
+ *
+ * JSON string literals are valid YAML double-quoted scalars. Always quoting
+ * prevents YAML 1.2 from retyping or interpreting secret bytes such as empty
+ * strings, null markers, collection syntax, directives, anchors, and blocks.
  */
 export function exportToYaml(secrets: Secret[]): string {
 	if (secrets.length === 0) return '';
-
-	return secrets
-		.map(({ key, value }) => {
-			if (yamlNeedsQuoting(value)) {
-				// Escape quotes and use double quotes
-				const escaped = value.replace(/"/g, '\\"');
-				return `${key}: "${escaped}"`;
-			}
-			return `${key}: ${value}`;
-		})
-		.join('\n');
+	return secrets.map(({ key, value }) => `${key}: ${JSON.stringify(value)}`).join('\n');
 }
 
 /**
  * Escape a CSV value if needed
  */
 function escapeCsvValue(value: string): string {
-	if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+	if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
 		// Escape quotes by doubling them
 		const escaped = value.replace(/"/g, '""');
 		return `"${escaped}"`;
@@ -115,7 +81,7 @@ export function exportToCsv(secrets: Secret[]): string {
 	const header = 'key,value';
 	if (secrets.length === 0) return header;
 
-	const rows = secrets.map(({ key, value }) => `${key},${escapeCsvValue(value)}`);
+	const rows = secrets.map(({ key, value }) => `${escapeCsvValue(key)},${escapeCsvValue(value)}`);
 	return [header, ...rows].join('\n');
 }
 
@@ -184,11 +150,20 @@ export function parseYaml(input: string): Secret[] {
 			}
 		}
 
-		// Handle quoted values
-		if (
-			(value.startsWith('"') && value.endsWith('"')) ||
-			(value.startsWith("'") && value.endsWith("'"))
-		) {
+		// Handle quoted values. Exported double-quoted values use JSON string
+		// escaping, which is also valid for this intentionally small YAML subset.
+		if (value.startsWith('"') && value.endsWith('"')) {
+			let decoded: unknown;
+			try {
+				decoded = JSON.parse(value);
+			} catch {
+				throw new Error(`Invalid YAML string for key ${key}`);
+			}
+			if (typeof decoded !== 'string') {
+				throw new Error(`Invalid YAML string for key ${key}`);
+			}
+			value = decoded;
+		} else if (value.startsWith("'") && value.endsWith("'")) {
 			value = value.slice(1, -1);
 		}
 
@@ -201,76 +176,92 @@ export function parseYaml(input: string): Secret[] {
 }
 
 /**
- * Parse a CSV field, handling quotes
+ * Parse CSV records while preserving commas, quotes, and line breaks inside
+ * quoted fields. Quotes are decoded exactly once.
  */
-function parseCsvField(field: string): string {
-	if (field.startsWith('"') && field.endsWith('"')) {
-		// Remove quotes and unescape doubled quotes
-		return field.slice(1, -1).replace(/""/g, '"');
-	}
-	return field;
-}
-
-/**
- * Parse a CSV line, handling quoted fields with commas
- */
-function parseCsvLine(line: string): string[] {
-	const fields: string[] = [];
-	let current = '';
+function parseCsvRecords(input: string): string[][] {
+	const records: string[][] = [];
+	let record: string[] = [];
+	let field = '';
 	let inQuotes = false;
+	let justClosedQuote = false;
 
-	for (let i = 0; i < line.length; i++) {
-		const char = line[i];
+	const finishRecord = () => {
+		record.push(field);
+		if (record.some((value) => value.length > 0)) records.push(record);
+		record = [];
+		field = '';
+		justClosedQuote = false;
+	};
 
-		if (char === '"') {
-			if (inQuotes && line[i + 1] === '"') {
-				// Escaped quote
-				current += '"';
-				i++;
+	for (let index = 0; index < input.length; index++) {
+		const character = input[index];
+		if (inQuotes) {
+			if (character === '"' && input[index + 1] === '"') {
+				field += '"';
+				index += 1;
+			} else if (character === '"') {
+				inQuotes = false;
+				justClosedQuote = true;
 			} else {
-				inQuotes = !inQuotes;
-				current += char;
+				field += character;
 			}
-		} else if (char === ',' && !inQuotes) {
-			fields.push(parseCsvField(current));
-			current = '';
+			continue;
+		}
+		if (justClosedQuote) {
+			if (character === ',') {
+				record.push(field);
+				field = '';
+				justClosedQuote = false;
+			} else if (character === '\n' || character === '\r') {
+				finishRecord();
+				if (character === '\r' && input[index + 1] === '\n') index += 1;
+			} else {
+				throw new Error('Invalid CSV: unexpected byte after closing quote');
+			}
+			continue;
+		}
+		if (character === '"') {
+			if (field.length > 0) throw new Error('Invalid CSV: unexpected quote');
+			inQuotes = true;
+		} else if (character === ',') {
+			record.push(field);
+			field = '';
+		} else if (character === '\n' || character === '\r') {
+			finishRecord();
+			if (character === '\r' && input[index + 1] === '\n') index += 1;
 		} else {
-			current += char;
+			field += character;
 		}
 	}
-
-	fields.push(parseCsvField(current));
-	return fields;
+	if (inQuotes) throw new Error('Invalid CSV: unterminated quoted field');
+	finishRecord();
+	return records;
 }
 
 /**
  * Parse CSV format with headers (key,value)
  */
 export function parseCsv(input: string): Secret[] {
-	// Normalize line endings
-	const normalized = input.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-	const lines = normalized.split('\n').filter((line) => line.trim());
-
-	if (lines.length === 0) {
+	const records = parseCsvRecords(input);
+	if (records.length === 0) {
 		throw new Error('Invalid CSV: no content');
 	}
 
-	// First line is headers
-	const headers = parseCsvLine(lines[0]);
-	if (headers[0]?.toLowerCase() !== 'key' || headers[1]?.toLowerCase() !== 'value') {
+	const headers = records[0] ?? [];
+	if (
+		headers.length !== 2 ||
+		headers[0]?.toLowerCase() !== 'key' ||
+		headers[1]?.toLowerCase() !== 'value'
+	) {
 		throw new Error('Invalid CSV: expected headers "key,value"');
 	}
 
 	const secrets: Secret[] = [];
-	for (let i = 1; i < lines.length; i++) {
-		const fields = parseCsvLine(lines[i]);
-		if (fields.length >= 2 && fields[0]) {
-			secrets.push({
-				key: fields[0],
-				value: fields[1] || '',
-			});
-		}
+	for (const fields of records.slice(1)) {
+		if (fields.length !== 2) throw new Error('Invalid CSV: expected exactly two fields');
+		const key = fields[0];
+		if (key) secrets.push({ key, value: fields[1] ?? '' });
 	}
-
 	return secrets;
 }

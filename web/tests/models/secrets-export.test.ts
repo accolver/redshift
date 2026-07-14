@@ -1,3 +1,4 @@
+import { parse as parseYamlDocument } from 'yaml';
 import { describe, it, expect } from 'vitest';
 import {
 	exportToEnv,
@@ -47,6 +48,15 @@ describe('Secrets Export/Import', () => {
 			const result = exportToEnv(secrets);
 			expect(result).toBe('CONN=host=localhost;port=5432');
 		});
+
+		it('round-trips carriage returns, tabs, and edge whitespace', () => {
+			const secrets: Secret[] = [
+				{ key: 'CR', value: '\r' },
+				{ key: 'TAB', value: '\tvalue\t' },
+				{ key: 'PADDED', value: ' value ' },
+			];
+			expect(parseEnv(exportToEnv(secrets))).toEqual(secrets);
+		});
 	});
 
 	describe('exportToJson', () => {
@@ -74,7 +84,7 @@ describe('Secrets Export/Import', () => {
 	describe('exportToYaml', () => {
 		it('exports secrets to YAML format', () => {
 			const result = exportToYaml(testSecrets);
-			expect(result).toContain('API_KEY: sk_test_12345');
+			expect(result).toContain('API_KEY: "sk_test_12345"');
 			// URLs with colons get quoted
 			expect(result).toContain('DATABASE_URL: "postgres://user:pass@localhost:5432/db"');
 			expect(result).toContain('DEBUG: "true"');
@@ -85,7 +95,7 @@ describe('Secrets Export/Import', () => {
 			expect(result).toBe('');
 		});
 
-		it('quotes values that look like booleans or numbers', () => {
+		it('quotes every value to preserve string semantics', () => {
 			const secrets: Secret[] = [
 				{ key: 'BOOL', value: 'true' },
 				{ key: 'NUM', value: '123' },
@@ -94,7 +104,7 @@ describe('Secrets Export/Import', () => {
 			const result = exportToYaml(secrets);
 			expect(result).toContain('BOOL: "true"');
 			expect(result).toContain('NUM: "123"');
-			expect(result).toContain('STR: hello');
+			expect(result).toContain('STR: "hello"');
 		});
 
 		it('handles values with colons', () => {
@@ -298,6 +308,11 @@ describe('Secrets Export/Import', () => {
 			expect(() => parseCsv('')).toThrow('Invalid CSV');
 		});
 
+		it('rejects bytes after a closing quote and excess columns', () => {
+			expect(() => parseCsv('key,value\n"KEY"junk,value')).toThrow('closing quote');
+			expect(() => parseCsv('key,value\nKEY,value,extra')).toThrow('exactly two fields');
+		});
+
 		it('handles CRLF line endings', () => {
 			const input = 'key,value\r\nAPI_KEY,value\r\n';
 			const result = parseCsv(input);
@@ -324,10 +339,44 @@ describe('Secrets Export/Import', () => {
 			expect(imported).toEqual(testSecrets);
 		});
 
+		it('yaml preserves whitespace, quotes, and reserved YAML scalars', () => {
+			const secrets: Secret[] = [
+				{ key: 'EMPTY', value: '' },
+				{ key: 'SPACE', value: ' ' },
+				{ key: 'PADDED', value: ' value ' },
+				{ key: 'DOUBLE_QUOTE', value: '"' },
+				{ key: 'SINGLE_QUOTE', value: "'" },
+				{ key: 'NULL_MARKER', value: '~' },
+				{ key: 'COLLECTION', value: '[a]' },
+				{ key: 'SEQUENCE', value: '- item' },
+				{ key: 'ALIAS', value: '*anchor' },
+				{ key: 'DIRECTIVE', value: '%value' },
+				{ key: 'RESERVED_AT', value: '@value' },
+				{ key: 'RESERVED_TICK', value: '`value' },
+				{ key: 'BLOCK_LITERAL', value: '|' },
+				{ key: 'BLOCK_FOLDED', value: '>' },
+			];
+			const exported = exportToYaml(secrets);
+			expect(parseYaml(exported)).toEqual(secrets);
+			expect(parseYamlDocument(exported)).toEqual(
+				Object.fromEntries(secrets.map(({ key, value }) => [key, value])),
+			);
+		});
+
 		it('csv format round-trips correctly', () => {
 			const exported = exportToCsv(testSecrets);
 			const imported = parseCsv(exported);
 			expect(imported).toEqual(testSecrets);
+		});
+
+		it('csv preserves quotes and every in-field line-ending byte', () => {
+			const secrets: Secret[] = [
+				{ key: 'QUOTES', value: '""' },
+				{ key: 'MULTILINE', value: 'line one\nline two' },
+				{ key: 'CARRIAGE_RETURN', value: 'line one\rline two' },
+				{ key: 'CRLF', value: 'line one\r\nline two' },
+			];
+			expect(parseCsv(exportToCsv(secrets))).toEqual(secrets);
 		});
 	});
 });

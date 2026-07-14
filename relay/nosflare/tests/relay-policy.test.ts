@@ -80,6 +80,23 @@ describe('managed relay policy', () => {
 		}
 	});
 
+	it('fails closed instead of throwing for structurally invalid read filters', () => {
+		for (const filters of [
+			[null],
+			[[]],
+			['filter'],
+			[{ kinds: '1059', '#p': [principal], '#t': ['redshift-secrets'] }],
+			[{ kinds: [1059], '#p': principal, '#t': ['redshift-secrets'] }],
+		]) {
+			expect(() =>
+				authorizeReadFilters(filters as unknown as NostrFilter[], principal),
+			).not.toThrow();
+			expect(authorizeReadFilters(filters as unknown as NostrFilter[], principal).allowed).toBe(
+				false,
+			);
+		}
+	});
+
 	it('normalizes exact AUTH relay URLs and rejects ambiguous forms', () => {
 		expect(normalizeAuthRelayUrl('wss://relay.example/path')).toBe('wss://relay.example/path');
 		expect(normalizeAuthRelayUrl('https://relay.example')).toBeNull();

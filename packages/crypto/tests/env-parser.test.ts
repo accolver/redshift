@@ -114,4 +114,11 @@ describe('formatEnvLine', () => {
 	it('escapes backslashes', () => {
 		expect(formatEnvLine('KEY', 'path\\to\\file')).toBe('KEY="path\\\\to\\\\file"');
 	});
+
+	it('round-trips literal escape sequences without interpreting them', () => {
+		for (const value of ['\\n', '\\r', '\\t', '\\\\', '\\"', 'prefix\\n\\t\\rsuffix']) {
+			const parsed = parseEnvFile(formatEnvLine('KEY', value));
+			expect(parsed.KEY).toBe(value);
+		}
+	});
 });

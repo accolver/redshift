@@ -52,6 +52,14 @@ describe('Search Utilities', () => {
 			expect(fuzzyMatch('GOOGLE_CLIENT_ID', 'client_id')).toBe(true);
 			expect(fuzzyMatch('GOOGLE_CLIENT_ID', 'google_client id')).toBe(true);
 		});
+
+		it('rejects non-empty queries made only of separators', () => {
+			for (const query of ['_', '___', ' _ ', '_   _']) {
+				expect(fuzzyMatch('', query)).toBe(false);
+				expect(fuzzyMatch('GOOGLE_CLIENT_ID', query)).toBe(false);
+				expect(matchScore('GOOGLE_CLIENT_ID', query)).toBe(-1);
+			}
+		});
 	});
 
 	describe('matchScore', () => {

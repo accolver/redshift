@@ -4,10 +4,7 @@
 	"description": "Decentralized, censorship-resistant secret management platform",
 	"type": "module",
 	"private": true,
-	"workspaces": [
-		"packages/*",
-		"web"
-	],
+	"workspaces": ["packages/*", "web"],
 	"overrides": {
 		"cookie": "0.7.2",
 		"esbuild": "0.28.1",
@@ -40,6 +37,8 @@
 		"test:crypto": "cd packages/crypto && bun test",
 		"test:rate-limiter": "cd packages/rate-limiter && bun test",
 		"test:all": "bun run test:crypto && bun run test:rate-limiter && bun run test:cli && bun run test:web",
+		"test:fuzz": "bun test tests/helpers/fuzz.test.ts packages/crypto/tests/fuzz.test.ts packages/rate-limiter/tests/fuzz.test.ts cli/tests/commands/secrets-fuzz.test.ts && (cd web && bun run test:fuzz) && (cd relay/nosflare && bun run test:fuzz)",
+		"test:fuzz:extended": "REDSHIFT_FUZZ_RUNS=${REDSHIFT_FUZZ_RUNS:-5000} REDSHIFT_FUZZ_TIME_MS=${REDSHIFT_FUZZ_TIME_MS:-120000} bun run test:fuzz",
 		"audit:dependencies": "bun audit --audit-level=low && cd relay/nosflare && bun audit --audit-level=low",
 		"test:production": "bash scripts/verify-production-readiness.sh",
 		"test:release:containers": "bash scripts/test-release-containers.sh",
@@ -60,6 +59,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.4",
 		"@types/bun": "latest",
+		"fast-check": "4.9.0",
 		"typescript": "^5.9.3"
 	},
 	"dependencies": {

@@ -7,6 +7,7 @@ const workflowPaths = [
 	'.github/workflows/ci.yml',
 	'.github/workflows/release.yml',
 	'.github/workflows/deploy-relay.yml',
+	'.github/workflows/fuzz.yml',
 	'.github/workflows/verify-published-release.yml',
 ];
 
@@ -59,6 +60,29 @@ describe('GitHub Actions policy', () => {
 			}
 			expect(workflow).toContain('Browser gates leaked a repository workerd process');
 		}
+	});
+
+	it('runs bounded required and replayable extended fuzz gates', () => {
+		const ci = readWorkflow('.github/workflows/ci.yml');
+		const extended = readWorkflow('.github/workflows/fuzz.yml');
+		const productionGate = readRepositoryFile('scripts/verify-production-readiness.sh');
+		expect(ci).toContain('bun run test:fuzz');
+		expect(productionGate).toContain('bun run test:fuzz');
+		expect(extended).toContain('schedule:');
+		expect(extended).toContain('workflow_dispatch:');
+		expect(extended).toContain('permissions:\n  contents: read');
+		expect(extended).toContain('REDSHIFT_FUZZ_SEED="$seed"');
+		expect(extended).toContain('REDSHIFT_FUZZ_RUNS="$runs"');
+		expect(extended).toContain('REDSHIFT_FUZZ_TIME_MS=120000');
+		expect(extended).toContain('seed="${REQUESTED_SEED:-$GITHUB_RUN_NUMBER}"');
+		expect(extended).toContain('Invalid fuzz seed');
+		expect(extended).toContain("fuzzParameters('workflow input validation')");
+		expect(extended.indexOf('Invalid fuzz seed')).toBeLessThan(
+			extended.indexOf('tee fuzz-replay.txt'),
+		);
+		expect(extended).toContain('fuzz-replay.txt');
+		expect(extended).toContain('if: always()');
+		expect(extended).not.toContain('secrets.');
 	});
 
 	it('verifies generated relay bytes without requiring a clean worktree', () => {

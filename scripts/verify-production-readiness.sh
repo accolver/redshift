@@ -52,6 +52,9 @@ if ./dist/redshift --definitely-unknown >/dev/null 2>&1; then
   exit 1
 fi
 
+phase "Deterministic property and fuzz tests"
+bun run test:fuzz
+
 phase "Product and managed-relay test suites"
 bun run test:all
 (

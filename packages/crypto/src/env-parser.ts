@@ -63,15 +63,11 @@ export function parseEnvFile(content: string): Record<string, string> {
 export function parseEnvValue(input: string): string {
 	let result = input.trim();
 
-	// Handle double-quoted strings
+	// Handle double-quoted strings with a single left-to-right escape pass.
+	// Chained replacements corrupt literal sequences such as `\\n` after
+	// formatEnvLine first escapes the backslash.
 	if (result.startsWith('"') && result.endsWith('"')) {
-		return result
-			.slice(1, -1)
-			.replace(/\\n/g, '\n')
-			.replace(/\\r/g, '\r')
-			.replace(/\\t/g, '\t')
-			.replace(/\\"/g, '"')
-			.replace(/\\\\/g, '\\');
+		return decodeDoubleQuotedValue(result.slice(1, -1));
 	}
 
 	// Handle single-quoted strings (no escaping)
@@ -86,6 +82,38 @@ export function parseEnvValue(input: string): string {
 	}
 
 	return result;
+}
+
+function decodeDoubleQuotedValue(value: string): string {
+	let decoded = '';
+	for (let index = 0; index < value.length; index++) {
+		const character = value[index];
+		if (character !== '\\' || index + 1 >= value.length) {
+			decoded += character;
+			continue;
+		}
+		const escaped = value[++index];
+		switch (escaped) {
+			case 'n':
+				decoded += '\n';
+				break;
+			case 'r':
+				decoded += '\r';
+				break;
+			case 't':
+				decoded += '\t';
+				break;
+			case '"':
+				decoded += '"';
+				break;
+			case '\\':
+				decoded += '\\';
+				break;
+			default:
+				decoded += `\\${escaped}`;
+		}
+	}
+	return decoded;
 }
 
 /**
