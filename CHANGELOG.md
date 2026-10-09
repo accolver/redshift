@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.14.4](https://github.com/accolver/redshift/compare/v0.14.3...v0.14.4) (2026-10-09)
+
+
+### Bug Fixes
+
+* **ci:** await relay subscription in logout regression ([c4fd361](https://github.com/accolver/redshift/commit/c4fd361a8f34f2b928680a8f1108a2852fc5f15b))
+* **ci:** drain modal cleanup timers before jsdom teardown ([d326f3f](https://github.com/accolver/redshift/commit/d326f3f469567ada173ad82af96629ae5cef35b0))
+* **deps:** clear security audits in CI lockfiles ([79db1b1](https://github.com/accolver/redshift/commit/79db1b1f80a91b32454cd981bc7648f9f9adc761))
+* **security:** bound relay ingestion and isolate sessions ([fdeb80a](https://github.com/accolver/redshift/commit/fdeb80aec15b9300a8774d0a56d7a2e99f2e37aa))
+
 ## [0.14.3](https://github.com/accolver/redshift/compare/v0.14.2...v0.14.3) (2026-07-14)
 
 
