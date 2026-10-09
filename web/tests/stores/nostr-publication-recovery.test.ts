@@ -101,6 +101,10 @@ afterEach(() => {
 describe('Nostr publication recovery', () => {
 	it('does not insert a late history response after logout', async () => {
 		let complete!: () => void;
+		let markSubscribed!: () => void;
+		const subscribed = new Promise<void>((resolve) => {
+			markSubscribed = resolve;
+		});
 		const event = signedEvent();
 		mockRequest.mockReturnValue(
 			new Observable<NostrEvent>((subscriber) => {
@@ -108,13 +112,16 @@ describe('Nostr publication recovery', () => {
 					subscriber.next(event);
 					subscriber.complete();
 				};
+				markSubscribed();
 			}),
 		);
 		const pending = refreshRedshiftEvents(ownerPubkey);
-		await Promise.resolve();
+		const assertion = expect(pending).rejects.toThrow('session');
+		// Wait for actual subscription readiness, not a runtime-specific microtask count.
+		await subscribed;
 		disconnect();
 		complete();
-		await expect(pending).rejects.toThrow('session');
+		await assertion;
 		expect(mockEvents).toEqual([]);
 	});
 

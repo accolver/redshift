@@ -102,6 +102,11 @@ and 18 relay-toolchain advisories (some overlap).
 - Telos validation converges: patched compatible dependencies support the existing
   user workflows and protocol contracts while preserving the release security gate.
 
+The next CI run (`37886360614`) passed the audit and exposed a scheduling race in
+the logout regression fixture. The fixture now waits for an explicit relay
+subscription-ready signal and attaches its expected-rejection handler before
+logout, rather than assuming that one microtask starts the subscription.
+
 Other production-release blockers remain:
 
 - Two selected Playwright dashboard journeys could not launch Chromium because
