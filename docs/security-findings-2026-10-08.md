@@ -107,6 +107,11 @@ the logout regression fixture. The fixture now waits for an explicit relay
 subscription-ready signal and attaches its expected-rejection handler before
 logout, rather than assuming that one microtask starts the subscription.
 
+After PR #59 passed all checks and merged, main run `37888405156` exposed an
+intermittent Bits UI body-scroll-lock cleanup timer outliving jsdom in the modal
+tests. That fixture now uses an advancing fake clock, drains deferred cleanup
+after unmount, and asserts no timers remain before restoring the real clock.
+
 Other production-release blockers remain:
 
 - Two selected Playwright dashboard journeys could not launch Chromium because

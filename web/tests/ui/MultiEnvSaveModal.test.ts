@@ -26,11 +26,19 @@ describe('MultiEnvSaveModal', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.useFakeTimers({ shouldAdvanceTime: true });
 	});
 
-	afterEach(() => {
-		// Clean up components to prevent bits-ui body-scroll-lock cleanup errors
-		cleanup();
+	afterEach(async () => {
+		try {
+			cleanup();
+			// Bits UI restores body styles on a deferred timer after unmount. Run that
+			// cleanup while jsdom still exists, before restoring the real clock.
+			await vi.runOnlyPendingTimersAsync();
+			expect(vi.getTimerCount()).toBe(0);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it('renders the modal with secret key in description', () => {
