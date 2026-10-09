@@ -4,7 +4,8 @@
  * L4: Integration-Contractor - Nostr relay communication
  */
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { HISTORY_LIMITS } from '@redshift/crypto';
 import { finalizeEvent, generateSecretKey } from 'nostr-tools/pure';
 import { RateLimiter } from '../../src/lib/rate-limiter';
 import {
@@ -21,6 +22,37 @@ import type { NostrEvent } from '../../src/lib/types';
 
 describe('Relay Module', () => {
 	describe('createRelayPool', () => {
+		it('stops a relay flood locally, closes the subscription, and does not retry', async () => {
+			const relay = createRelayPool(['ws://127.0.0.1:4777'], { enableRateLimiting: false });
+			let closed = 0;
+			const events = Array.from({ length: HISTORY_LIMITS.maxObservedEvents + 1 }, (_, index) => ({
+				...createMockRumor('project|dev', index),
+				id: index.toString(16).padStart(64, '0'),
+			}));
+			const unbounded = spyOn(relay.pool, 'querySync').mockResolvedValue(events);
+			const bounded = spyOn(relay.pool, 'subscribeMany').mockImplementation(
+				(_relays, _filter, params) => {
+					for (const event of events) params.onevent?.(event);
+					params.oneose?.();
+					return {
+						close: () => {
+							closed += 1;
+						},
+					};
+				},
+			);
+			try {
+				await expect(relay.query({ kinds: [1059] })).rejects.toThrow('bound');
+				expect(bounded).toHaveBeenCalledTimes(1);
+				expect(unbounded).not.toHaveBeenCalled();
+				expect(closed).toBe(1);
+			} finally {
+				unbounded.mockRestore();
+				bounded.mockRestore();
+				relay.close();
+			}
+		});
+
 		it('creates a pool with given relay URLs', () => {
 			const relays = ['wss://relay1.test', 'wss://relay2.test'];
 			const pool = createRelayPool(relays);

@@ -7,7 +7,7 @@ import type { ChildProcess } from 'node:child_process';
 import { constants as osConstants } from 'node:os';
 import { getRelays, loadProjectConfig } from '../lib/config';
 import { ValidationError } from '../lib/errors';
-import { SecretManager, injectSecrets } from '../lib/secret-manager';
+import { SecretManager, injectSecrets, isRedshiftAuthVariable } from '../lib/secret-manager';
 import { redactValue } from '../lib/validation';
 import { requireAuth } from './login';
 
@@ -70,6 +70,9 @@ export function applyPreserveEnvironment(
 ): Record<string, string> {
 	const result = { ...injectedEnv };
 	for (const name of preserveNames) {
+		if (isRedshiftAuthVariable(name)) {
+			throw new ValidationError('Cannot preserve Redshift authentication in a child process');
+		}
 		if (!ENVIRONMENT_NAME.test(name)) {
 			throw new ValidationError(`Invalid --preserve-env name: ${name}`);
 		}

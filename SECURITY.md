@@ -98,6 +98,8 @@ inferable:
 
 - User public key or recipient public key tags needed for routing Gift Wrapped
   events.
+- Project metadata published directly as kind 30078, including project slugs,
+  display names, and environment names. These are not encrypted secret bundles.
 - Event kind, Redshift type tags, relay URLs, publish times, event counts, and
   approximate event sizes.
 - IP addresses, user agents, connection timing, and access patterns visible to
@@ -158,6 +160,55 @@ Practical mitigations:
 - Keep browser extensions, Redshift binaries, and dependencies updated.
 - Rotate the Nostr key and all affected application secrets after suspected key
   compromise.
+
+### Current credential and execution safeguards
+
+New CLI logins require OS keychain storage or command-scoped credentials;
+there is no automatic plaintext config fallback. Legacy plaintext credentials
+must migrate successfully to the keychain before use. Redshift strips its
+authentication variables from `redshift run` children, including attempts to
+reintroduce them with `--preserve-env`, and rejects dangerous fetched startup
+variables such as `LD_PRELOAD` and `NODE_OPTIONS`.
+
+Browser decryption caches are owner-scoped. Logout invalidates pending
+decryption and history responses so they cannot refill a cleared session.
+This does not make browser storage resistant to arbitrary same-origin XSS:
+an attacker executing in the application origin could still invoke browser
+crypto or a connected signer.
+
+## Client Resource Limits
+
+Relay-provided filter limits are not trusted. CLI queries and browser event
+ingestion enforce local observation budgets: reaching 1,000 distinct events
+or exceeding 16 MiB of aggregate UTF-8 content and tag data fails closed.
+Per-event content is limited to 2 Mi characters; tags are limited to 256 arrays,
+16 fields per array, and 64 KiB of aggregate UTF-8 data. Gift Wrap envelope
+bounds are checked before the shared crypto layer hashes or decrypts them.
+
+CLI overflow closes the subscription and is not automatically retried. Browser
+live-sync overflow closes ingestion, clears partial state, and reports an error;
+the budget lasts until disconnect so reconnecting cannot grow the same store
+indefinitely. These limits intentionally favor an explicit failure over selecting
+or overwriting secrets from an incomplete snapshot.
+
+These are application-level bounds, not immunity from denial of service.
+WebSocket buffering, transport JSON parsing and signature checks can occur before
+application ingestion, and an untrusted relay can always withhold valid data.
+Choose trusted alternate relays when one repeatedly causes a limit failure.
+
+## Installation and Local Dashboard
+
+The installer and updater require exact-name SHA-256 entries and GitHub artifact
+attestations for both the binary and checksum manifest, bound to the expected
+repository, release workflow, and source commit. Verification failure prevents
+replacement of the installed binary. This protects against untrusted artifact
+substitution, but does not make a compromised authorized build workflow safe.
+
+`redshift serve` defaults to loopback. It checks the request authority as well
+as the browser Origin to reject DNS-rebinding requests. Its read-only API does
+not return secret values. An explicit public bind is still operator-controlled
+and is not an authenticated remote administration service; keep the default
+loopback bind for the local dashboard.
 
 ## NIP-59 Limits
 

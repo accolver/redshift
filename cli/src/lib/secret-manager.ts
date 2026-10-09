@@ -360,11 +360,17 @@ export class SecretManager {
 
 		const filter = filterGiftWraps(this.publicKey);
 		const giftWraps = await this.pool.query(filter);
+		const bounded = boundHistoryGiftWraps(giftWraps);
+		if (bounded.truncated) {
+			throw new ValidationError(
+				'Observed secret state reached the fixed safety bound; current selection is blocked',
+			);
+		}
 
 		// Unwrap all events and track latest by d-tag
 		const latestByDTag = new Map<string, SecretStateSnapshot>();
 
-		for (const giftWrap of giftWraps) {
+		for (const giftWrap of bounded.events) {
 			const entry = await this.getDecryptionEntry(giftWrap);
 			if (!entry) continue;
 			const existing = latestByDTag.get(entry.dTag);
@@ -590,7 +596,7 @@ export function injectSecrets(
 	const result: Record<string, string> = {};
 
 	for (const [key, value] of Object.entries(baseEnv)) {
-		if (value !== undefined && !REDSHIFT_AUTH_VARIABLES.has(key.toUpperCase())) {
+		if (value !== undefined && !isRedshiftAuthVariable(key)) {
 			result[key] = value;
 		}
 	}
@@ -601,6 +607,10 @@ export function injectSecrets(
 	}
 
 	return result;
+}
+
+export function isRedshiftAuthVariable(name: string) {
+	return REDSHIFT_AUTH_VARIABLES.has(name.toUpperCase());
 }
 
 function validatePublishTimestamp(createdAt?: number) {

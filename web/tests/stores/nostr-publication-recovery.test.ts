@@ -3,7 +3,7 @@
 import type { NostrEvent } from 'nostr-tools';
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools/pure';
 import { wrapSecrets } from '@redshift/crypto';
-import { concat, NEVER, of } from 'rxjs';
+import { concat, NEVER, Observable, of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockPublish, mockRequest, mockEvents } = vi.hoisted(() => ({
@@ -99,6 +99,25 @@ afterEach(() => {
 });
 
 describe('Nostr publication recovery', () => {
+	it('does not insert a late history response after logout', async () => {
+		let complete!: () => void;
+		const event = signedEvent();
+		mockRequest.mockReturnValue(
+			new Observable<NostrEvent>((subscriber) => {
+				complete = () => {
+					subscriber.next(event);
+					subscriber.complete();
+				};
+			}),
+		);
+		const pending = refreshRedshiftEvents(ownerPubkey);
+		await Promise.resolve();
+		disconnect();
+		complete();
+		await expect(pending).rejects.toThrow('session');
+		expect(mockEvents).toEqual([]);
+	});
+
 	it('aborts a bounded history refresh at a total deadline when EOSE never arrives', async () => {
 		vi.useFakeTimers();
 		const event = signedEvent();

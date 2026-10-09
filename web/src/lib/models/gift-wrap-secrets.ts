@@ -26,7 +26,8 @@ import {
 import type { Secret } from '$lib/types/nostr';
 import type { EventStore } from 'applesauce-core';
 import type { NostrEvent } from 'nostr-tools';
-import { type Observable, from, of } from 'rxjs';
+import { getPublicKey } from 'nostr-tools/pure';
+import { Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap } from 'rxjs/operators';
 
 export interface SharedDecryptionBatch {
@@ -43,11 +44,14 @@ export type Decryptor =
 	| { type: 'decryptFn'; expectedAuthor: string; fn: DecryptFn };
 
 /**
- * Module-level decryption cache keyed by event ID.
+ * Bounded decryption cache keyed by authenticated owner and event ID.
  * Caches both successful results AND nulls (to avoid re-attempting
  * events that belong to other users or are corrupted).
  */
 const decryptionCache = new Map<string, UnwrapResult | null>();
+// Reuse in-flight work when live updates supersede an RxJS batch.
+const pendingDecryptions = new Map<string, Promise<UnwrapResult | null>>();
+let decryptionGeneration = 0;
 const HISTORY_TEXT_ENCODER = new TextEncoder();
 
 class RemoteSignerDecryptionError extends Error {
@@ -62,7 +66,15 @@ class RemoteSignerDecryptionError extends Error {
  * Call this when the user logs out or switches accounts.
  */
 export function clearDecryptionCache(): void {
+	decryptionGeneration += 1;
 	decryptionCache.clear();
+	pendingDecryptions.clear();
+}
+
+class DecryptionSessionEndedError extends Error {
+	constructor() {
+		super('Decryption session ended');
+	}
 }
 
 /**
@@ -85,13 +97,22 @@ function bundleToSecrets(bundle: Record<string, unknown>): Secret[] {
 async function unwrapEvents(
 	events: NostrEvent[],
 	decryptor: Decryptor,
+	signal: AbortSignal,
 ): Promise<Array<{ event: NostrEvent; result: UnwrapResult }>> {
 	const results: Array<{ event: NostrEvent; result: UnwrapResult }> = [];
+	const generation = decryptionGeneration;
+	const owner =
+		decryptor.type === 'privateKey' ? getPublicKey(decryptor.key) : decryptor.expectedAuthor;
+	const assertSession = () => {
+		if (generation !== decryptionGeneration) throw new DecryptionSessionEndedError();
+	};
 
 	for (const event of events) {
-		// Check cache first (keyed by event ID)
-		if (decryptionCache.has(event.id)) {
-			const cached = decryptionCache.get(event.id);
+		assertSession();
+		if (signal.aborted) return [];
+		const cacheKey = `${owner}:${event.id}`;
+		if (decryptionCache.has(cacheKey)) {
+			const cached = decryptionCache.get(cacheKey);
 			if (cached) {
 				results.push({ event, result: cached });
 			}
@@ -99,36 +120,60 @@ async function unwrapEvents(
 			continue;
 		}
 
+		let pending = pendingDecryptions.get(cacheKey);
+		if (!pending) {
+			pending = (async () => {
+				try {
+					let result: UnwrapResult;
+					if (decryptor.type === 'privateKey') {
+						result = unwrapGiftWrap(event, decryptor.key);
+					} else {
+						result = await unwrapGiftWrapWithSigner(
+							event,
+							decryptor.expectedAuthor,
+							async (pubkey, ciphertext) => {
+								assertSession();
+								try {
+									const plaintext = await decryptor.fn(pubkey, ciphertext);
+									assertSession();
+									return plaintext;
+								} catch (error) {
+									if (error instanceof DecryptionSessionEndedError) throw error;
+									// Every remote exception is uncertain. Shared crypto rejects malformed
+									// payload structure before invoking this callback.
+									throw new RemoteSignerDecryptionError(error);
+								}
+							},
+						);
+					}
+					assertSession();
+					return result;
+				} catch (error) {
+					assertSession();
+					if (error instanceof DecryptionSessionEndedError) throw error;
+					if (error instanceof RemoteSignerDecryptionError) {
+						throw new Error('The remote signer could not decrypt observed secret state', {
+							cause: error.originalError,
+						});
+					}
+					// Cache cryptographically invalid or unrelated events, but never signer uncertainty.
+					return null;
+				}
+			})();
+			pendingDecryptions.set(cacheKey, pending);
+		}
 		try {
-			let result: UnwrapResult;
-			if (decryptor.type === 'privateKey') {
-				result = unwrapGiftWrap(event, decryptor.key);
-			} else {
-				result = await unwrapGiftWrapWithSigner(
-					event,
-					decryptor.expectedAuthor,
-					async (pubkey, ciphertext) => {
-						try {
-							return await decryptor.fn(pubkey, ciphertext);
-						} catch (error) {
-							// Every remote exception is uncertain. Shared crypto rejects malformed
-							// payload structure before invoking this callback.
-							throw new RemoteSignerDecryptionError(error);
-						}
-					},
-				);
+			const result = await pending;
+			assertSession();
+			if (signal.aborted) return [];
+			if (decryptionCache.size >= HISTORY_LIMITS.maxObservedEvents) {
+				const oldest = decryptionCache.keys().next().value;
+				if (oldest !== undefined) decryptionCache.delete(oldest);
 			}
-			// Cache successful decryption
-			decryptionCache.set(event.id, result);
-			results.push({ event, result });
-		} catch (error) {
-			if (error instanceof RemoteSignerDecryptionError) {
-				throw new Error('The remote signer could not decrypt observed secret state', {
-					cause: error.originalError,
-				});
-			}
-			// Cache cryptographically invalid or unrelated events, but never signer uncertainty.
-			decryptionCache.set(event.id, null);
+			decryptionCache.set(cacheKey, result);
+			if (result) results.push({ event, result });
+		} finally {
+			if (pendingDecryptions.get(cacheKey) === pending) pendingDecryptions.delete(cacheKey);
 		}
 	}
 
@@ -184,13 +229,21 @@ export function createSharedDecryptionPipeline(
 					isRedshiftSecretsEvent(event as NostrEvent),
 				) as NostrEvent[];
 				const bounded = boundRedshiftHistoryEvents(redshiftEvents);
-				return from(unwrapEvents(bounded.events, decryptor)).pipe(
-					map((unwrapped) => ({
-						events: unwrapped,
-						observedEvents: bounded.observedEvents,
-						truncated: bounded.truncated,
-					})),
-				);
+				return new Observable<SharedDecryptionBatch>((subscriber) => {
+					const controller = new AbortController();
+					void unwrapEvents(bounded.events, decryptor, controller.signal).then(
+						(unwrapped) => {
+							subscriber.next({
+								events: unwrapped,
+								observedEvents: bounded.observedEvents,
+								truncated: bounded.truncated,
+							});
+							subscriber.complete();
+						},
+						(error: unknown) => subscriber.error(error),
+					);
+					return () => controller.abort();
+				});
 			}),
 			shareReplay({ bufferSize: 1, refCount: true }),
 		);

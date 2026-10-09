@@ -10,10 +10,11 @@
  * in packages/crypto/tests where they run with Bun's native crypto support.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EventStore } from 'applesauce-core';
 import { firstValueFrom, Observable, of } from 'rxjs';
-import { generateSecretKey } from 'nostr-tools/pure';
+import { generateSecretKey, getPublicKey } from 'nostr-tools/pure';
+import { nip44 } from 'nostr-tools';
 import {
 	HISTORY_LIMITS,
 	type NostrEvent,
@@ -148,6 +149,89 @@ describe('Bundle to Secrets Conversion', () => {
 });
 
 describe('Authenticated history model', () => {
+	it('shares pending signer work across overlapping decryption pipelines', async () => {
+		clearDecryptionCache();
+		const owner = generateSecretKey();
+		const store = new EventStore();
+		store.add(wrapSecrets({ KEY: 'value' }, owner, 'project|dev').event);
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const decrypt = vi.fn(async (pubkey: string, ciphertext: string) => {
+			await gate;
+			return nip44.v2.decrypt(ciphertext, nip44.v2.utils.getConversationKey(owner, pubkey));
+		});
+		const decryptor = {
+			type: 'decryptFn' as const,
+			expectedAuthor: getPublicKey(owner),
+			fn: decrypt,
+		};
+		const first = firstValueFrom(createSharedDecryptionPipeline(store, decryptor));
+		const second = firstValueFrom(createSharedDecryptionPipeline(store, decryptor));
+		expect(decrypt).toHaveBeenCalledTimes(1);
+		release();
+		const batches = await Promise.all([first, second]);
+		expect(batches.map(({ events }) => events.length)).toEqual([1, 1]);
+		expect(decrypt).toHaveBeenCalledTimes(2);
+	});
+
+	it("does not reuse another owner's decrypted cache entry", async () => {
+		clearDecryptionCache();
+		const owner = generateSecretKey();
+		const store = new EventStore();
+		store.add(wrapSecrets({ KEY: 'owner-only' }, owner, 'project|dev').event);
+		const first = await firstValueFrom(
+			createSharedDecryptionPipeline(store, { type: 'privateKey', key: owner }),
+		);
+		expect(first.events).toHaveLength(1);
+		const second = await firstValueFrom(
+			createSharedDecryptionPipeline(store, { type: 'privateKey', key: generateSecretKey() }),
+		);
+		expect(second.events).toHaveLength(0);
+	});
+
+	it('stops pending signer work and cache writes after logout', async () => {
+		clearDecryptionCache();
+		const owner = generateSecretKey();
+		const store = new EventStore();
+		store.add(wrapSecrets({ KEY: 'old-session' }, owner, 'project|dev').event);
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const decrypt = vi.fn(async (pubkey: string, ciphertext: string) => {
+			await gate;
+			return nip44.v2.decrypt(ciphertext, nip44.v2.utils.getConversationKey(owner, pubkey));
+		});
+		const pending = firstValueFrom(
+			createSharedDecryptionPipeline(store, {
+				type: 'decryptFn',
+				expectedAuthor: getPublicKey(owner),
+				fn: decrypt,
+			}),
+		);
+		expect(decrypt).toHaveBeenCalledTimes(1);
+		clearDecryptionCache();
+		const rejected = expect(pending).rejects.toThrow('session');
+		release();
+		await rejected;
+		expect(decrypt).toHaveBeenCalledTimes(1);
+		const nextSigner = vi.fn(async () => {
+			throw new Error('permission denied');
+		});
+		await expect(
+			firstValueFrom(
+				createSharedDecryptionPipeline(store, {
+					type: 'decryptFn',
+					expectedAuthor: getPublicKey(owner),
+					fn: nextSigner,
+				}),
+			),
+		).rejects.toThrow('remote signer');
+		expect(nextSigner).toHaveBeenCalledTimes(1);
+	});
+
 	it('orders ties, marks tombstones, deduplicates, and caps versions', async () => {
 		const results: Array<{ event: NostrEvent; result: UnwrapResult }> = Array.from(
 			{ length: HISTORY_LIMITS.maxVersionsPerDTag + 2 },

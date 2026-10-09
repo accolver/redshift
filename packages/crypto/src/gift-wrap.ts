@@ -24,12 +24,13 @@ import type {
 } from './types.js';
 import { NostrKinds, REDSHIFT_TYPE_TAG } from './types.js';
 import { parseDTag } from './utils.js';
+import { MAX_RELAY_CONTENT_LENGTH, measureRelayEvent } from './relay-budget.js';
 
 const TWO_DAYS_SECONDS = 2 * 24 * 60 * 60;
 export const MAX_RUMOR_FUTURE_SKEW_SECONDS = 300;
 const CANONICAL_PUBKEY = /^[0-9a-f]{64}$/;
 
-export const MAX_NIP44_CIPHERTEXT_LENGTH = 2 * 1024 * 1024;
+export const MAX_NIP44_CIPHERTEXT_LENGTH = MAX_RELAY_CONTENT_LENGTH;
 
 /** Reject structurally malformed or excessive NIP-44 v2 payloads before calling a remote signer. */
 export function validateNip44CiphertextStructure(payload: string) {
@@ -159,6 +160,7 @@ function resolveNow(options?: UnwrapOptions) {
 
 export function validateGiftWrapEnvelope(giftWrap: NostrEvent, expectedAuthor: string): void {
 	assertCanonicalPubkey(expectedAuthor, 'expected author');
+	measureRelayEvent(giftWrap);
 	if (giftWrap.kind !== NostrKinds.GIFT_WRAP) {
 		throw new Error(`Invalid gift wrap event: expected kind ${NostrKinds.GIFT_WRAP}`);
 	}
@@ -392,11 +394,13 @@ export function unwrapGiftWrap(
 	validatePrivateKey(privateKey);
 	const expectedAuthor = getPublicKey(privateKey);
 	validateGiftWrapEnvelope(giftWrap, expectedAuthor);
+	validateNip44CiphertextStructure(giftWrap.content);
 
 	const outerConversationKey = nip44.v2.utils.getConversationKey(privateKey, giftWrap.pubkey);
 	const sealJson = nip44.v2.decrypt(giftWrap.content, outerConversationKey);
 	const seal = parseAndValidateSeal(sealJson, expectedAuthor);
 	const innerConversationKey = nip44.v2.utils.getConversationKey(privateKey, seal.pubkey);
+	validateNip44CiphertextStructure(seal.content);
 	const rumorJson = nip44.v2.decrypt(seal.content, innerConversationKey);
 	const { rumor, secrets, dTag } = parseAndValidateRumor(
 		rumorJson,

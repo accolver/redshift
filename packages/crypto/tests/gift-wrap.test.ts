@@ -14,6 +14,8 @@ import {
 	REDSHIFT_TYPE_TAG,
 	type SecretBundle,
 	compareSecretVersions,
+	MAX_NIP44_CIPHERTEXT_LENGTH,
+	validateGiftWrapEnvelope,
 	createTombstone,
 	getRedshiftSecretsFilter,
 	isRedshiftSecretsEvent,
@@ -78,6 +80,18 @@ describe('NIP-59 Gift Wrap', () => {
 	beforeEach(() => {
 		privateKey = generateSecretKey();
 		publicKey = getPublicKey(privateKey);
+	});
+
+	it('rejects oversized ciphertext before hashing or verifying the envelope', () => {
+		const { event } = wrapSecrets({ KEY: 'value' }, privateKey, 'project|dev');
+		const oversized = { ...event, content: 'A'.repeat(MAX_NIP44_CIPHERTEXT_LENGTH + 4) };
+		expect(() => validateGiftWrapEnvelope(oversized, publicKey)).toThrow('bound');
+	});
+
+	it('rejects excessive tag data before hashing or verifying the envelope', () => {
+		const { event } = wrapSecrets({ KEY: 'value' }, privateKey, 'project|dev');
+		const oversized = { ...event, tags: [...event.tags, ['x', 'x'.repeat(65_537)]] };
+		expect(() => validateGiftWrapEnvelope(oversized, publicKey)).toThrow('bound');
 	});
 
 	describe('wrapSecrets', () => {

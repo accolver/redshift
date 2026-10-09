@@ -101,6 +101,19 @@ describe('Binary Serve Integration Tests', () => {
 		expect(data.status).toBe('ok');
 	}, 10000);
 
+	it('rejects DNS-rebinding Host headers even without an Origin', async () => {
+		serverPort = getRandomPort();
+		serverUrl = `http://127.0.0.1:${serverPort}`;
+		serverProcess = await startServer(serverPort);
+		expect(await waitForServer(`${serverUrl}/api/health`)).toBe(true);
+		for (const path of ['/', '/api/config', '/api/info']) {
+			const response = await fetch(`${serverUrl}${path}`, {
+				headers: { Host: `attacker.example:${serverPort}` },
+			});
+			expect(response.status).toBe(403);
+		}
+	}, 10000);
+
 	it('serves /api/info endpoint with server info', async () => {
 		serverPort = getRandomPort();
 		serverUrl = `http://127.0.0.1:${serverPort}`;

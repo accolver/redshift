@@ -1,10 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import LoginDialog from '$lib/components/LoginDialog.svelte';
-
-const webRoot = process.cwd();
+import adminLayoutSource from '../../src/routes/admin/+layout.svelte?raw';
 
 describe('admin authentication accessibility', () => {
 	afterEach(cleanup);
@@ -25,7 +22,6 @@ describe('admin authentication accessibility', () => {
 	});
 
 	it('gives the admin search control an explicit accessible name', () => {
-		const layout = readFileSync(resolve(webRoot, 'src/routes/admin/+layout.svelte'), 'utf8');
-		expect(layout).toContain('aria-label="Search projects and secrets"');
+		expect(adminLayoutSource).toContain('aria-label="Search projects and secrets"');
 	});
 });

@@ -71,11 +71,23 @@ function prepareHtmlResponse(content: string, headers: Headers, relays: string[]
 }
 
 /**
- * SECURITY: Validate that the request originates from localhost.
- * Blocks requests from external origins to prevent CSRF and data exfiltration.
- * Only allows requests from 127.0.0.1 and localhost origins.
+ * SECURITY: Validate both request authority and Origin against loopback and
+ * the explicitly configured host. Origin alone does not prevent DNS rebinding.
  */
 function isAllowedOrigin(req: Request, host: string, port: number): boolean {
+	const bindHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+	const allowedOrigins = [
+		new URL(`http://127.0.0.1:${port}`).origin,
+		new URL(`http://localhost:${port}`).origin,
+		new URL(`http://[::1]:${port}`).origin,
+		new URL(`http://${bindHost}:${port}`).origin,
+	];
+	// Same-origin browser requests often omit Origin. Check the authority too,
+	// so a hostile DNS name resolving to loopback cannot read the local server.
+	const authority = req.headers.get('host');
+	if (!allowedOrigins.includes(new URL(req.url).origin)) return false;
+	if (authority && !allowedOrigins.some((origin) => new URL(origin).host === authority))
+		return false;
 	const origin = req.headers.get('origin');
 	const path = new URL(req.url).pathname;
 
@@ -88,14 +100,9 @@ function isAllowedOrigin(req: Request, host: string, port: number): boolean {
 		return req.headers.has('x-redshift-client');
 	}
 
-	// No origin header means same-origin request (e.g., direct browser navigation)
+	// Direct navigation and non-browser requests may omit Origin; authority was checked above.
 	if (!origin) return true;
 
-	const allowedOrigins = [
-		`http://127.0.0.1:${port}`,
-		`http://localhost:${port}`,
-		`http://${host}:${port}`,
-	];
 	return allowedOrigins.includes(origin);
 }
 

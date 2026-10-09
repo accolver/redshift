@@ -215,6 +215,14 @@ describe('run command execution contract', () => {
 
 		expect(result).toEqual({ PATH: '/base/bin', API_KEY: 'secret', OTHER: 'value' });
 	});
+
+	it('never restores Redshift credentials through --preserve-env', () => {
+		for (const name of ['REDSHIFT_NSEC', 'REDSHIFT_BUNKER', 'redshift_nsec']) {
+			expect(() => applyPreserveEnvironment({ [name]: 'credential' }, {}, [name])).toThrow(
+				'authentication',
+			);
+		}
+	});
 });
 
 describe('run command config loading', () => {

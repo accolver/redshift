@@ -63,6 +63,13 @@ export {
 
 // Gift Wrap functions
 export {
+	MAX_RELAY_CONTENT_LENGTH,
+	RelayObservationBudget,
+	RelayObservationLimitError,
+	measureRelayEvent,
+} from './relay-budget.js';
+
+export {
 	wrapSecrets,
 	unwrapSecrets,
 	unwrapGiftWrap,

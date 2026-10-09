@@ -11,7 +11,7 @@ import {
 	parseNip20Reason,
 	withPublishBackoff,
 } from '$lib/rate-limiter';
-import { DEFAULT_RELAYS as CRYPTO_DEFAULT_RELAYS } from '@redshift/crypto';
+import { DEFAULT_RELAYS as CRYPTO_DEFAULT_RELAYS, RelayObservationBudget } from '@redshift/crypto';
 import { EventStore } from 'applesauce-core';
 import { RelayPool, onlyEvents } from 'applesauce-relay';
 import type { EventTemplate, NostrEvent } from 'nostr-tools';
@@ -210,6 +210,18 @@ export const relayPool = new RelayPool();
 let activeSubscription: { unsubscribe: () => void } | null = null;
 let managedRelayAuthSubscription: Subscription | null = null;
 let connectionFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+let connectionGeneration = 0;
+let ingestionBudget = new RelayObservationBudget();
+
+function stopRelayIngestion() {
+	connectionGeneration += 1;
+	activeSubscription?.unsubscribe();
+	if (connectionFallbackTimer) clearTimeout(connectionFallbackTimer);
+	connectionFallbackTimer = null;
+	clearDecryptionCache();
+	eventStore.removeByFilters({});
+	relayState = { ...relayState, status: 'error' };
+}
 
 interface ManagedAuthRelay {
 	readonly authenticated: boolean;
@@ -274,6 +286,7 @@ export function getRelayState(): RelayState {
  * Connect to relays and start syncing events for a user
  */
 export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS): void {
+	const generation = ++connectionGeneration;
 	// Clean up resources owned by any previous connection lifecycle.
 	if (activeSubscription) {
 		activeSubscription.unsubscribe();
@@ -329,6 +342,15 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 		.pipe(onlyEvents())
 		.subscribe({
 			next: (event: NostrEvent) => {
+				if (generation !== connectionGeneration) return;
+				try {
+					if (!ingestionBudget.accept(event)) return;
+				} catch (error) {
+					// Never retain or display a partial snapshot as current state after overflow.
+					stopRelayIngestion();
+					console.error('Relay ingestion stopped:', error);
+					return;
+				}
 				eventStore.add(event);
 
 				// Mark as connected once we receive any event
@@ -341,6 +363,7 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 				}
 			},
 			error: (err) => {
+				if (generation !== connectionGeneration) return;
 				console.error('Relay subscription error:', err);
 				relayState = {
 					...relayState,
@@ -348,6 +371,7 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
 				};
 			},
 		});
+	if (generation !== connectionGeneration) activeSubscription.unsubscribe();
 
 	// Fallback timeout: if no events are received within 10 seconds,
 	// mark as connected with no data rather than error.
@@ -372,6 +396,8 @@ export function connectAndSync(pubkey: string, relays: string[] = DEFAULT_RELAYS
  * Disconnect from relays and clean up
  */
 export function disconnect(): void {
+	connectionGeneration += 1;
+	ingestionBudget = new RelayObservationBudget();
 	if (activeSubscription) {
 		activeSubscription.unsubscribe();
 		activeSubscription = null;
@@ -421,10 +447,16 @@ export async function withPublishTimeout<T>(
  */
 export async function refreshRedshiftEvents(pubkey: string) {
 	if (!/^[0-9a-f]{64}$/.test(pubkey)) throw new Error('Invalid Redshift history owner');
+	const generation = connectionGeneration;
+	const assertSession = () => {
+		if (generation !== connectionGeneration) throw new Error('Relay session ended');
+	};
 	const targets = normalizePublicationRelayUrls(
 		relayState.relays.length > 0 ? relayState.relays : DEFAULT_RELAYS,
 	);
 	await rateLimiter.waitForSlot();
+	assertSession();
+	const queryBudget = new RelayObservationBudget();
 	const initial = {
 		events: [] as NostrEvent[],
 		ciphertextBytes: 0,
@@ -444,6 +476,8 @@ export async function refreshRedshiftEvents(pubkey: string) {
 			.pipe(
 				takeUntil(deadline),
 				scan((state, event) => {
+					assertSession();
+					if (!queryBudget.accept(event)) return state;
 					const eventBytes = HISTORY_TEXT_ENCODER.encode(event.content).length;
 					if (
 						state.events.length >= HISTORY_LIMITS.maxObservedEvents ||
@@ -461,13 +495,21 @@ export async function refreshRedshiftEvents(pubkey: string) {
 				last(),
 			),
 	);
+	assertSession();
 	if (deadlineReached) throw new Error('Relay history refresh timed out before completion');
 	const unique = new Map(collected.events.map((event) => [event.id, event]));
 	const ordered = [...unique.values()].sort((left, right) => {
 		if (left.created_at !== right.created_at) return right.created_at - left.created_at;
 		return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
 	});
-	for (const event of ordered.slice(0, HISTORY_LIMITS.maxObservedEvents)) eventStore.add(event);
+	try {
+		// Reserve the entire batch before inserting it, including previous live-sync work.
+		for (const event of ordered) ingestionBudget.accept(event);
+	} catch (error) {
+		stopRelayIngestion();
+		throw error;
+	}
+	for (const event of ordered) eventStore.add(event);
 	return {
 		observedEvents: ordered.length,
 		truncated:

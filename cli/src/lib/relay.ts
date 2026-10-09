@@ -11,6 +11,7 @@ import type { EventTemplate, VerifiedEvent } from 'nostr-tools/core';
 import { verifyEvent } from 'nostr-tools/pure';
 import type { Filter } from 'nostr-tools/filter';
 import { SimplePool } from 'nostr-tools/pool';
+import { RelayObservationBudget, RelayObservationLimitError } from '@redshift/crypto';
 import { normalizeRelayUrls } from './config';
 import { HISTORY_LIMITS, compareSecretVersions } from './crypto';
 import { RelayError } from './errors';
@@ -21,6 +22,7 @@ import {
 	getUnavailableTargets,
 	mergeQuorumReports,
 	parseNip20Reason,
+	isPermanentError,
 	withPublishBackoff,
 	withQueryBackoff,
 } from './rate-limiter';
@@ -204,6 +206,55 @@ export function createRelayPool(relayUrls: string[], options: RelayPoolOptions =
 		enableRetry = true,
 	} = options;
 
+	const boundedQuery = (relays: string[], filter: Filter, timeout: number) =>
+		new Promise<NostrEvent[]>((resolve, reject) => {
+			const events: NostrEvent[] = [];
+			const budget = new RelayObservationBudget();
+			let subscription: { close(): void } | undefined;
+			let settled = false;
+			const finish = (error?: Error) => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(deadline);
+				subscription?.close();
+				if (error) reject(error);
+				else resolve(events);
+			};
+			const deadline = setTimeout(
+				() => finish(new RelayError('Relay query timed out', 'query')),
+				timeout,
+			);
+			try {
+				subscription = pool.subscribeMany(
+					relays,
+					{
+						...filter,
+						limit: Math.min(
+							filter.limit ?? HISTORY_LIMITS.maxObservedEvents,
+							HISTORY_LIMITS.maxObservedEvents,
+						),
+					},
+					{
+						maxWait: timeout,
+						onevent(event) {
+							if (settled) return;
+							try {
+								if (budget.accept(event)) events.push(event);
+							} catch (error) {
+								finish(error instanceof Error ? error : new Error('Invalid relay event'));
+							}
+						},
+						oneose: () => finish(),
+						onclose: () => finish(new RelayError('Relay query closed before completion', 'query')),
+					},
+				);
+				// Test transports can deliver synchronously during subscription creation.
+				if (settled) subscription.close();
+			} catch (error) {
+				finish(error instanceof Error ? error : new Error('Relay query failed'));
+			}
+		});
+
 	const publishTo = async (
 		targetRelays: string[],
 		event: NostrEvent,
@@ -232,11 +283,7 @@ export function createRelayPool(relayUrls: string[], options: RelayPoolOptions =
 						try {
 							const matches = options.queryRelay
 								? await options.queryRelay(relay, { ids: [event.id] }, 2000)
-								: ((await pool.querySync(
-										[relay],
-										{ ids: [event.id] },
-										{ maxWait: 2000 },
-									)) as NostrEvent[]);
+								: await boundedQuery([relay], { ids: [event.id] }, 2000);
 							if (matches.some((candidate) => isByteIdenticalVerifiedEvent(candidate, event)))
 								return;
 						} catch {
@@ -279,15 +326,15 @@ export function createRelayPool(relayUrls: string[], options: RelayPoolOptions =
 				if (enableRateLimiting) {
 					await rateLimiter.waitForSlot();
 				}
-				const events = await pool.querySync(normalizedRelayUrls, filter, {
-					maxWait: timeout,
-				});
-				return events as NostrEvent[];
+				return boundedQuery(normalizedRelayUrls, filter, timeout);
 			};
 
 			try {
 				if (enableRetry) {
-					return await withQueryBackoff(queryOperation);
+					return await withQueryBackoff(queryOperation, {
+						retry: (error) =>
+							!(error instanceof RelayObservationLimitError) && !isPermanentError(error),
+					});
 				}
 				return await queryOperation();
 			} catch (err) {

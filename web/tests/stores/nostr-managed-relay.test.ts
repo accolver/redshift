@@ -6,6 +6,7 @@
  */
 
 import type { EventTemplate, NostrEvent } from 'nostr-tools';
+import { HISTORY_LIMITS } from '@redshift/crypto';
 import { Subscription } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -163,6 +164,27 @@ describe('Managed Relay Integration', () => {
 	});
 
 	describe('connection synchronization lifecycle', () => {
+		it('fails closed before a live relay flood can grow the event store past its bound', () => {
+			const pubkey = 'a'.repeat(64);
+			connectAndSync(pubkey, ['wss://relay.example']);
+			for (let index = 0; index < HISTORY_LIMITS.maxObservedEvents + 50; index++) {
+				mockSubscriptions[0]?.next?.({
+					id: index.toString(16).padStart(64, '0'),
+					pubkey,
+					created_at: index,
+					kind: 1059,
+					tags: [
+						['p', pubkey],
+						['t', 'redshift-secrets'],
+					],
+					content: 'ciphertext',
+					sig: 'b'.repeat(128),
+				});
+			}
+			expect(getRelayState().status).toBe('error');
+			expect(mockEvents).toHaveLength(0);
+		});
+
 		it('uses the configured relay set and repeats bounded full filters after a future event', () => {
 			const pubkey = 'a'.repeat(64);
 			const configuredRelays = ['ws://127.0.0.1:4777'];

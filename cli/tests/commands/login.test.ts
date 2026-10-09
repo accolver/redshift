@@ -222,6 +222,7 @@ describe('Login Command', () => {
 
 describe('nsec validation edge cases', () => {
 	const testDir = join(tmpdir(), `redshift-nsec-test-${Date.now()}`);
+	const originalEnv = { ...process.env };
 
 	beforeEach(() => {
 		if (existsSync(testDir)) {
@@ -233,6 +234,7 @@ describe('nsec validation edge cases', () => {
 	});
 
 	afterEach(() => {
+		process.env = { ...originalEnv };
 		if (existsSync(testDir)) {
 			rmSync(testDir, { recursive: true });
 		}

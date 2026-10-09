@@ -45,8 +45,8 @@
 	},
 	"dependencies": {
 		"@lucide/svelte": "^0.544.0",
-		"@redshift/crypto": "file:../packages/crypto",
-		"@redshift/rate-limiter": "file:../packages/rate-limiter",
+		"@redshift/crypto": "workspace:*",
+		"@redshift/rate-limiter": "workspace:*",
 		"applesauce-core": "^4.4.2",
 		"applesauce-relay": "^4.4.2",
 		"bits-ui": "^2.18.1",
