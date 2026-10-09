@@ -3,6 +3,10 @@
 	"version": "7.9.33",
 	"main": "worker.js",
 	"type": "module",
+	"overrides": {
+		"sharp": "0.35.5",
+		"undici": "7.30.0"
+	},
 	"scripts": {
 		"build": "esbuild src/index.ts --bundle --outfile=worker.js --platform=neutral --target=es2020 --format=esm --minify=false --keep-names --external:node:*",
 		"dev": "wrangler dev",
@@ -22,6 +26,6 @@
 		"fast-check": "4.9.0",
 		"nostr-tools": "2.23.9",
 		"typescript": "5.9.3",
-		"wrangler": "4.110.0"
+		"wrangler": "4.116.0"
 	}
 }

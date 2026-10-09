@@ -82,11 +82,28 @@ Pre-commit results:
 - Crypto: **165 pass**. Rate limiter: **17 pass**. Managed relay: **25 pass**.
 - Generated dashboard embeds were rebuilt and their source digest verified.
 
-Production-release blockers remain:
+### PR #59 dependency-audit follow-up
 
-- Dependency audits report **38 advisories** in the product graph and **18** in
-  the relay toolchain graph (some overlap), including high-severity advisories in
-  existing dependencies. The release audit gate must be cleared before production.
+CI run `37885073921`, Product Verification job `113673140996`, failed at
+`Audit frozen dependency graphs`. The failure reproduced locally with 38 product
+and 18 relay-toolchain advisories (some overlap).
+
+- Updated SvelteKit within major 2, Vitest/UI within major 4, and sanitize-html
+  within the 2.17 patch line.
+- Pinned Wrangler 4.116.0 in both deployment surfaces to retain stable Miniflare 4,
+  with patched sharp 0.35.5 and undici 7.30.0 overrides.
+- Updated vulnerable PostCSS, selector parser, source-map-js, devalue and fflate
+  overrides, and refreshed the locked Nano ID 5 dependency within Applesauce's
+  existing range. PostCSS retains its separate compatible Nano ID 3 dependency.
+- Regenerated the root and relay lockfiles and embedded dashboard. Both frozen
+  installs and both low-threshold audits pass with **no vulnerabilities found**.
+- Reverified all 643 CLI, 396 web, 165 crypto, 17 rate-limiter and 25 relay tests,
+  all fuzz suites, type checks, builds, lint/format and generated relay consistency.
+- Telos validation converges: patched compatible dependencies support the existing
+  user workflows and protocol contracts while preserving the release security gate.
+
+Other production-release blockers remain:
+
 - Two selected Playwright dashboard journeys could not launch Chromium because
   this host lacks `libglib-2.0.so.0`; no browser workflow pass is claimed.
 - The installed OpenSpec CLI's strict all-spec check passes 14 items and fails
